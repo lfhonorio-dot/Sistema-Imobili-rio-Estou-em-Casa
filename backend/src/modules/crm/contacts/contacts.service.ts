@@ -317,7 +317,7 @@ export class ContactsService {
   }
 
   // Exporta contatos como CSV (apenas Admin/Manager)
-  async exportCsv(workspaceId: string, userId: string): Promise<string> {
+  async exportCsv(workspaceId: string, userId: string, ipAddress?: string): Promise<string> {
     const contacts = await this.prisma.contact.findMany({
       where: { workspaceId, deletedAt: null },
       include: { tags: { include: { tag: true } } },
@@ -329,6 +329,7 @@ export class ContactsService {
       action: 'CONTACTS_EXPORTED',
       entity: 'Contact',
       after: { count: contacts.length },
+      ipAddress,
     });
 
     const headers = ['ID', 'Tipo', 'Nome', 'Email', 'Telefone', 'CPF/CNPJ', 'Cidade', 'Estado', 'Origem', 'Criado em'];

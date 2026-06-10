@@ -15,11 +15,12 @@ import {
   HttpCode,
   HttpStatus,
   Res,
+  Req,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { ApiTags, ApiBearerAuth, ApiHeader, ApiOperation } from '@nestjs/swagger';
 import { ContactsService } from './contacts.service';
 import {
@@ -64,9 +65,10 @@ export class ContactsController {
   async exportCsv(
     @Headers('x-workspace-id') workspaceId: string,
     @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const csv = await this.contactsService.exportCsv(workspaceId, user.sub);
+    const csv = await this.contactsService.exportCsv(workspaceId, user.sub, req.ip);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="contatos.csv"');
     res.send(csv);
