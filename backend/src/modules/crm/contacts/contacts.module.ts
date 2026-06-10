@@ -10,7 +10,7 @@ import { AuditModule } from '../../audit/audit.module';
   imports: [
     PrismaModule,
     AuditModule,
-    MulterModule.register({ dest: '/tmp' }),
+    MulterModule.register({ storage: require('multer').memoryStorage() }),
   ],
   controllers: [ContactsController],
   providers: [ContactsService],

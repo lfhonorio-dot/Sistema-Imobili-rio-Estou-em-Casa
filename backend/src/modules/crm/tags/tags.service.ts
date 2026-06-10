@@ -19,7 +19,7 @@ export class TagsService {
       },
     });
 
-    return { success: true, data: tags };
+    return tags;
   }
 
   async create(workspaceId: string, dto: CreateTagDto) {
@@ -32,7 +32,7 @@ export class TagsService {
       },
     });
 
-    return { success: true, data: tag };
+    return tag;
   }
 
   async update(workspaceId: string, id: string, dto: UpdateTagDto) {
@@ -45,7 +45,7 @@ export class TagsService {
       data: { ...dto },
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   async remove(workspaceId: string, id: string) {
@@ -55,6 +55,6 @@ export class TagsService {
 
     await this.prisma.tag.delete({ where: { id } });
 
-    return { success: true, data: { deleted: true } };
+    return { deleted: true };
   }
 }

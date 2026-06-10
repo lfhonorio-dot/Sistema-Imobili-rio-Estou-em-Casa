@@ -21,7 +21,7 @@ export class CustomFieldsService {
       orderBy: [{ module: 'asc' }, { order: 'asc' }],
     });
 
-    return { success: true, data: fields };
+    return fields;
   }
 
   async create(workspaceId: string, dto: CreateCustomFieldDto) {
@@ -38,7 +38,7 @@ export class CustomFieldsService {
       },
     });
 
-    return { success: true, data: field };
+    return field;
   }
 
   async update(workspaceId: string, id: string, dto: UpdateCustomFieldDto) {
@@ -58,7 +58,7 @@ export class CustomFieldsService {
       },
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   async remove(workspaceId: string, id: string) {
@@ -70,6 +70,6 @@ export class CustomFieldsService {
 
     await this.prisma.customField.delete({ where: { id } });
 
-    return { success: true, data: { deleted: true } };
+    return { deleted: true };
   }
 }

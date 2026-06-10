@@ -1,9 +1,9 @@
 // Configuração do Next.js 14
 // Headers de segurança, redirecionamentos e otimizações
 
-import type { NextConfig } from 'next';
 
-const nextConfig: NextConfig = {
+
+const nextConfig = {
   // Habilita o modo de compilação standalone para Docker
   output: 'standalone',
 

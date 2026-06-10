@@ -87,11 +87,7 @@ export class DealsService {
         (now.getTime() - deal.lastActivityAt.getTime()) > 7 * 24 * 60 * 60 * 1000,
     }));
 
-    return {
-      success: true,
-      data: dealsWithIndicators,
-      meta: { page, limit, total, pages: Math.ceil(total / limit) },
-    };
+    return { items: dealsWithIndicators, meta: { page, limit, total, pages: Math.ceil(total / limit) } };
   }
 
   // Busca negócio por ID com detalhes completos
@@ -125,7 +121,7 @@ export class DealsService {
     const isCold = !deal.lastActivityAt ||
       (now.getTime() - deal.lastActivityAt.getTime()) > 7 * 24 * 60 * 60 * 1000;
 
-    return { success: true, data: { ...deal, isHot, isCold } };
+    return { ...deal, isHot, isCold };
   }
 
   // Cria novo negócio
@@ -180,7 +176,7 @@ export class DealsService {
       after: deal,
     });
 
-    return { success: true, data: deal };
+    return deal;
   }
 
   // Atualiza negócio
@@ -214,7 +210,7 @@ export class DealsService {
       after: updated,
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   // Move negócio para outro estágio
@@ -287,7 +283,7 @@ export class DealsService {
       after: { stageId: dto.stageId },
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   // Soft delete de negócio
@@ -311,7 +307,7 @@ export class DealsService {
       entityId: id,
     });
 
-    return { success: true, data: { deleted: true } };
+    return { deleted: true };
   }
 
   // Adiciona tag a um negócio
@@ -328,7 +324,7 @@ export class DealsService {
       update: {},
     });
 
-    return { success: true, data: { added: true } };
+    return { added: true };
   }
 
   // Remove tag de um negócio
@@ -341,6 +337,6 @@ export class DealsService {
 
     await this.prisma.dealTag.deleteMany({ where: { dealId, tagId } });
 
-    return { success: true, data: { removed: true } };
+    return { removed: true };
   }
 }

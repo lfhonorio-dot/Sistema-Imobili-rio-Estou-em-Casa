@@ -73,8 +73,7 @@ export class ContactsService {
     ]);
 
     return {
-      success: true,
-      data: contacts,
+      items: contacts,
       meta: {
         page,
         limit,
@@ -109,7 +108,7 @@ export class ContactsService {
       throw new NotFoundException('Contato não encontrado');
     }
 
-    return { success: true, data: contact };
+    return contact;
   }
 
   // Cria novo contato com verificação de duplicatas
@@ -162,7 +161,7 @@ export class ContactsService {
       after: contact,
     });
 
-    return { success: true, data: contact };
+    return contact;
   }
 
   // Atualiza contato com log de auditoria
@@ -212,7 +211,7 @@ export class ContactsService {
       after: updated,
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   // Soft delete de contato
@@ -238,7 +237,7 @@ export class ContactsService {
       entityId: id,
     });
 
-    return { success: true, data: { deleted: true } };
+    return { deleted: true };
   }
 
   // Importa contatos via CSV
@@ -314,7 +313,7 @@ export class ContactsService {
       after: { created, updated, errors: errors.length },
     });
 
-    return { success: true, data: { created, updated, errors } };
+    return { created, updated, errors };
   }
 
   // Exporta contatos como CSV (apenas Admin/Manager)
@@ -368,7 +367,7 @@ export class ContactsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return { success: true, data: activities };
+    return activities;
   }
 
   // Merge de duplicatas: move dados do source para o target
@@ -420,7 +419,7 @@ export class ContactsService {
       after: { mergedFrom: sourceId },
     });
 
-    return { success: true, data: { merged: true, targetId, sourceId } };
+    return { merged: true, targetId, sourceId };
   }
 
   // Encontra possíveis duplicatas por CPF, CNPJ, email ou telefone
@@ -455,7 +454,7 @@ export class ContactsService {
       }
     });
 
-    return { success: true, data: duplicateGroups };
+    return duplicateGroups;
   }
 
   // Adiciona tag a um contato
@@ -479,7 +478,7 @@ export class ContactsService {
       update: {},
     });
 
-    return { success: true, data: { added: true } };
+    return { added: true };
   }
 
   // Remove tag de um contato
@@ -494,7 +493,7 @@ export class ContactsService {
       where: { contactId, tagId },
     });
 
-    return { success: true, data: { removed: true } };
+    return { removed: true };
   }
 
   // Método auxiliar: verifica duplicatas antes de criar

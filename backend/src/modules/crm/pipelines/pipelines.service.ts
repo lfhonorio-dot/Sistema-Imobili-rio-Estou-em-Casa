@@ -62,7 +62,7 @@ export class PipelinesService {
       },
     });
 
-    return { success: true, data: pipelines };
+    return pipelines;
   }
 
   // Busca pipeline por ID com resumo por estágio
@@ -84,7 +84,7 @@ export class PipelinesService {
 
     if (!pipeline) throw new NotFoundException('Pipeline não encontrado');
 
-    return { success: true, data: pipeline };
+    return pipeline;
   }
 
   // Cria pipeline com estágios padrão para SALE e RENTAL
@@ -148,7 +148,7 @@ export class PipelinesService {
       after: updated,
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   // Soft delete de pipeline
@@ -172,7 +172,7 @@ export class PipelinesService {
       entityId: id,
     });
 
-    return { success: true, data: { deleted: true } };
+    return { deleted: true };
   }
 
   // Adiciona estágio ao pipeline
@@ -196,7 +196,7 @@ export class PipelinesService {
       },
     });
 
-    return { success: true, data: stage };
+    return stage;
   }
 
   // Atualiza estágio
@@ -212,7 +212,7 @@ export class PipelinesService {
       data: { ...dto },
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   // Remove estágio (apenas se não tiver negócios)
@@ -230,7 +230,7 @@ export class PipelinesService {
 
     await this.prisma.pipelineStage.delete({ where: { id: stageId } });
 
-    return { success: true, data: { deleted: true } };
+    return { deleted: true };
   }
 
   // Reordena estágios
@@ -250,6 +250,6 @@ export class PipelinesService {
 
     await this.prisma.$transaction(updates);
 
-    return { success: true, data: { reordered: true } };
+    return { reordered: true };
   }
 }

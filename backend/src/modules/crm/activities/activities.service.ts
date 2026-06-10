@@ -56,11 +56,7 @@ export class ActivitiesService {
       this.prisma.activity.count({ where }),
     ]);
 
-    return {
-      success: true,
-      data: activities,
-      meta: { page, limit, total, pages: Math.ceil(total / limit) },
-    };
+    return { items: activities, meta: { page, limit, total, pages: Math.ceil(total / limit) } };
   }
 
   // Busca atividade por ID
@@ -75,7 +71,7 @@ export class ActivitiesService {
 
     if (!activity) throw new NotFoundException('Atividade não encontrada');
 
-    return { success: true, data: activity };
+    return activity;
   }
 
   // Cria nova atividade
@@ -104,7 +100,7 @@ export class ActivitiesService {
       });
     }
 
-    return { success: true, data: activity };
+    return activity;
   }
 
   // Atualiza atividade
@@ -126,7 +122,7 @@ export class ActivitiesService {
       },
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   // Soft delete de atividade
@@ -142,7 +138,7 @@ export class ActivitiesService {
       data: { deletedAt: new Date() },
     });
 
-    return { success: true, data: { deleted: true } };
+    return { deleted: true };
   }
 
   // Marca atividade como concluída
@@ -158,7 +154,7 @@ export class ActivitiesService {
       data: { doneAt: new Date() },
     });
 
-    return { success: true, data: updated };
+    return updated;
   }
 
   // Retorna atividades para visualização de calendário
@@ -194,7 +190,7 @@ export class ActivitiesService {
       }
     }
 
-    return { success: true, data: { activities, byDay } };
+    return { activities, byDay };
   }
 
   // Retorna tarefas pendentes para hoje
@@ -217,6 +213,6 @@ export class ActivitiesService {
       },
     });
 
-    return { success: true, data: activities };
+    return activities;
   }
 }

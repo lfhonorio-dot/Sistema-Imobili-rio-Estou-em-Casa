@@ -17,7 +17,7 @@ export class WorkspaceGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string>;
-      user: { id: string; permissions?: Record<string, boolean>; isOwner?: boolean };
+      user: { sub: string; id?: string; permissions?: Record<string, boolean>; isOwner?: boolean };
       workspaceId?: string;
     }>();
 
@@ -29,7 +29,7 @@ export class WorkspaceGuard implements CanActivate {
       );
     }
 
-    const userId = request.user?.id;
+    const userId = request.user?.sub || request.user?.id;
     if (!userId) {
       throw new ForbiddenException('Usuário não autenticado.');
     }
