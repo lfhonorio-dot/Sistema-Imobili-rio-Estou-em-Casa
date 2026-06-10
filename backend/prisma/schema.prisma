@@ -46,6 +46,13 @@ model Workspace {
   documents          Document[]
   tags               Tag[]
   customFields       CustomField[]
+  // ERP Imobiliário
+  properties         Property[]
+  contracts          Contract[]
+  financialEntries   FinancialEntry[]
+  commissions        Commission[]
+  inspections        Inspection[]
+  maintenanceOrders  MaintenanceOrder[]
 
   @@map("workspaces")
 }
@@ -300,13 +307,17 @@ model Contact {
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  workspace     Workspace @relation(fields: [workspaceId], references: [id])
-  tags          ContactTag[]
-  deals         Deal[]
-  activities    Activity[]
-  companyLinks  ContactCompanyLink[] @relation("PersonLinks")
-  personLinks   ContactCompanyLink[] @relation("CompanyLinks")
-  documents     Document[]
+  workspace         Workspace @relation(fields: [workspaceId], references: [id])
+  tags              ContactTag[]
+  deals             Deal[]
+  activities        Activity[]
+  companyLinks      ContactCompanyLink[] @relation("PersonLinks")
+  personLinks       ContactCompanyLink[] @relation("CompanyLinks")
+  documents         Document[]
+  // ERP: imóveis e contratos
+  ownedProperties   Property[] @relation("PropertyOwner")
+  contractsAsOwner  Contract[] @relation("ContractOwner")
+  contractsAsTenant Contract[] @relation("ContractTenant")
 
   @@map("contacts")
 }
@@ -450,7 +461,8 @@ model DealTag {
 model DealProperty {
   dealId     String
   propertyId String
-  deal       Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  deal       Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  property   Property? @relation(fields: [propertyId], references: [id])
 
   @@id([dealId, propertyId])
   @@map("deal_properties")
@@ -497,6 +509,8 @@ model Document {
   id          String    @id @default(uuid())
   workspaceId String
   contactId   String?
+  propertyId  String?
+  contractId  String?
   name        String
   type        String    // RG, CPF, CNPJ, RENDA, CERTIDAO, ESCRITURA, LAUDO, CONTRATO, OUTRO
   url         String
@@ -509,6 +523,261 @@ model Document {
   updatedAt   DateTime  @updatedAt
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   contact     Contact?  @relation(fields: [contactId], references: [id])
+  property    Property? @relation(fields: [propertyId], references: [id])
+  contract    Contract? @relation(fields: [contractId], references: [id])
 
   @@map("documents")
+}
+
+// =============================================
+// ERP IMOBILIÁRIO - Estágio 3
+// =============================================
+
+model Property {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  code             String    // código interno único por workspace
+  portalCode       String?   // código de publicação nos portais
+  type             String    // APARTMENT, HOUSE, COMMERCIAL, LAND, WAREHOUSE, LAUNCH, RURAL
+  purpose          String    // SALE, RENTAL, SALE_RENTAL
+  status           String    @default("AVAILABLE") // AVAILABLE, RESERVED, RENTED, SOLD, MAINTENANCE, INACTIVE
+  // Endereço
+  zipCode          String?
+  street           String?
+  number           String?
+  complement       String?
+  neighborhood     String?
+  city             String?
+  state            String?
+  latitude         Decimal?  @db.Decimal(10, 8)
+  longitude        Decimal?  @db.Decimal(11, 8)
+  // Características
+  totalArea        Decimal?  @db.Decimal(10, 2)
+  privateArea      Decimal?  @db.Decimal(10, 2)
+  bedrooms         Int?
+  suites           Int?
+  bathrooms        Int?
+  parkingSpaces    Int?
+  floor            Int?
+  totalFloors      Int?
+  acceptsPets      Boolean   @default(false)
+  furnished        Boolean   @default(false)
+  // Valores
+  salePrice        Decimal?  @db.Decimal(15, 2)
+  rentalPrice      Decimal?  @db.Decimal(15, 2)
+  iptuMonthly      Decimal?  @db.Decimal(10, 2)
+  condoMonthly     Decimal?  @db.Decimal(10, 2)
+  // Documentação
+  registrationNumber String? // matrícula
+  iptuNumber         String?
+  // Publicação
+  description      String?   @db.Text
+  videoUrl         String?
+  tourUrl          String?
+  // Relações
+  ownerId          String?   // Contact id do proprietário
+  assigneeId       String?   // WorkspaceUser id do corretor responsável
+  tags             String[]  @default([])
+  highlights       String[]  @default([]) // exclusividade, permuta, financiamento_cef
+  customFields     Json      @default("{}")
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id])
+  owner            Contact?       @relation("PropertyOwner", fields: [ownerId], references: [id])
+  photos           PropertyPhoto[]
+  statusHistory    PropertyStatusHistory[]
+  contracts        Contract[]
+  inspections      Inspection[]
+  maintenanceOrders MaintenanceOrder[]
+  documents        Document[]
+  dealProperties   DealProperty[]
+
+  @@unique([workspaceId, code])
+  @@map("properties")
+}
+
+model PropertyPhoto {
+  id          String   @id @default(uuid())
+  propertyId  String
+  url         String
+  caption     String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@map("property_photos")
+}
+
+model PropertyStatusHistory {
+  id         String   @id @default(uuid())
+  propertyId String
+  status     String
+  userId     String?
+  note       String?
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id])
+
+  @@map("property_status_history")
+}
+
+model Contract {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  type             String    // SALE, RENTAL_RESIDENTIAL, RENTAL_COMMERCIAL, BROKERAGE
+  status           String    @default("DRAFT") // DRAFT, ACTIVE, TERMINATED, RESCINDED
+  propertyId       String
+  // Partes
+  ownerId          String?   // Contact id proprietário/vendedor
+  tenantId         String?   // Contact id inquilino/comprador
+  guarantorIds     String[]  @default([])
+  // Datas
+  startDate        DateTime?
+  endDate          DateTime?
+  signedAt         DateTime?
+  // Locação
+  rentalValue      Decimal?  @db.Decimal(15, 2)
+  adjustmentIndex  String?   // IGPM, IPCA, IPC
+  adjustmentMonth  Int?      // mês de reajuste
+  dueDay           Int?      // dia de vencimento (1-31)
+  lateFee          Decimal?  @db.Decimal(5, 2) // % multa atraso
+  punctualDiscount Decimal?  @db.Decimal(5, 2) // % desconto pontualidade
+  includesWater    Boolean   @default(false)
+  includesElec     Boolean   @default(false)
+  includesCondo    Boolean   @default(false)
+  includesIptu     Boolean   @default(false)
+  customClauses    String?   @db.Text
+  // Venda
+  saleValue        Decimal?  @db.Decimal(15, 2)
+  paymentMethod    String?   // CASH, FINANCING, INSTALLMENT
+  commissionRate   Decimal?  @db.Decimal(5, 2)
+  proposalDate     DateTime?
+  acceptanceDate   DateTime?
+  deedDate         DateTime?
+  keyDeliveryDate  DateTime?
+  // Arquivo
+  signedFileUrl    String?
+  notes            String?   @db.Text
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id])
+  property         Property    @relation(fields: [propertyId], references: [id])
+  owner            Contact?    @relation("ContractOwner", fields: [ownerId], references: [id])
+  tenant           Contact?    @relation("ContractTenant", fields: [tenantId], references: [id])
+  financialEntries FinancialEntry[]
+  commissions      Commission[]
+  inspections      Inspection[]
+  documents        Document[]
+
+  @@map("contracts")
+}
+
+model FinancialEntry {
+  id                String    @id @default(uuid())
+  workspaceId       String
+  type              String    // RECEIVABLE, PAYABLE
+  category          String    // RENT, SALE, ADMINISTRATION, COMMISSION, MAINTENANCE, MARKETING, OTHER
+  description       String
+  amount            Decimal   @db.Decimal(15, 2)
+  dueDate           DateTime
+  paidAt            DateTime?
+  paidAmount        Decimal?  @db.Decimal(15, 2)
+  status            String    @default("PENDING") // PENDING, PAID, OVERDUE, CANCELLED, EXEMPT
+  paymentMethod     String?   // BOLETO, PIX, TRANSFER, CASH
+  contractId        String?
+  propertyId        String?
+  contactId         String?   // proprietário ou inquilino
+  installment       Int?      // número da parcela
+  totalInstallments Int?
+  notes             String?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  workspace         Workspace  @relation(fields: [workspaceId], references: [id])
+  contract          Contract?  @relation(fields: [contractId], references: [id])
+
+  @@map("financial_entries")
+}
+
+model Commission {
+  id          String    @id @default(uuid())
+  workspaceId String
+  contractId  String
+  userId      String    // WorkspaceUser id do corretor
+  amount      Decimal   @db.Decimal(15, 2)
+  rate        Decimal   @db.Decimal(5, 2)
+  status      String    @default("PENDING") // PENDING, PAID
+  paidAt      DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  contract    Contract  @relation(fields: [contractId], references: [id])
+
+  @@map("commissions")
+}
+
+model Inspection {
+  id          String    @id @default(uuid())
+  workspaceId String
+  type        String    // ENTRY, EXIT
+  propertyId  String
+  contractId  String?
+  scheduledAt DateTime?
+  doneAt      DateTime?
+  notes       String?   @db.Text
+  reportUrl   String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id])
+  property    Property   @relation(fields: [propertyId], references: [id])
+  contract    Contract?  @relation(fields: [contractId], references: [id])
+  rooms       InspectionRoom[]
+
+  @@map("inspections")
+}
+
+model InspectionRoom {
+  id           String    @id @default(uuid())
+  inspectionId String
+  name         String    // sala, quarto, banheiro, cozinha, área externa
+  items        Json      @default("[]") // [{name, condition, notes, photoUrls:[]}]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@map("inspection_rooms")
+}
+
+model MaintenanceOrder {
+  id              String    @id @default(uuid())
+  workspaceId     String
+  propertyId      String
+  contractId      String?
+  type            String    // ELECTRICAL, PLUMBING, STRUCTURAL, PAINTING, LOCKSMITH, OTHER
+  priority        String    // URGENT, HIGH, MEDIUM, LOW
+  requestedBy     String    // OWNER, TENANT, BROKER, AGENCY
+  title           String
+  description     String    @db.Text
+  status          String    @default("OPEN") // OPEN, IN_PROGRESS, AWAITING_QUOTE, COMPLETED, CANCELLED
+  assigneeId      String?   // internal user
+  supplierName    String?
+  quotedAmount    Decimal?  @db.Decimal(15, 2)
+  finalAmount     Decimal?  @db.Decimal(15, 2)
+  approvedAt      DateTime?
+  completedAt     DateTime?
+  paidBy          String?   // OWNER, AGENCY, TENANT
+  beforePhotos    String[]  @default([])
+  afterPhotos     String[]  @default([])
+  serviceOrderUrl String?
+  notes           String?   @db.Text
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  property        Property  @relation(fields: [propertyId], references: [id])
+
+  @@map("maintenance_orders")
 }
