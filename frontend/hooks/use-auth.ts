@@ -102,7 +102,7 @@ export function useAuth() {
   // Mutação de logout
   // -----------------------------------------------
   const logoutMutation = useMutation({
-    mutationFn: async (allDevices = false) => {
+    mutationFn: async (allDevices: boolean = false) => {
       await api.post('/auth/logout', { allDevices });
     },
     onSettled: () => {

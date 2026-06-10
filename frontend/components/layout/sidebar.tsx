@@ -159,7 +159,7 @@ export function Sidebar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0"
-          onClick={() => logout()}
+          onClick={() => logout(false)}
           title="Sair"
         >
           <LogOut className="h-4 w-4" />

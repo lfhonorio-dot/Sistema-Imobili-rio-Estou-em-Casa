@@ -37,7 +37,7 @@ interface JwtTokenPayload {
 }
 
 // Resposta dos tokens
-interface TokenPair {
+export interface TokenPair {
   accessToken: string;
   refreshToken: string;
 }

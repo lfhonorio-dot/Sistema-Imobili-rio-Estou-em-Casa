@@ -11,8 +11,10 @@ export interface CreateAuditLogDto {
   action: string;
   entity?: string;
   entityId?: string;
-  before?: Record<string, unknown>;
-  after?: Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  before?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  after?: any;
   ipAddress?: string;
   userAgent?: string;
 }
