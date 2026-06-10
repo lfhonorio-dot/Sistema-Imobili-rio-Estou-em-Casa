@@ -94,7 +94,13 @@ export class MaintenanceService {
     });
     if (!existing) throw new NotFoundException('Ordem de manutenção não encontrada');
 
-    const data: Prisma.MaintenanceOrderUpdateInput = { status: dto.status };
+    const data: Prisma.MaintenanceOrderUpdateInput = {
+      status: dto.status,
+      ...(dto.supplierName !== undefined && { supplierName: dto.supplierName }),
+      ...(dto.quotedAmount !== undefined && { quotedAmount: dto.quotedAmount }),
+      ...(dto.finalAmount !== undefined && { finalAmount: dto.finalAmount }),
+      ...(dto.notes !== undefined && { notes: dto.notes }),
+    };
     if (dto.status === 'COMPLETED') {
       data.completedAt = new Date();
     }

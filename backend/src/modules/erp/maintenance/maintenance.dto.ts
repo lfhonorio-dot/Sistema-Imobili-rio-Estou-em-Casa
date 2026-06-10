@@ -56,6 +56,22 @@ export class UpdateMaintenanceOrderDto extends CreateMaintenanceOrderDto {}
 export class ChangeMaintenanceStatusDto {
   @IsEnum(['OPEN', 'IN_PROGRESS', 'AWAITING_QUOTE', 'COMPLETED', 'CANCELLED'])
   status!: string;
+
+  @IsOptional()
+  @IsString()
+  supplierName?: string;
+
+  @IsOptional()
+  @IsNumber()
+  quotedAmount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  finalAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
 
 export class MaintenanceQueryDto {

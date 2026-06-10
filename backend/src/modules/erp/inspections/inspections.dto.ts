@@ -1,6 +1,6 @@
 // DTOs para o módulo de Vistorias
 
-import { IsString, IsOptional, IsDateString, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsDateString, IsEnum, IsInt, Min, Max, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateInspectionDto {
@@ -37,6 +37,8 @@ export class AddRoomDto {
   @IsString()
   name!: string;
 
+  @IsOptional()
+  @IsArray()
   items?: Array<{
     name: string;
     condition: string;
