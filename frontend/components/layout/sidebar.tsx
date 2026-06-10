@@ -13,6 +13,9 @@ import {
   Building2,
   LogOut,
   ChevronDown,
+  KanbanSquare,
+  ContactIcon,
+  CheckSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -27,6 +30,21 @@ const navItems = [
     label: 'Dashboard',
     href: '/',
     icon: LayoutDashboard,
+  },
+  {
+    label: 'Pipeline',
+    href: '/pipeline',
+    icon: KanbanSquare,
+  },
+  {
+    label: 'Contatos',
+    href: '/contacts',
+    icon: ContactIcon,
+  },
+  {
+    label: 'Tarefas',
+    href: '/tasks',
+    icon: CheckSquare,
   },
 ];
 

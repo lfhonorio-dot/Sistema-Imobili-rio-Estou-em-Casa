@@ -19,6 +19,9 @@ import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LgpdModule } from './modules/lgpd/lgpd.module';
 import { AuditModule } from './modules/audit/audit.module';
 
+// Módulo CRM Core (Estágio 2)
+import { CrmModule } from './modules/crm/crm.module';
+
 @Module({
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
@@ -53,6 +56,9 @@ import { AuditModule } from './modules/audit/audit.module';
     WorkspaceModule,
     LgpdModule,
     AuditModule,
+
+    // CRM Core
+    CrmModule,
   ],
 })
 export class AppModule {}

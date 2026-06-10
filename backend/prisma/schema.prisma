@@ -1,5 +1,6 @@
 // Schema Prisma - Plataforma Imobiliária Estou em Casa
 // Estágio 1: Fundação, Segurança e Conformidade LGPD
+// Estágio 2: CRM Core
 
 generator client {
   provider = "prisma-client-js"
@@ -37,6 +38,14 @@ model Workspace {
   privacyPolicies    PrivacyPolicy[]
   lgpdRequests       LgpdRequest[]
   securityIncidents  SecurityIncident[]
+  // CRM Core
+  contacts           Contact[]
+  pipelines          Pipeline[]
+  deals              Deal[]
+  activities         Activity[]
+  documents          Document[]
+  tags               Tag[]
+  customFields       CustomField[]
 
   @@map("workspaces")
 }
@@ -249,4 +258,257 @@ model SecurityIncident {
   workspace       Workspace @relation(fields: [workspaceId], references: [id])
 
   @@map("security_incidents")
+}
+
+// =============================================
+// CRM CORE - Estágio 2
+// =============================================
+
+model Contact {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  type          String    // PERSON, COMPANY
+  name          String
+  email         String?
+  phone         String?
+  cpf           String?   // criptografado
+  cnpj          String?
+  birthDate     DateTime?
+  profession    String?
+  income        Decimal?  @db.Decimal(15, 2)
+  // Empresa
+  companyName   String?   // razão social
+  tradeName     String?   // nome fantasia
+  // Endereço
+  zipCode       String?
+  street        String?
+  number        String?
+  complement    String?
+  neighborhood  String?
+  city          String?
+  state         String?
+  // LGPD
+  marketingConsent Boolean @default(false)
+  // Metadados
+  customFields  Json      @default("{}")
+  origin        String?   // MANUAL, META_ADS, GOOGLE_ADS, PORTAL, WHATSAPP, SITE, REFERRAL
+  utmSource     String?
+  utmCampaign   String?
+  utmContent    String?
+  utmAdset      String?
+  utmAd         String?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id])
+  tags          ContactTag[]
+  deals         Deal[]
+  activities    Activity[]
+  companyLinks  ContactCompanyLink[] @relation("PersonLinks")
+  personLinks   ContactCompanyLink[] @relation("CompanyLinks")
+  documents     Document[]
+
+  @@map("contacts")
+}
+
+model Tag {
+  id          String       @id @default(uuid())
+  workspaceId String
+  name        String
+  color       String       @default("#6366f1")
+  module      String       // CONTACT, DEAL, PROPERTY
+  createdAt   DateTime     @default(now())
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
+  contacts    ContactTag[]
+  deals       DealTag[]
+
+  @@unique([workspaceId, name, module])
+  @@map("tags")
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@map("contact_tags")
+}
+
+model ContactCompanyLink {
+  id        String   @id @default(uuid())
+  personId  String
+  companyId String
+  role      String?  // SOCIO, FUNCIONARIO, PROPRIETARIO, INQUILINO
+  createdAt DateTime @default(now())
+  person    Contact  @relation("PersonLinks", fields: [personId], references: [id])
+  company   Contact  @relation("CompanyLinks", fields: [companyId], references: [id])
+
+  @@map("contact_company_links")
+}
+
+model CustomField {
+  id          String   @id @default(uuid())
+  workspaceId String
+  module      String   // CONTACT, DEAL, PROPERTY
+  name        String
+  key         String
+  type        String   // TEXT, NUMBER, DATE, SELECT, MULTISELECT, URL, FILE
+  options     Json?    // Para SELECT/MULTISELECT
+  required    Boolean  @default(false)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, module, key])
+  @@map("custom_fields")
+}
+
+model Pipeline {
+  id          String         @id @default(uuid())
+  workspaceId String
+  name        String
+  type        String         // SALE, RENTAL, COMMERCIAL, CUSTOM
+  isDefault   Boolean        @default(false)
+  order       Int            @default(0)
+  deletedAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id])
+  stages      PipelineStage[]
+  deals       Deal[]
+
+  @@map("pipelines")
+}
+
+model PipelineStage {
+  id               String    @id @default(uuid())
+  pipelineId       String
+  name             String
+  color            String    @default("#6366f1")
+  order            Int
+  expectedDays     Int?
+  isWon            Boolean   @default(false)
+  isLost           Boolean   @default(false)
+  rottenAfterDays  Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  pipeline         Pipeline  @relation(fields: [pipelineId], references: [id])
+  deals            Deal[]
+  dealHistory      DealStageHistory[]
+
+  @@map("pipeline_stages")
+}
+
+model Deal {
+  id              String    @id @default(uuid())
+  workspaceId     String
+  title           String
+  value           Decimal?  @db.Decimal(15, 2)
+  contactId       String
+  pipelineId      String
+  stageId         String
+  assigneeId      String?   // WorkspaceUser id
+  expectedCloseAt DateTime?
+  closedAt        DateTime?
+  lostReason      String?
+  lostNote        String?
+  origin          String?
+  utmSource       String?
+  utmCampaign     String?
+  utmContent      String?
+  gclid           String?
+  customFields    Json      @default("{}")
+  lastActivityAt  DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id])
+  contact         Contact       @relation(fields: [contactId], references: [id])
+  pipeline        Pipeline      @relation(fields: [pipelineId], references: [id])
+  stage           PipelineStage @relation(fields: [stageId], references: [id])
+  tags            DealTag[]
+  stageHistory    DealStageHistory[]
+  activities      Activity[]
+  properties      DealProperty[]
+
+  @@map("deals")
+}
+
+model DealTag {
+  dealId String
+  tagId  String
+  deal   Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([dealId, tagId])
+  @@map("deal_tags")
+}
+
+model DealProperty {
+  dealId     String
+  propertyId String
+  deal       Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@id([dealId, propertyId])
+  @@map("deal_properties")
+}
+
+model DealStageHistory {
+  id          String        @id @default(uuid())
+  dealId      String
+  stageId     String
+  userId      String?
+  daysInStage Int?
+  movedAt     DateTime      @default(now())
+  deal        Deal          @relation(fields: [dealId], references: [id])
+  stage       PipelineStage @relation(fields: [stageId], references: [id])
+
+  @@map("deal_stage_history")
+}
+
+model Activity {
+  id          String    @id @default(uuid())
+  workspaceId String
+  type        String    // NOTE, TASK, CALL, VISIT, MEETING, EMAIL, WHATSAPP, STAGE_CHANGE, FIELD_CHANGE
+  title       String?
+  content     String?   @db.Text
+  contactId   String?
+  dealId      String?
+  userId      String?
+  dueAt       DateTime?
+  doneAt      DateTime?
+  priority    String?   // LOW, MEDIUM, HIGH, URGENT
+  reminderAt  DateTime?
+  recurrence  String?   // NONE, DAILY, WEEKLY, MONTHLY
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  contact     Contact?  @relation(fields: [contactId], references: [id])
+  deal        Deal?     @relation(fields: [dealId], references: [id])
+
+  @@map("activities")
+}
+
+model Document {
+  id          String    @id @default(uuid())
+  workspaceId String
+  contactId   String?
+  name        String
+  type        String    // RG, CPF, CNPJ, RENDA, CERTIDAO, ESCRITURA, LAUDO, CONTRATO, OUTRO
+  url         String
+  size        Int?
+  mimeType    String?
+  expiresAt   DateTime?
+  notes       String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  contact     Contact?  @relation(fields: [contactId], references: [id])
+
+  @@map("documents")
 }
