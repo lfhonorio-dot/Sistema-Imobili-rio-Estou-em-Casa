@@ -2,8 +2,9 @@
 
 import {
   Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, Headers, UseGuards,
+  Body, Param, Query, Headers, UseGuards, Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiTags, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { InspectionsService } from './inspections.service';
 import {
@@ -49,7 +50,11 @@ export class InspectionsController {
     @Headers('x-workspace-id') workspaceId: string,
     @Param('id') id: string,
     @Body() dto: AddRoomDto,
+    @Req() req: Request,
   ) {
+    // Usa rawBody.items para preservar objetos aninhados ignorados pelo whitelist
+    const rawItems = (req.body as any)?.items;
+    if (rawItems !== undefined) dto.items = rawItems;
     return this.inspectionsService.addRoom(workspaceId, id, dto);
   }
 
