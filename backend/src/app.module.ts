@@ -22,6 +22,9 @@ import { AuditModule } from './modules/audit/audit.module';
 // Módulo CRM Core (Estágio 2)
 import { CrmModule } from './modules/crm/crm.module';
 
+// Módulo ERP Imobiliário (Estágio 3)
+import { ErpModule } from './modules/erp/erp.module';
+
 @Module({
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
@@ -59,6 +62,9 @@ import { CrmModule } from './modules/crm/crm.module';
 
     // CRM Core
     CrmModule,
+
+    // ERP Imobiliário
+    ErpModule,
   ],
 })
 export class AppModule {}

@@ -40,10 +40,10 @@ export enum PropertyStatus {
 
 export class CreatePropertyDto {
   @IsEnum(PropertyType)
-  type: PropertyType;
+  type!: PropertyType;
 
   @IsEnum(PropertyPurpose)
-  purpose: PropertyPurpose;
+  purpose!: PropertyPurpose;
 
   @IsOptional()
   @IsString()
@@ -251,7 +251,7 @@ export class PropertyQueryDto {
 
 export class ChangeStatusDto {
   @IsEnum(PropertyStatus)
-  status: PropertyStatus;
+  status!: PropertyStatus;
 
   @IsOptional()
   @IsString()
@@ -260,10 +260,10 @@ export class ChangeStatusDto {
 
 export class AddPhotosDto {
   @IsArray()
-  photos: Array<{ url: string; caption?: string; order?: number }>;
+  photos!: Array<{ url: string; caption?: string; order?: number }>;
 }
 
 export class ReorderPhotosDto {
   @IsArray()
-  photos: Array<{ id: string; order: number }>;
+  photos!: Array<{ id: string; order: number }>;
 }

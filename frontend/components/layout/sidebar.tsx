@@ -16,6 +16,10 @@ import {
   KanbanSquare,
   ContactIcon,
   CheckSquare,
+  Home,
+  FileText,
+  DollarSign,
+  Wrench,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -45,6 +49,27 @@ const navItems = [
     label: 'Tarefas',
     href: '/tasks',
     icon: CheckSquare,
+  },
+  // ERP Imobiliário (Estágio 3)
+  {
+    label: 'Imóveis',
+    href: '/properties',
+    icon: Home,
+  },
+  {
+    label: 'Contratos',
+    href: '/contracts',
+    icon: FileText,
+  },
+  {
+    label: 'Financeiro',
+    href: '/financial',
+    icon: DollarSign,
+  },
+  {
+    label: 'Manutenção',
+    href: '/maintenance',
+    icon: Wrench,
   },
 ];
 
