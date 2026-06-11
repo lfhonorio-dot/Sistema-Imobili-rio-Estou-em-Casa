@@ -31,6 +31,10 @@ import { HubModule } from './modules/hub/hub.module';
 // Módulo Marketing (Etapa 5)
 import { MarketingModule } from './modules/marketing/marketing.module';
 
+// Módulos Etapa 6 — Automações e Notificações
+import { AutomationModule } from './modules/automation/automation.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+
 @Module({
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
@@ -75,6 +79,10 @@ import { MarketingModule } from './modules/marketing/marketing.module';
 
     // Marketing
     MarketingModule,
+
+    // Automações e Notificações
+    AutomationModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

@@ -27,6 +27,7 @@ import {
   Receipt,
   Banknote,
   Megaphone,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -97,6 +98,11 @@ const navItems = [
     label: 'Marketing',
     href: '/marketing',
     icon: Megaphone,
+  },
+  {
+    label: 'Automações',
+    href: '/automation',
+    icon: Zap,
   },
   {
     label: 'Manutenção',
