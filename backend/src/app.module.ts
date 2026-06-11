@@ -28,6 +28,9 @@ import { ErpModule } from './modules/erp/erp.module';
 // Módulo Hub de Comunicação (Estágio 4)
 import { HubModule } from './modules/hub/hub.module';
 
+// Módulo Marketing (Etapa 5)
+import { MarketingModule } from './modules/marketing/marketing.module';
+
 @Module({
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
@@ -69,6 +72,9 @@ import { HubModule } from './modules/hub/hub.module';
     // ERP Imobiliário
     ErpModule,
     HubModule,
+
+    // Marketing
+    MarketingModule,
   ],
 })
 export class AppModule {}

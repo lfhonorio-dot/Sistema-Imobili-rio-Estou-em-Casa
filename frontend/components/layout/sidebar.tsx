@@ -26,6 +26,7 @@ import {
   Landmark,
   Receipt,
   Banknote,
+  Megaphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -91,6 +92,11 @@ const navItems = [
     label: 'Fiscal',
     href: '/fiscal',
     icon: Receipt,
+  },
+  {
+    label: 'Marketing',
+    href: '/marketing',
+    icon: Megaphone,
   },
   {
     label: 'Manutenção',

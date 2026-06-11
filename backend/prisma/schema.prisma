@@ -72,6 +72,11 @@ model Workspace {
   dimobRecords       DimobRecord[]
   irrfRecords        IrrfRecord[]
   carneLeaoRecords   CarneLeaoRecord[]
+  // Etapa 5 — Marketing
+  marketingIntegrations MarketingIntegration[]
+  adCampaigns           AdCampaign[]
+  portalIntegrations    PortalIntegration[]
+  portalPublications    PortalPublication[]
 
   @@map("workspaces")
 }
@@ -613,6 +618,7 @@ model Property {
   maintenanceOrders MaintenanceOrder[]
   documents        Document[]
   dealProperties   DealProperty[]
+  portalPublications PortalPublication[]
 
   @@unique([workspaceId, code])
   @@map("properties")
@@ -1374,4 +1380,86 @@ model CarneLeaoRecord {
   workspace        Workspace @relation(fields: [workspaceId], references: [id])
 
   @@map("carne_leao_records")
+}
+
+// ── ETAPA 5 — MARKETING ──────────────────────────────────────
+
+model MarketingIntegration {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  provider     String    // META_ADS, GOOGLE_ADS
+  status       String    @default("ACTIVE")
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  accountId    String?
+  pageId       String?
+  config       Json      @default("{}")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, provider])
+  @@map("marketing_integrations")
+}
+
+model AdCampaign {
+  id          String    @id @default(uuid())
+  workspaceId String
+  provider    String    // META_ADS, GOOGLE_ADS
+  externalId  String
+  name        String
+  status      String    @default("ACTIVE")
+  spend       Float     @default(0)
+  impressions Int       @default(0)
+  clicks      Int       @default(0)
+  leads       Int       @default(0)
+  conversions Int       @default(0)
+  revenue     Float     @default(0)
+  metrics     Json      @default("{}")
+  syncedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, provider, externalId])
+  @@map("ad_campaigns")
+}
+
+model PortalIntegration {
+  id           String              @id @default(uuid())
+  workspaceId  String
+  portal       String              // ZAP, VIVAREAL, OLX, IMOVELWEB, I123
+  apiKey       String?
+  status       String              @default("ACTIVE")
+  config       Json                @default("{}")
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id])
+  publications PortalPublication[]
+
+  @@unique([workspaceId, portal])
+  @@map("portal_integrations")
+}
+
+model PortalPublication {
+  id            String            @id @default(uuid())
+  workspaceId   String
+  portalId      String
+  propertyId    String
+  externalId    String?
+  status        String            @default("PENDING")
+  publishedAt   DateTime?
+  unpublishedAt DateTime?
+  lastError     String?
+  retryCount    Int               @default(0)
+  syncedAt      DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id])
+  portal        PortalIntegration @relation(fields: [portalId], references: [id])
+  property      Property          @relation(fields: [propertyId], references: [id])
+
+  @@unique([portalId, propertyId])
+  @@map("portal_publications")
 }
