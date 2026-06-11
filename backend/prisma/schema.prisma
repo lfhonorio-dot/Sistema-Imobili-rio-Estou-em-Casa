@@ -59,6 +59,19 @@ model Workspace {
   emailTemplates     EmailTemplate[]
   notifications      Notification[]
   whatsAppConfig     WhatsAppConfig?
+  // Backfill Etapa 3
+  signatureEnvelopes SignatureEnvelope[]
+  gatewayConfigs     PaymentGatewayConfig[]
+  boletos            Boleto[]
+  cnabFiles          CnabFile[]
+  splitRecipients    SplitRecipient[]
+  bankAccounts       BankAccount[]
+  taxConfig          TaxConfig?
+  nfseRecords        NfseRecord[]
+  fiscalObligations  FiscalObligation[]
+  dimobRecords       DimobRecord[]
+  irrfRecords        IrrfRecord[]
+  carneLeaoRecords   CarneLeaoRecord[]
 
   @@map("workspaces")
 }
@@ -677,6 +690,8 @@ model Contract {
   commissions      Commission[]
   inspections      Inspection[]
   documents        Document[]
+  signatureEnvelopes SignatureEnvelope[]
+  splitRules       SplitRule[]
 
   @@map("contracts")
 }
@@ -704,6 +719,7 @@ model FinancialEntry {
   updatedAt         DateTime  @updatedAt
   workspace         Workspace  @relation(fields: [workspaceId], references: [id])
   contract          Contract?  @relation(fields: [contractId], references: [id])
+  boleto            Boleto?
 
   @@map("financial_entries")
 }
@@ -885,4 +901,477 @@ model WhatsAppConfig {
   workspace     Workspace @relation(fields: [workspaceId], references: [id])
 
   @@map("whatsapp_configs")
+}
+
+// =============================================
+// BACKFILL ETAPA 3 — SUB-MÓDULOS AVANÇADOS
+// =============================================
+
+// ─── 3.3-A ASSINATURA ELETRÔNICA ────────────
+
+model SignatureEnvelope {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  contractId    String?
+  title         String
+  documentUrl   String   // URL no MinIO do PDF original
+  documentHash  String   // SHA-256 do PDF antes do envio
+  signedUrl     String?  // URL do PDF assinado final
+  signedHash    String?  // SHA-256 do PDF assinado
+  certUrl       String?  // URL do certificado de conclusão
+  type          String   @default("ADVANCED") // SIMPLE, ADVANCED, QUALIFIED
+  order         String   @default("PARALLEL") // PARALLEL, SEQUENTIAL
+  deadline      DateTime?
+  message       String?  @db.Text
+  status        String   @default("DRAFT") // DRAFT, SENT, PARTIAL, COMPLETED, EXPIRED, CANCELLED
+  completedAt   DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id])
+  contract      Contract?  @relation(fields: [contractId], references: [id])
+  signatories   SignatureSignatory[]
+
+  @@map("signature_envelopes")
+}
+
+model SignatureSignatory {
+  id             String   @id @default(uuid())
+  envelopeId     String
+  name           String
+  email          String
+  phone          String?
+  cpf            String?
+  role           String   // LOCATARIO, LOCADOR, FIADOR, IMOBILIARIA, TESTEMUNHA
+  order          Int      @default(0)
+  token          String   @unique // token único de 64 chars
+  tokenExpiresAt DateTime?
+  status         String   @default("PENDING") // PENDING, SENT, VIEWED, SIGNED, REJECTED
+  otpHash        String?  // hash do OTP usado
+  signedAt       DateTime?
+  rejectedAt     DateTime?
+  rejectionReason String?
+  ipAddress      String?
+  userAgent      String?
+  latitude       Float?
+  longitude      Float?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  envelope       SignatureEnvelope @relation(fields: [envelopeId], references: [id])
+  auditEvents    SignatureAuditEvent[]
+
+  @@map("signature_signatories")
+}
+
+model SignatureAuditEvent {
+  id           String   @id @default(uuid())
+  signatoryId  String
+  event        String   // LINK_SENT, DOCUMENT_OPENED, OTP_REQUESTED, OTP_VALIDATED, SIGNED, REJECTED
+  ipAddress    String?
+  userAgent    String?
+  latitude     Float?
+  longitude    Float?
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
+  signatory    SignatureSignatory @relation(fields: [signatoryId], references: [id])
+
+  @@map("signature_audit_events")
+}
+
+// ─── 3.4-C BOLETOS E COBRANÇAS ──────────────
+
+model PaymentGatewayConfig {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  provider      String   // ASAAS, EFI, PAGARME, ZOOP, ITAU, BRADESCO, BB
+  name          String
+  apiKey        String   // criptografada
+  apiSecret     String?  // criptografada
+  webhookSecret String?
+  environment   String   @default("SANDBOX") // SANDBOX, PRODUCTION
+  accountId     String?
+  agencia       String?
+  conta         String?
+  convenio      String?
+  isActive      Boolean  @default(true)
+  isDefault     Boolean  @default(false)
+  metadata      Json     @default("{}")
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id])
+  boletos       Boleto[]
+  splitRecipients SplitRecipient[]
+
+  @@map("payment_gateway_configs")
+}
+
+model Boleto {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  gatewayId        String?
+  financialEntryId String?  @unique
+  contractId       String?
+  contactId        String?
+  gatewayBoletoId  String?  // ID no gateway externo
+  nossoNumero      String?
+  linhaDigitavel   String?
+  codigoBarras     String?
+  pixQrCode        String?  @db.Text
+  pixCopiaECola    String?  @db.Text
+  amount           Float
+  dueDate          DateTime
+  issueDate        DateTime @default(now())
+  paidAt           DateTime?
+  paidAmount       Float?
+  cancelledAt      DateTime?
+  status           String   @default("PENDING") // PENDING, REGISTERED, SENT, VIEWED, PAID, OVERDUE, CANCELLED
+  registeredAt     DateTime?
+  bankslipUrl      String?
+  fine             Float    @default(2.0)   // % multa
+  interest         Float    @default(0.033) // % juros diário
+  discount         Float    @default(0.0)   // % desconto pontualidade
+  instructions     String?  @db.Text
+  description      String?
+  cnabReturnLines  Json     @default("[]")
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  workspace        Workspace            @relation(fields: [workspaceId], references: [id])
+  gateway          PaymentGatewayConfig? @relation(fields: [gatewayId], references: [id])
+  financialEntry   FinancialEntry?       @relation(fields: [financialEntryId], references: [id])
+
+  @@map("boletos")
+}
+
+model CnabFile {
+  id          String   @id @default(uuid())
+  workspaceId String
+  gatewayId   String?
+  type        String   // REMESSA, RETORNO
+  format      String   // CNAB240, CNAB400
+  filename    String
+  fileUrl     String?  // URL no MinIO
+  fileHash    String?
+  status      String   @default("PENDING") // PENDING, PROCESSING, PROCESSED, ERROR
+  recordCount Int      @default(0)
+  processedAt DateTime?
+  errorLog    String?  @db.Text
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  records     CnabRecord[]
+
+  @@map("cnab_files")
+}
+
+model CnabRecord {
+  id          String   @id @default(uuid())
+  cnabFileId  String
+  lineNumber  Int
+  occurrence  String?  // 06=Liquidação, 09=Baixa, 02=Entrada Confirmada, etc.
+  nossoNumero String?
+  amount      Float?
+  paidAt      DateTime?
+  boletoId    String?
+  status      String   @default("PENDING") // PENDING, MATCHED, ERROR
+  errorMsg    String?
+  rawLine     String?  @db.Text
+  createdAt   DateTime @default(now())
+  cnabFile    CnabFile @relation(fields: [cnabFileId], references: [id])
+
+  @@map("cnab_records")
+}
+
+// ─── 3.4-D SPLIT DE PAGAMENTO ───────────────
+
+model SplitRecipient {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  gatewayId       String?
+  contactId       String?
+  name            String
+  document        String   // CPF ou CNPJ
+  documentType    String   // CPF, CNPJ
+  email           String?
+  phone           String?
+  pixKeyType      String?  // CPF, CNPJ, EMAIL, PHONE, RANDOM
+  pixKey          String?
+  bankCode        String?
+  agency          String?
+  accountNumber   String?
+  accountType     String?  // CHECKING, SAVINGS
+  gatewayRecipientId String?
+  kycStatus       String   @default("PENDING") // PENDING, SUBMITTED, APPROVED, REJECTED, SUSPENDED
+  kycSubmittedAt  DateTime?
+  kycApprovedAt   DateTime?
+  kycRejectedAt   DateTime?
+  kycReason       String?
+  documentUrl     String?  // documento de identidade no MinIO
+  isActive        Boolean  @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id])
+  gateway         PaymentGatewayConfig? @relation(fields: [gatewayId], references: [id])
+  splitRules      SplitRule[]
+  splitTransactions SplitTransaction[]
+
+  @@map("split_recipients")
+}
+
+model SplitRule {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  contractId   String
+  recipientId  String
+  type         String   @default("PERCENTAGE") // PERCENTAGE, FIXED
+  value        Float    // % ou valor fixo
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  contract     Contract       @relation(fields: [contractId], references: [id])
+  recipient    SplitRecipient @relation(fields: [recipientId], references: [id])
+
+  @@map("split_rules")
+}
+
+model SplitTransaction {
+  id                 String   @id @default(uuid())
+  workspaceId        String
+  financialEntryId   String?
+  recipientId        String
+  gatewayTransactionId String?
+  amount             Float
+  status             String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, REVERSED
+  processedAt        DateTime?
+  failReason         String?
+  description        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  recipient          SplitRecipient @relation(fields: [recipientId], references: [id])
+
+  @@map("split_transactions")
+}
+
+// ─── 3.4-E INTEGRAÇÃO BANCÁRIA ──────────────
+
+model BankAccount {
+  id                  String   @id @default(uuid())
+  workspaceId         String
+  name                String
+  bankCode            String?
+  bankName            String?
+  agency              String?
+  accountNumber       String?
+  accountType         String   @default("CHECKING") // CHECKING, SAVINGS
+  pixKey              String?
+  openFinanceId       String?  // ID do consentimento Open Finance
+  openFinanceConsent  String?  // token de consentimento
+  consentExpiresAt    DateTime?
+  balance             Float    @default(0)
+  balanceDate         DateTime?
+  isDefault           Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  deletedAt           DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  workspace           Workspace @relation(fields: [workspaceId], references: [id])
+  transactions        BankTransaction[]
+  reconciliations     BankReconciliation[]
+
+  @@map("bank_accounts")
+}
+
+model BankTransaction {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  bankAccountId   String
+  externalId      String?  // ID no banco ou Open Finance
+  date            DateTime
+  amount          Float    // positivo=crédito, negativo=débito
+  description     String?
+  type            String?  // PIX, TED, DOC, BOLETO, TARIFA, etc.
+  counterpart     String?  // nome do pagador/recebedor
+  counterpartDoc  String?
+  balance         Float?
+  reconciled      Boolean  @default(false)
+  financialEntryId String?
+  importSource    String?  // OPEN_FINANCE, OFX, CNAB, MANUAL
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  bankAccount     BankAccount    @relation(fields: [bankAccountId], references: [id])
+  reconciliations BankReconciliation[]
+
+  @@map("bank_transactions")
+}
+
+model BankReconciliation {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  bankAccountId     String
+  bankTransactionId String?
+  financialEntryId  String?
+  status            String   @default("PENDING") // PENDING, AUTO, MANUAL, IGNORED
+  confidence        Float?   // 0-1 score de confiança no match automático
+  reconciledAt      DateTime?
+  reconciledBy      String?  // userId
+  notes             String?
+  createdAt         DateTime @default(now())
+  bankAccount       BankAccount       @relation(fields: [bankAccountId], references: [id])
+  bankTransaction   BankTransaction?  @relation(fields: [bankTransactionId], references: [id])
+
+  @@map("bank_reconciliations")
+}
+
+// ─── 3.4-F MÓDULO FISCAL ────────────────────
+
+model TaxConfig {
+  id                  String   @id @default(uuid())
+  workspaceId         String   @unique
+  regime              String   @default("SIMPLES") // SIMPLES, LUCRO_PRESUMIDO, LUCRO_REAL, MEI
+  cnpj                String?
+  inscricaoMunicipal  String?
+  inscricaoEstadual   String?
+  municipio           String?
+  codigoServico       String?  // CNAE/LC116
+  aliquotaISS         Float    @default(3.0)
+  aliquotaPIS         Float    @default(0.65)
+  aliquotaCOFINS      Float    @default(3.0)
+  aliquotaIRPJ        Float    @default(15.0)
+  aliquotaCSLL        Float    @default(9.0)
+  presumidoIRPJ       Float    @default(32.0) // % presunção
+  presumidoCSLL       Float    @default(32.0)
+  nfseProvider        String?  // ABRASF, SAOPAULO, RIO
+  nfseLogin           String?
+  nfsePassword        String?  // criptografada
+  nfseEnvironment     String   @default("HOMOLOG")
+  updatedAt           DateTime @updatedAt
+  workspace           Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@map("tax_configs")
+}
+
+model NfseRecord {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  financialEntryId String?
+  number          String?  // número da NFS-e
+  serie           String?
+  verificationCode String?
+  issuerCnpj      String
+  takerDocument   String
+  takerName       String
+  serviceCode     String
+  description     String   @db.Text
+  amount          Float
+  issRate         Float
+  issAmount       Float
+  issRetained     Boolean  @default(false)
+  status          String   @default("PENDING") // PENDING, ISSUED, CANCELLED, ERROR
+  issuedAt        DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  xmlUrl          String?
+  pdfUrl          String?
+  gatewayResponse Json     @default("{}")
+  retryCount      Int      @default(0)
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@map("nfse_records")
+}
+
+model FiscalObligation {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  type         String   // DAS, DARF_PIS, DARF_COFINS, DARF_IRPJ, DARF_CSLL, ISS, CNPJ
+  period       String   // YYYY-MM ou YYYY-QX
+  dueDate      DateTime
+  amount       Float?
+  receiptCode  String?  // código de receita DARF
+  status       String   @default("PENDING") // PENDING, GENERATED, PAID, OVERDUE
+  paidAt       DateTime?
+  paidAmount   Float?
+  receiptUrl   String?
+  calcDetails  Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@map("fiscal_obligations")
+}
+
+model DimobRecord {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  year         Int
+  contractId   String?
+  type         String   // LOCACAO, VENDA, INTERMEDIACAO
+  locadorDoc   String
+  locadorName  String
+  locatarioDoc String
+  locatarioName String
+  propertyAddress String
+  startDate    DateTime?
+  endDate      DateTime?
+  monthlyValue Float?
+  totalValue   Float?
+  commissionAmount Float?
+  exported     Boolean  @default(false)
+  exportedAt   DateTime?
+  exportHash   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@map("dimob_records")
+}
+
+model IrrfRecord {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  period           String   // YYYY-MM
+  contractId       String?
+  tenantDocument   String
+  tenantName       String
+  ownerDocument    String
+  ownerName        String
+  grossAmount      Float
+  irrfRate         Float
+  irrfAmount       Float
+  netAmount        Float
+  status           String   @default("PENDING") // PENDING, RETAINED, INFORMED
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@map("irrf_records")
+}
+
+model CarneLeaoRecord {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  period           String   // YYYY-MM
+  ownerContactId   String?
+  ownerDocument    String
+  ownerName        String
+  grossIncome      Float
+  deductions       Float    @default(0)
+  taxableBase      Float
+  rate             Float
+  taxDue           Float
+  darfAmount       Float
+  status           String   @default("CALCULATED") // CALCULATED, PAID, EXPORTED
+  paidAt           DateTime?
+  calcDetails      Json     @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@map("carne_leao_records")
 }

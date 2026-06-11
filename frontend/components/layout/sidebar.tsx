@@ -22,6 +22,10 @@ import {
   Wrench,
   MessageSquare,
   Mail,
+  PenSquare,
+  Landmark,
+  Receipt,
+  Banknote,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -64,9 +68,29 @@ const navItems = [
     icon: FileText,
   },
   {
+    label: 'Assinaturas',
+    href: '/contracts/signatures',
+    icon: PenSquare,
+  },
+  {
     label: 'Financeiro',
     href: '/financial',
     icon: DollarSign,
+  },
+  {
+    label: 'Boletos',
+    href: '/financial/billing',
+    icon: Banknote,
+  },
+  {
+    label: 'Bancário',
+    href: '/financial/banking',
+    icon: Landmark,
+  },
+  {
+    label: 'Fiscal',
+    href: '/fiscal',
+    icon: Receipt,
   },
   {
     label: 'Manutenção',

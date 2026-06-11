@@ -8,6 +8,11 @@ import { FinancialModule } from './financial/financial.module';
 import { InspectionsModule } from './inspections/inspections.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { DocumentsModule } from './documents/documents.module';
+import { EsignatureModule } from './esignature/esignature.module';
+import { BillingModule } from './billing/billing.module';
+import { SplitModule } from './split/split.module';
+import { BankingModule } from './banking/banking.module';
+import { FiscalModule } from './fiscal/fiscal.module';
 
 @Module({
   imports: [
@@ -17,6 +22,11 @@ import { DocumentsModule } from './documents/documents.module';
     InspectionsModule,
     MaintenanceModule,
     DocumentsModule,
+    EsignatureModule,
+    BillingModule,
+    SplitModule,
+    BankingModule,
+    FiscalModule,
   ],
   exports: [
     PropertiesModule,
@@ -25,6 +35,11 @@ import { DocumentsModule } from './documents/documents.module';
     InspectionsModule,
     MaintenanceModule,
     DocumentsModule,
+    EsignatureModule,
+    BillingModule,
+    SplitModule,
+    BankingModule,
+    FiscalModule,
   ],
 })
 export class ErpModule {}
