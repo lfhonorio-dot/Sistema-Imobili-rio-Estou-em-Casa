@@ -25,6 +25,9 @@ import { CrmModule } from './modules/crm/crm.module';
 // Módulo ERP Imobiliário (Estágio 3)
 import { ErpModule } from './modules/erp/erp.module';
 
+// Módulo Hub de Comunicação (Estágio 4)
+import { HubModule } from './modules/hub/hub.module';
+
 @Module({
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
@@ -65,6 +68,7 @@ import { ErpModule } from './modules/erp/erp.module';
 
     // ERP Imobiliário
     ErpModule,
+    HubModule,
   ],
 })
 export class AppModule {}

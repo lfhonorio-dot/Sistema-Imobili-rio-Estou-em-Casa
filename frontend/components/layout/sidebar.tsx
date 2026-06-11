@@ -20,6 +20,8 @@ import {
   FileText,
   DollarSign,
   Wrench,
+  MessageSquare,
+  Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -70,6 +72,17 @@ const navItems = [
     label: 'Manutenção',
     href: '/maintenance',
     icon: Wrench,
+  },
+  // Hub de Comunicação (Estágio 4)
+  {
+    label: 'Caixa de Entrada',
+    href: '/inbox',
+    icon: MessageSquare,
+  },
+  {
+    label: 'Templates Email',
+    href: '/email-templates',
+    icon: Mail,
   },
 ];
 
