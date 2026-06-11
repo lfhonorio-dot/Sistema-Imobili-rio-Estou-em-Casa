@@ -31,17 +31,19 @@ export class FiscalService {
 
   // ── NFS-e ─────────────────────────────────────────────────
 
-  async findNfse(workspaceId: string, page = 1, limit = 20) {
-    const skip = (page - 1) * limit;
+  async findNfse(workspaceId: string, page: number | string = 1, limit: number | string = 20) {
+    const p = +page || 1;
+    const l = +limit || 20;
+    const skip = (p - 1) * l;
     const where = { workspaceId };
     const [items, total] = await Promise.all([
       this.prisma.nfseRecord.findMany({
-        where, skip, take: limit,
+        where, skip, take: l,
         orderBy: { issuedAt: 'desc' },
       }),
       this.prisma.nfseRecord.count({ where }),
     ]);
-    return { items, meta: { page, limit, total, pages: Math.ceil(total / limit) } };
+    return { items, meta: { page: p, limit: l, total, pages: Math.ceil(total / l) } };
   }
 
   async emitNfse(workspaceId: string, dto: EmitNfseDto) {
