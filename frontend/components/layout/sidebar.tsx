@@ -29,6 +29,7 @@ import {
   Megaphone,
   Zap,
   BarChart2,
+  Plug,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -109,6 +110,11 @@ const navItems = [
     label: 'Relatórios',
     href: '/reports',
     icon: BarChart2,
+  },
+  {
+    label: 'Integrações',
+    href: '/integrations',
+    icon: Plug,
   },
   {
     label: 'Manutenção',

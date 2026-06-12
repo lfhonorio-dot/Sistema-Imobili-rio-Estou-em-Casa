@@ -26,16 +26,25 @@ export class TokenBlacklistService implements OnModuleInit {
 
   // Adiciona token à blacklist com TTL em segundos
   async blacklistToken(token: string, ttlSeconds: number): Promise<void> {
-    const key = `${this.PREFIX}${this.hashToken(token)}`;
-    await this.redis.setex(key, ttlSeconds, '1');
-    this.logger.debug(`Token adicionado à blacklist (TTL: ${ttlSeconds}s)`);
+    try {
+      const key = `${this.PREFIX}${this.hashToken(token)}`;
+      await this.redis.setex(key, ttlSeconds, '1');
+      this.logger.debug(`Token adicionado à blacklist (TTL: ${ttlSeconds}s)`);
+    } catch {
+      this.logger.warn('Redis indisponível — token não pôde ser adicionado à blacklist');
+    }
   }
 
   // Verifica se token está na blacklist
   async isBlacklisted(token: string): Promise<boolean> {
-    const key = `${this.PREFIX}${this.hashToken(token)}`;
-    const result = await this.redis.get(key);
-    return result !== null;
+    try {
+      const key = `${this.PREFIX}${this.hashToken(token)}`;
+      const result = await this.redis.get(key);
+      return result !== null;
+    } catch {
+      // Redis indisponível — assume token não está na blacklist
+      return false;
+    }
   }
 
   // Hash do token para não armazenar o token completo no Redis

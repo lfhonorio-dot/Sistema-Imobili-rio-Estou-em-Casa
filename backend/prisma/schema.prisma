@@ -80,6 +80,9 @@ model Workspace {
   // Etapa 6 — Automações e Notificações
   automations           Automation[]
   notificationPreferences NotificationPreference[]
+  // Etapa 8 — Integrações
+  apiKeys              ApiKey[]
+  webhookEndpoints     WebhookEndpoint[]
 
   @@map("workspaces")
 }
@@ -1522,4 +1525,51 @@ model NotificationPreference {
 
   @@unique([workspaceId, userId, type])
   @@map("notification_preferences")
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  keyHash     String   @unique
+  keyPrefix   String
+  scopes      String[] @default([])
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  @@map("api_keys")
+}
+
+model WebhookEndpoint {
+  id          String   @id @default(uuid())
+  workspaceId String
+  url         String
+  events      String[] @default([])
+  secret      String
+  status      String   @default("ACTIVE")
+  lastTriggeredAt DateTime?
+  failureCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  logs        WebhookLog[]
+  @@map("webhook_endpoints")
+}
+
+model WebhookLog {
+  id         String   @id @default(uuid())
+  endpointId String
+  event      String
+  payload    Json     @default("{}")
+  status     String
+  statusCode Int?
+  response   String?
+  duration   Int?
+  createdAt  DateTime @default(now())
+  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id])
+  @@map("webhook_logs")
 }

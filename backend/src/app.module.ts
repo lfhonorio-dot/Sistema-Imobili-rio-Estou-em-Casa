@@ -38,6 +38,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 // Módulo Etapa 7 — Relatórios e Analytics
 import { ReportsModule } from './modules/reports/reports.module';
 
+// Módulo Etapa 8 — Integrações e API Pública
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+
 @Module({
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
@@ -89,6 +92,9 @@ import { ReportsModule } from './modules/reports/reports.module';
 
     // Relatórios e Analytics
     ReportsModule,
+
+    // Integrações e API Pública
+    IntegrationsModule,
   ],
 })
 export class AppModule {}
