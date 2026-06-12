@@ -39,7 +39,10 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReportsModule } from './modules/reports/reports.module';
 
 // Módulo Etapa 8 — Integrações e API Pública
+import { AdminModule } from './modules/admin/admin.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+
+// Módulo Etapa 9 — Super Admin e Configurações Avançadas
 
 @Module({
   imports: [
@@ -95,6 +98,11 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 
     // Integrações e API Pública
     IntegrationsModule,
+
+    // Super Admin
+    AdminModule,
+
+    // Super Admin e Configurações Avançadas
   ],
 })
 export class AppModule {}

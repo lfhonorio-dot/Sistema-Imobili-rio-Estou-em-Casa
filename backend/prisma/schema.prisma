@@ -83,6 +83,9 @@ model Workspace {
   // Etapa 8 — Integrações
   apiKeys              ApiKey[]
   webhookEndpoints     WebhookEndpoint[]
+  // Etapa 9 — Admin & Configurações Avançadas
+  plan                 WorkspacePlan?
+  onboardingSteps      OnboardingStep[]
 
   @@map("workspaces")
 }
@@ -1572,4 +1575,55 @@ model WebhookLog {
   createdAt  DateTime @default(now())
   endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id])
   @@map("webhook_logs")
+}
+
+// =============================================
+// ETAPA 9 — SUPER ADMIN E CONFIGURAÇÕES AVANÇADAS
+// =============================================
+
+model PlatformConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+  @@map("platform_configs")
+}
+
+model FeatureFlag {
+  id           String   @id @default(uuid())
+  key          String   @unique
+  enabled      Boolean  @default(false)
+  description  String?
+  workspaceIds String[] @default([])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  @@map("feature_flags")
+}
+
+model WorkspacePlan {
+  id            String    @id @default(uuid())
+  workspaceId   String    @unique
+  plan          String    @default("FREE")
+  maxUsers      Int       @default(3)
+  maxProperties Int       @default(50)
+  maxContacts   Int       @default(500)
+  features      String[]  @default([])
+  validUntil    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  workspace     Workspace @relation(fields: [workspaceId], references: [id])
+  @@map("workspace_plans")
+}
+
+model OnboardingStep {
+  id          String    @id @default(uuid())
+  workspaceId String
+  step        String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  @@unique([workspaceId, step])
+  @@map("onboarding_steps")
 }

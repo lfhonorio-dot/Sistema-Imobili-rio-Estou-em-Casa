@@ -30,6 +30,7 @@ import {
   Zap,
   BarChart2,
   Plug,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -115,6 +116,11 @@ const navItems = [
     label: 'Integrações',
     href: '/integrations',
     icon: Plug,
+  },
+  {
+    label: 'Admin',
+    href: '/admin',
+    icon: ShieldCheck,
   },
   {
     label: 'Manutenção',
