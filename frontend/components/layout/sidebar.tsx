@@ -28,6 +28,7 @@ import {
   Banknote,
   Megaphone,
   Zap,
+  BarChart2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -103,6 +104,11 @@ const navItems = [
     label: 'Automações',
     href: '/automation',
     icon: Zap,
+  },
+  {
+    label: 'Relatórios',
+    href: '/reports',
+    icon: BarChart2,
   },
   {
     label: 'Manutenção',
