@@ -35,6 +35,9 @@ import { MarketingModule } from './modules/marketing/marketing.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 
+// Módulo Etapa 7 — Relatórios e Analytics
+import { ReportsModule } from './modules/reports/reports.module';
+
 @Module({
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
@@ -83,6 +86,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     // Automações e Notificações
     AutomationModule,
     NotificationsModule,
+
+    // Relatórios e Analytics
+    ReportsModule,
   ],
 })
 export class AppModule {}
