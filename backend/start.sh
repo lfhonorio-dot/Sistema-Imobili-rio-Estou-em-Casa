@@ -7,7 +7,7 @@ set -e
 echo "==> Aguardando banco de dados..."
 # Tenta conectar ao banco por até 30s usando uma query simples (sem modificar o schema)
 for i in $(seq 1 30); do
-  npx prisma db execute --stdin <<< "SELECT 1" 2>/dev/null && break || true
+  echo "SELECT 1" | npx prisma db execute --stdin 2>/dev/null && break || true
   echo "    Tentativa $i/30 — aguardando PostgreSQL..."
   sleep 2
 done
