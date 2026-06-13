@@ -61,6 +61,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY prisma ./prisma/
 
+# Copia script de inicialização
+COPY start.sh ./start.sh
+RUN chmod +x start.sh
+
 # Usuário não-root para segurança
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nestjs
@@ -68,4 +72,4 @@ USER nestjs
 
 EXPOSE 3001
 
-CMD ["node", "dist/main"]
+CMD ["sh", "start.sh"]

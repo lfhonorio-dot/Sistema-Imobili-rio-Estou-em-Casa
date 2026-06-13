@@ -1,0 +1,14 @@
+# railway.toml — Frontend Next.js
+# Configura o Railway para usar o Dockerfile de produção
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+dockerBuildTarget = "production"
+
+[deploy]
+startCommand = "node server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
