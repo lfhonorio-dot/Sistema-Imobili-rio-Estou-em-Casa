@@ -1,0 +1,17 @@
+# nixpacks.toml — Configuração de build para Railway (Nixpacks)
+# Define explicitamente as fases: install → build → start
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "openssl"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = [
+  "npx prisma generate",
+  "npm run build"
+]
+
+[start]
+cmd = "sh scripts/start.sh"
