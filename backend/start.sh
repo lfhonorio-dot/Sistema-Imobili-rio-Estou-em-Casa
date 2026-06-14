@@ -26,5 +26,5 @@ npx prisma migrate deploy
 
 echo "==> Iniciando servidor NestJS..."
 echo "==> Compilando TypeScript..."
-npm run build
+npm ci && npm run build
 exec node dist/main
