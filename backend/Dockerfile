@@ -8,7 +8,7 @@ COPY package*.json ./
 
 # Forçar instalação de devDependencies no build (independente do NODE_ENV do Railway)
 ARG NODE_ENV=development
-RUN npm ci
+RUN npm install
 
 COPY . .
 
