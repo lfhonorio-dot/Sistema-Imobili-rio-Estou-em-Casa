@@ -1,8 +1,11 @@
 #!/bin/sh
-# start.sh — Script de inicialização para produção (Railway)
-# O prisma generate já é executado no build — aqui apenas migramos e iniciamos
-
 set -e
+
+echo "==> DEBUG: Pasta atual: $(pwd)"
+echo "==> DEBUG: Arquivos em /app:"
+ls -la /app/ 2>/dev/null || echo "Pasta /app nao existe"
+echo "==> DEBUG: Pasta dist:"
+ls -la /app/dist/ 2>/dev/null || echo "DIST NAO EXISTE!"
 
 echo "==> Aguardando banco de dados..."
 for i in $(seq 1 30); do
