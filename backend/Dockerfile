@@ -15,8 +15,8 @@ COPY . .
 RUN npx prisma generate
 RUN npm run build
 
-RUN chmod +x iniciar.sh
+RUN chmod +x start.sh
 
 EXPOSE 3000
 
-CMD ["sh", "iniciar.sh"]
+CMD ["sh", "start.sh"]
