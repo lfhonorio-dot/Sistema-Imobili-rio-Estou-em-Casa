@@ -1,7 +1,3 @@
-// Schema Prisma - Plataforma Imobiliária Estou em Casa
-// Estágio 1: Fundação, Segurança e Conformidade LGPD
-// Estágio 2: CRM Core
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,1619 +7,381 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// -----------------------------------------------
-// Workspace: representa uma imobiliária/empresa
-// -----------------------------------------------
-model Workspace {
-  id                 String    @id @default(uuid())
-  name               String
-  slug               String    @unique
-  cnpj               String?
-  address            String?
-  phone              String?
-  timezone           String    @default("America/Sao_Paulo")
-  currency           String    @default("BRL")
-  logo               String?
-  twoFactorRequired  Boolean   @default(false)
-  dpoName            String?
-  dpoEmail           String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  deletedAt          DateTime?
-  users              WorkspaceUser[]
-  roles              Role[]
-  inviteTokens       InviteToken[]
-  auditLogs          AuditLog[]
-  lgpdConsents       LgpdConsent[]
-  privacyPolicies    PrivacyPolicy[]
-  lgpdRequests       LgpdRequest[]
-  securityIncidents  SecurityIncident[]
-  // CRM Core
-  contacts           Contact[]
-  pipelines          Pipeline[]
-  deals              Deal[]
-  activities         Activity[]
-  documents          Document[]
-  tags               Tag[]
-  customFields       CustomField[]
-  // ERP Imobiliário
-  properties         Property[]
-  contracts          Contract[]
-  financialEntries   FinancialEntry[]
-  commissions        Commission[]
-  inspections        Inspection[]
-  maintenanceOrders  MaintenanceOrder[]
-  // Hub de Comunicação
-  conversations      Conversation[]
-  messages           Message[]
-  emailTemplates     EmailTemplate[]
-  notifications      Notification[]
-  whatsAppConfig     WhatsAppConfig?
-  // Backfill Etapa 3
-  signatureEnvelopes SignatureEnvelope[]
-  gatewayConfigs     PaymentGatewayConfig[]
-  boletos            Boleto[]
-  cnabFiles          CnabFile[]
-  splitRecipients    SplitRecipient[]
-  bankAccounts       BankAccount[]
-  taxConfig          TaxConfig?
-  nfseRecords        NfseRecord[]
-  fiscalObligations  FiscalObligation[]
-  dimobRecords       DimobRecord[]
-  irrfRecords        IrrfRecord[]
-  carneLeaoRecords   CarneLeaoRecord[]
-  // Etapa 5 — Marketing
-  marketingIntegrations MarketingIntegration[]
-  adCampaigns           AdCampaign[]
-  portalIntegrations    PortalIntegration[]
-  portalPublications    PortalPublication[]
-  // Etapa 6 — Automações e Notificações
-  automations           Automation[]
-  notificationPreferences NotificationPreference[]
-  // Etapa 8 — Integrações
-  apiKeys              ApiKey[]
-  webhookEndpoints     WebhookEndpoint[]
-  // Etapa 9 — Admin & Configurações Avançadas
-  plan                 WorkspacePlan?
-  onboardingSteps      OnboardingStep[]
-
-  @@map("workspaces")
-}
-
-// -----------------------------------------------
-// Usuário: pessoa com acesso ao sistema
-// -----------------------------------------------
 model User {
-  id                  String    @id @default(uuid())
-  email               String    @unique
-  passwordHash        String
-  name                String
-  phone               String?
-  avatar              String?
-  twoFactorSecret     String?
-  twoFactorEnabled    Boolean   @default(false)
-  lastLoginAt         DateTime?
-  failedLoginAttempts Int       @default(0)
-  lockedUntil         DateTime?
-  preferences         Json      @default("{}")
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  deletedAt           DateTime?
-  workspaces          WorkspaceUser[]
-  sessions            UserSession[]
-  auditLogs           AuditLog[]
-  passwordResetTokens PasswordResetToken[]
-
-  @@map("users")
-}
-
-// -----------------------------------------------
-// Relacionamento Usuário <-> Workspace com papel
-// -----------------------------------------------
-model WorkspaceUser {
-  id          String    @id @default(uuid())
-  workspaceId String
-  userId      String
-  roleId      String
-  isOwner     Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  user        User      @relation(fields: [userId], references: [id])
-  role        Role      @relation(fields: [roleId], references: [id])
-
-  @@unique([workspaceId, userId])
-  @@map("workspace_users")
-}
-
-// -----------------------------------------------
-// Papéis de acesso com permissões em JSON
-// -----------------------------------------------
-model Role {
-  id             String          @id @default(uuid())
-  workspaceId    String
-  name           String
-  isSystem       Boolean         @default(false)
-  permissions    Json            @default("{}")
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  workspace      Workspace       @relation(fields: [workspaceId], references: [id])
-  workspaceUsers WorkspaceUser[]
-
-  @@unique([workspaceId, name])
-  @@map("roles")
-}
-
-// -----------------------------------------------
-// Tokens de convite para novos membros
-// -----------------------------------------------
-model InviteToken {
-  id          String    @id @default(uuid())
-  workspaceId String
-  email       String
-  roleId      String
-  token       String    @unique
-  expiresAt   DateTime
-  usedAt      DateTime?
-  createdAt   DateTime  @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("invite_tokens")
-}
-
-// -----------------------------------------------
-// Sessões de usuário com fingerprint
-// -----------------------------------------------
-model UserSession {
-  id           String   @id @default(uuid())
-  userId       String
-  refreshToken String   @unique
-  userAgent    String?
-  ipAddress    String?
-  fingerprint  String?
-  expiresAt    DateTime
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
   createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id])
+  updatedAt    DateTime @updatedAt
 
-  @@map("user_sessions")
+  retirementPlan      RetirementPlan?
+  cashFlowEntries     CashFlowEntry[]
+  importLogs          ImportLog[]
+  importRules         ImportRule[]
+  importMatchingRules ImportMatchingRule[]
+  monthlySnapshots    MonthlySnapshot[]
 }
 
-// -----------------------------------------------
-// Tokens de redefinição de senha
-// -----------------------------------------------
-model PasswordResetToken {
-  id        String    @id @default(uuid())
-  userId    String
-  token     String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
+enum AssetType {
+  RENDA_FIXA
+  FII
+  ACAO
+  PREVIDENCIA
+  COE
+  CAIXA
+  RECEBIVEIS
+}
+
+enum Indexer {
+  IPCA
+  CDI
+  SELIC
+  PREFIXADO
+  IGPM
+  OUTRO
+}
+
+enum LiquidityType {
+  D0
+  D1
+  NO_VENCIMENTO
+  ILIQUIDO
+}
+
+model InvestmentAsset {
+  id             String    @id @default(cuid())
+  type           AssetType
+  name           String
+  ticker         String?
+  issuer         String?
+  broker         String?
+  contractNumber String?
+
+  applicationDate DateTime?
+  maturityDate    DateTime?
+  exDividendDate  DateTime?
+
+  investedAmount Decimal  @db.Decimal(18, 2)
+  currentValue   Decimal  @db.Decimal(18, 2)
+  quantity       Decimal? @db.Decimal(18, 6)
+  averagePrice   Decimal? @db.Decimal(18, 6)
+  currentPrice   Decimal? @db.Decimal(18, 6)
+
+  indexer    Indexer?
+  rate       Decimal? @db.Decimal(10, 4)
+  grossRate  Decimal? @db.Decimal(10, 4)
+  isIRExempt Boolean  @default(false)
+  rating     String?
+  liquidity  LiquidityType?
+
+  segment              String?
+  lastDividendPerShare Decimal? @db.Decimal(18, 6)
+  monthlyDY            Decimal? @db.Decimal(10, 4)
+  pvp                  Decimal? @db.Decimal(10, 4)
+  beta                 Decimal? @db.Decimal(10, 4)
+
+  insurerName         String?
+  planType            String?
+  taxRegime           String?
+  monthlyContribution Decimal? @db.Decimal(18, 2)
+  beneficiaries       String?
+
+  minReturn        Decimal? @db.Decimal(18, 2)
+  baseReturn       Decimal? @db.Decimal(18, 2)
+  maxReturn        Decimal? @db.Decimal(18, 2)
+  capitalProtected Boolean  @default(false)
+  underlyingAsset  String?
+
+  lastImportedAt DateTime?
+  importSource   String?
+
+  deletedAt DateTime?
   createdAt DateTime  @default(now())
-  user      User      @relation(fields: [userId], references: [id])
+  updatedAt DateTime  @updatedAt
 
-  @@map("password_reset_tokens")
+  dividendHistory DividendHistory[]
+
+  @@index([type])
+  @@index([maturityDate])
+  @@index([deletedAt])
 }
 
-// -----------------------------------------------
-// Log de auditoria para todas as ações críticas
-// -----------------------------------------------
-model AuditLog {
-  id          String     @id @default(uuid())
-  workspaceId String?
-  userId      String?
-  action      String
-  entity      String?
-  entityId    String?
-  before      Json?
-  after       Json?
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime   @default(now())
-  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
-  user        User?      @relation(fields: [userId], references: [id])
+model DividendHistory {
+  id          String          @id @default(cuid())
+  asset       InvestmentAsset @relation(fields: [assetId], references: [id])
+  assetId     String
+  month       Int
+  year        Int
+  amount      Decimal         @db.Decimal(18, 6)
+  totalAmount Decimal         @db.Decimal(18, 2)
+  paymentDate DateTime?
+  createdAt   DateTime        @default(now())
 
-  @@map("audit_logs")
+  @@unique([assetId, year, month])
+  @@index([assetId, year, month])
 }
 
-// -----------------------------------------------
-// Consentimento LGPD dos titulares de dados
-// -----------------------------------------------
-model LgpdConsent {
-  id              String        @id @default(uuid())
-  workspaceId     String
-  subjectEmail    String
-  subjectName     String?
-  policyVersionId String
-  consentedAt     DateTime
-  ipAddress       String?
-  consentText     String        @db.Text
-  withdrawnAt     DateTime?
-  createdAt       DateTime      @default(now())
-  workspace       Workspace     @relation(fields: [workspaceId], references: [id])
-  policyVersion   PrivacyPolicy @relation(fields: [policyVersionId], references: [id])
-
-  @@map("lgpd_consents")
+enum PropertyClassification {
+  PARA_RENDA
+  USO_PROPRIO
+  A_COMERCIALIZAR
 }
 
-// -----------------------------------------------
-// Versões da Política de Privacidade
-// -----------------------------------------------
-model PrivacyPolicy {
-  id          String        @id @default(uuid())
-  workspaceId String
-  version     String
-  content     String        @db.Text
-  effectiveAt DateTime
-  createdAt   DateTime      @default(now())
-  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
-  consents    LgpdConsent[]
-
-  @@map("privacy_policies")
+enum PropertyType {
+  APARTAMENTO
+  CASA
+  SITIO
+  SALA_COMERCIAL
+  GALPAO
+  TERRENO
+  LOTE
+  RURAL
 }
 
-// -----------------------------------------------
-// Requisições de direitos dos titulares (LGPD art. 18)
-// -----------------------------------------------
-model LgpdRequest {
-  id           String    @id @default(uuid())
-  workspaceId  String
-  type         String    // ACCESS | CORRECTION | DELETION | PORTABILITY | REVOKE_CONSENT | INFORMATION
-  subjectEmail String
-  subjectName  String?
-  status       String    @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED | REJECTED
-  notes        String?   @db.Text
-  completedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  workspace    Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("lgpd_requests")
+enum RentAdjustmentIndex {
+  IGPM
+  IPCA
+  OUTRO
 }
-
-// -----------------------------------------------
-// Registro de incidentes de segurança
-// -----------------------------------------------
-model SecurityIncident {
-  id              String    @id @default(uuid())
-  workspaceId     String
-  title           String
-  description     String    @db.Text
-  severity        String    // LOW | MEDIUM | HIGH | CRITICAL
-  status          String    @default("OPEN") // OPEN | INVESTIGATING | RESOLVED
-  affectedData    String?
-  notifiedAnpd    Boolean   @default(false)
-  notifiedAnpdAt  DateTime?
-  resolvedAt      DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  workspace       Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("security_incidents")
-}
-
-// =============================================
-// CRM CORE - Estágio 2
-// =============================================
-
-model Contact {
-  id            String    @id @default(uuid())
-  workspaceId   String
-  type          String    // PERSON, COMPANY
-  name          String
-  email         String?
-  phone         String?
-  cpf           String?   // criptografado
-  cnpj          String?
-  birthDate     DateTime?
-  profession    String?
-  income        Decimal?  @db.Decimal(15, 2)
-  // Empresa
-  companyName   String?   // razão social
-  tradeName     String?   // nome fantasia
-  // Endereço
-  zipCode       String?
-  street        String?
-  number        String?
-  complement    String?
-  neighborhood  String?
-  city          String?
-  state         String?
-  // LGPD
-  marketingConsent Boolean @default(false)
-  // Metadados
-  customFields  Json      @default("{}")
-  origin        String?   // MANUAL, META_ADS, GOOGLE_ADS, PORTAL, WHATSAPP, SITE, REFERRAL
-  utmSource     String?
-  utmCampaign   String?
-  utmContent    String?
-  utmAdset      String?
-  utmAd         String?
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  workspace         Workspace @relation(fields: [workspaceId], references: [id])
-  tags              ContactTag[]
-  deals             Deal[]
-  activities        Activity[]
-  companyLinks      ContactCompanyLink[] @relation("PersonLinks")
-  personLinks       ContactCompanyLink[] @relation("CompanyLinks")
-  documents         Document[]
-  // ERP: imóveis e contratos
-  ownedProperties   Property[] @relation("PropertyOwner")
-  contractsAsOwner  Contract[] @relation("ContractOwner")
-  contractsAsTenant Contract[] @relation("ContractTenant")
-  // Hub: conversas
-  conversations     Conversation[]
-
-  @@map("contacts")
-}
-
-model Tag {
-  id          String       @id @default(uuid())
-  workspaceId String
-  name        String
-  color       String       @default("#6366f1")
-  module      String       // CONTACT, DEAL, PROPERTY
-  createdAt   DateTime     @default(now())
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
-  contacts    ContactTag[]
-  deals       DealTag[]
-
-  @@unique([workspaceId, name, module])
-  @@map("tags")
-}
-
-model ContactTag {
-  contactId String
-  tagId     String
-  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([contactId, tagId])
-  @@map("contact_tags")
-}
-
-model ContactCompanyLink {
-  id        String   @id @default(uuid())
-  personId  String
-  companyId String
-  role      String?  // SOCIO, FUNCIONARIO, PROPRIETARIO, INQUILINO
-  createdAt DateTime @default(now())
-  person    Contact  @relation("PersonLinks", fields: [personId], references: [id])
-  company   Contact  @relation("CompanyLinks", fields: [companyId], references: [id])
-
-  @@map("contact_company_links")
-}
-
-model CustomField {
-  id          String   @id @default(uuid())
-  workspaceId String
-  module      String   // CONTACT, DEAL, PROPERTY
-  name        String
-  key         String
-  type        String   // TEXT, NUMBER, DATE, SELECT, MULTISELECT, URL, FILE
-  options     Json?    // Para SELECT/MULTISELECT
-  required    Boolean  @default(false)
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@unique([workspaceId, module, key])
-  @@map("custom_fields")
-}
-
-model Pipeline {
-  id          String         @id @default(uuid())
-  workspaceId String
-  name        String
-  type        String         // SALE, RENTAL, COMMERCIAL, CUSTOM
-  isDefault   Boolean        @default(false)
-  order       Int            @default(0)
-  deletedAt   DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id])
-  stages      PipelineStage[]
-  deals       Deal[]
-
-  @@map("pipelines")
-}
-
-model PipelineStage {
-  id               String    @id @default(uuid())
-  pipelineId       String
-  name             String
-  color            String    @default("#6366f1")
-  order            Int
-  expectedDays     Int?
-  isWon            Boolean   @default(false)
-  isLost           Boolean   @default(false)
-  rottenAfterDays  Int?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  pipeline         Pipeline  @relation(fields: [pipelineId], references: [id])
-  deals            Deal[]
-  dealHistory      DealStageHistory[]
-
-  @@map("pipeline_stages")
-}
-
-model Deal {
-  id              String    @id @default(uuid())
-  workspaceId     String
-  title           String
-  value           Decimal?  @db.Decimal(15, 2)
-  contactId       String
-  pipelineId      String
-  stageId         String
-  assigneeId      String?   // WorkspaceUser id
-  expectedCloseAt DateTime?
-  closedAt        DateTime?
-  lostReason      String?
-  lostNote        String?
-  origin          String?
-  utmSource       String?
-  utmCampaign     String?
-  utmContent      String?
-  gclid           String?
-  customFields    Json      @default("{}")
-  lastActivityAt  DateTime?
-  deletedAt       DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  workspace       Workspace     @relation(fields: [workspaceId], references: [id])
-  contact         Contact       @relation(fields: [contactId], references: [id])
-  pipeline        Pipeline      @relation(fields: [pipelineId], references: [id])
-  stage           PipelineStage @relation(fields: [stageId], references: [id])
-  tags            DealTag[]
-  stageHistory    DealStageHistory[]
-  activities      Activity[]
-  properties      DealProperty[]
-
-  @@map("deals")
-}
-
-model DealTag {
-  dealId String
-  tagId  String
-  deal   Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([dealId, tagId])
-  @@map("deal_tags")
-}
-
-model DealProperty {
-  dealId     String
-  propertyId String
-  deal       Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  property   Property? @relation(fields: [propertyId], references: [id])
-
-  @@id([dealId, propertyId])
-  @@map("deal_properties")
-}
-
-model DealStageHistory {
-  id          String        @id @default(uuid())
-  dealId      String
-  stageId     String
-  userId      String?
-  daysInStage Int?
-  movedAt     DateTime      @default(now())
-  deal        Deal          @relation(fields: [dealId], references: [id])
-  stage       PipelineStage @relation(fields: [stageId], references: [id])
-
-  @@map("deal_stage_history")
-}
-
-model Activity {
-  id          String    @id @default(uuid())
-  workspaceId String
-  type        String    // NOTE, TASK, CALL, VISIT, MEETING, EMAIL, WHATSAPP, STAGE_CHANGE, FIELD_CHANGE
-  title       String?
-  content     String?   @db.Text
-  contactId   String?
-  dealId      String?
-  userId      String?
-  dueAt       DateTime?
-  doneAt      DateTime?
-  priority    String?   // LOW, MEDIUM, HIGH, URGENT
-  reminderAt  DateTime?
-  recurrence  String?   // NONE, DAILY, WEEKLY, MONTHLY
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  contact     Contact?  @relation(fields: [contactId], references: [id])
-  deal        Deal?     @relation(fields: [dealId], references: [id])
-
-  @@map("activities")
-}
-
-model Document {
-  id          String    @id @default(uuid())
-  workspaceId String
-  contactId   String?
-  propertyId  String?
-  contractId  String?
-  name        String
-  type        String    // RG, CPF, CNPJ, RENDA, CERTIDAO, ESCRITURA, LAUDO, CONTRATO, OUTRO
-  url         String
-  size        Int?
-  mimeType    String?
-  expiresAt   DateTime?
-  notes       String?
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  contact     Contact?  @relation(fields: [contactId], references: [id])
-  property    Property? @relation(fields: [propertyId], references: [id])
-  contract    Contract? @relation(fields: [contractId], references: [id])
-
-  @@map("documents")
-}
-
-// =============================================
-// ERP IMOBILIÁRIO - Estágio 3
-// =============================================
 
 model Property {
-  id               String    @id @default(uuid())
-  workspaceId      String
-  code             String    // código interno único por workspace
-  portalCode       String?   // código de publicação nos portais
-  type             String    // APARTMENT, HOUSE, COMMERCIAL, LAND, WAREHOUSE, LAUNCH, RURAL
-  purpose          String    // SALE, RENTAL, SALE_RENTAL
-  status           String    @default("AVAILABLE") // AVAILABLE, RESERVED, RENTED, SOLD, MAINTENANCE, INACTIVE
-  // Endereço
-  zipCode          String?
-  street           String?
-  number           String?
-  complement       String?
-  neighborhood     String?
-  city             String?
-  state            String?
-  latitude         Decimal?  @db.Decimal(10, 8)
-  longitude        Decimal?  @db.Decimal(11, 8)
-  // Características
-  totalArea        Decimal?  @db.Decimal(10, 2)
-  privateArea      Decimal?  @db.Decimal(10, 2)
-  bedrooms         Int?
-  suites           Int?
-  bathrooms        Int?
-  parkingSpaces    Int?
-  floor            Int?
-  totalFloors      Int?
-  acceptsPets      Boolean   @default(false)
-  furnished        Boolean   @default(false)
-  // Valores
-  salePrice        Decimal?  @db.Decimal(15, 2)
-  rentalPrice      Decimal?  @db.Decimal(15, 2)
-  iptuMonthly      Decimal?  @db.Decimal(10, 2)
-  condoMonthly     Decimal?  @db.Decimal(10, 2)
-  // Documentação
-  registrationNumber String? // matrícula
-  iptuNumber         String?
-  // Publicação
-  description      String?   @db.Text
-  videoUrl         String?
-  tourUrl          String?
-  // Relações
-  ownerId          String?   // Contact id do proprietário
-  assigneeId       String?   // WorkspaceUser id do corretor responsável
-  tags             String[]  @default([])
-  highlights       String[]  @default([]) // exclusividade, permuta, financiamento_cef
-  customFields     Json      @default("{}")
-  deletedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  workspace        Workspace      @relation(fields: [workspaceId], references: [id])
-  owner            Contact?       @relation("PropertyOwner", fields: [ownerId], references: [id])
-  photos           PropertyPhoto[]
-  statusHistory    PropertyStatusHistory[]
-  contracts        Contract[]
-  inspections      Inspection[]
-  maintenanceOrders MaintenanceOrder[]
-  documents        Document[]
-  dealProperties   DealProperty[]
-  portalPublications PortalPublication[]
-
-  @@unique([workspaceId, code])
-  @@map("properties")
-}
-
-model PropertyPhoto {
-  id          String   @id @default(uuid())
-  propertyId  String
-  url         String
-  caption     String?
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
-  @@map("property_photos")
-}
-
-model PropertyStatusHistory {
-  id         String   @id @default(uuid())
-  propertyId String
-  status     String
-  userId     String?
-  note       String?
-  createdAt  DateTime @default(now())
-  property   Property @relation(fields: [propertyId], references: [id])
-
-  @@map("property_status_history")
-}
-
-model Contract {
-  id               String    @id @default(uuid())
-  workspaceId      String
-  type             String    // SALE, RENTAL_RESIDENTIAL, RENTAL_COMMERCIAL, BROKERAGE
-  status           String    @default("DRAFT") // DRAFT, ACTIVE, TERMINATED, RESCINDED
-  propertyId       String
-  // Partes
-  ownerId          String?   // Contact id proprietário/vendedor
-  tenantId         String?   // Contact id inquilino/comprador
-  guarantorIds     String[]  @default([])
-  // Datas
-  startDate        DateTime?
-  endDate          DateTime?
-  signedAt         DateTime?
-  // Locação
-  rentalValue      Decimal?  @db.Decimal(15, 2)
-  adjustmentIndex  String?   // IGPM, IPCA, IPC
-  adjustmentMonth  Int?      // mês de reajuste
-  dueDay           Int?      // dia de vencimento (1-31)
-  lateFee          Decimal?  @db.Decimal(5, 2) // % multa atraso
-  punctualDiscount Decimal?  @db.Decimal(5, 2) // % desconto pontualidade
-  includesWater    Boolean   @default(false)
-  includesElec     Boolean   @default(false)
-  includesCondo    Boolean   @default(false)
-  includesIptu     Boolean   @default(false)
-  customClauses    String?   @db.Text
-  // Venda
-  saleValue        Decimal?  @db.Decimal(15, 2)
-  paymentMethod    String?   // CASH, FINANCING, INSTALLMENT
-  commissionRate   Decimal?  @db.Decimal(5, 2)
-  proposalDate     DateTime?
-  acceptanceDate   DateTime?
-  deedDate         DateTime?
-  keyDeliveryDate  DateTime?
-  // Arquivo
-  signedFileUrl    String?
-  notes            String?   @db.Text
-  deletedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  workspace        Workspace   @relation(fields: [workspaceId], references: [id])
-  property         Property    @relation(fields: [propertyId], references: [id])
-  owner            Contact?    @relation("ContractOwner", fields: [ownerId], references: [id])
-  tenant           Contact?    @relation("ContractTenant", fields: [tenantId], references: [id])
-  financialEntries FinancialEntry[]
-  commissions      Commission[]
-  inspections      Inspection[]
-  documents        Document[]
-  signatureEnvelopes SignatureEnvelope[]
-  splitRules       SplitRule[]
-
-  @@map("contracts")
-}
-
-model FinancialEntry {
-  id                String    @id @default(uuid())
-  workspaceId       String
-  type              String    // RECEIVABLE, PAYABLE
-  category          String    // RENT, SALE, ADMINISTRATION, COMMISSION, MAINTENANCE, MARKETING, OTHER
-  description       String
-  amount            Decimal   @db.Decimal(15, 2)
-  dueDate           DateTime
-  paidAt            DateTime?
-  paidAmount        Decimal?  @db.Decimal(15, 2)
-  status            String    @default("PENDING") // PENDING, PAID, OVERDUE, CANCELLED, EXEMPT
-  paymentMethod     String?   // BOLETO, PIX, TRANSFER, CASH
-  contractId        String?
-  propertyId        String?
-  contactId         String?   // proprietário ou inquilino
-  installment       Int?      // número da parcela
-  totalInstallments Int?
+  id                String                 @id @default(cuid())
+  name              String
+  classification    PropertyClassification
+  propertyType      PropertyType
+  currentValuation  Decimal                @db.Decimal(18, 2)
+  lastValuationDate DateTime?
   notes             String?
-  deletedAt         DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  workspace         Workspace  @relation(fields: [workspaceId], references: [id])
-  contract          Contract?  @relation(fields: [contractId], references: [id])
-  boleto            Boleto?
 
-  @@map("financial_entries")
+  rentAmount      Decimal?            @db.Decimal(18, 2)
+  rentStatus      String?
+  tenantName      String?
+  contractEndDate DateTime?
+  adjustmentIndex RentAdjustmentIndex?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([classification])
+  @@index([deletedAt])
 }
 
-model Commission {
-  id          String    @id @default(uuid())
-  workspaceId String
-  contractId  String
-  userId      String    // WorkspaceUser id do corretor
-  amount      Decimal   @db.Decimal(15, 2)
-  rate        Decimal   @db.Decimal(5, 2)
-  status      String    @default("PENDING") // PENDING, PAID
-  paidAt      DateTime?
-  notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  contract    Contract  @relation(fields: [contractId], references: [id])
+model ReceivablePortfolio {
+  id                    String   @id @default(cuid())
+  name                  String
+  developmentName       String?
+  presentValue          Decimal  @db.Decimal(18, 2)
+  futureTotalReceivable Decimal  @db.Decimal(18, 2)
+  averageRemainingTerm  Int?
+  impliedMonthlyRate    Decimal? @db.Decimal(10, 6)
+  monthlyReceivedAmount Decimal  @db.Decimal(18, 2) @default(0)
+  expectedMonthlyAmount Decimal? @db.Decimal(18, 2)
 
-  @@map("commissions")
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  monthlyHistory ReceivableMonthlyHistory[]
 }
 
-model Inspection {
-  id          String    @id @default(uuid())
-  workspaceId String
-  type        String    // ENTRY, EXIT
-  propertyId  String
-  contractId  String?
-  scheduledAt DateTime?
-  doneAt      DateTime?
-  notes       String?   @db.Text
-  reportUrl   String?
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  workspace   Workspace  @relation(fields: [workspaceId], references: [id])
-  property    Property   @relation(fields: [propertyId], references: [id])
-  contract    Contract?  @relation(fields: [contractId], references: [id])
-  rooms       InspectionRoom[]
+model ReceivableMonthlyHistory {
+  id             String              @id @default(cuid())
+  portfolio      ReceivablePortfolio @relation(fields: [portfolioId], references: [id])
+  portfolioId    String
+  month          Int
+  year           Int
+  expectedAmount Decimal             @db.Decimal(18, 2)
+  receivedAmount Decimal             @db.Decimal(18, 2)
+  createdAt      DateTime            @default(now())
 
-  @@map("inspections")
+  @@unique([portfolioId, year, month])
 }
 
-model InspectionRoom {
-  id           String    @id @default(uuid())
-  inspectionId String
-  name         String    // sala, quarto, banheiro, cozinha, área externa
-  items        Json      @default("[]") // [{name, condition, notes, photoUrls:[]}]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
-
-  @@map("inspection_rooms")
+enum CashFlowCategory {
+  ALUGUEL
+  RECEBIVEIS_LOTEAMENTO
+  APOSENTADORIA
+  RENDIMENTO_FII
+  RENDIMENTO_RENDA_FIXA
+  DIVIDENDO
+  SALARIO
+  OUTRAS_RECEITAS
+  IPTU
+  CONDOMINIO
+  SEGURO
+  MANUTENCAO_IMOVEL
+  IMPOSTOS_ESCRITORIO
+  IR_DARF
+  CUSTO_VIDA
+  PLANO_SAUDE
+  OUTRAS_DESPESAS
 }
 
-model MaintenanceOrder {
-  id              String    @id @default(uuid())
-  workspaceId     String
-  propertyId      String
-  contractId      String?
-  type            String    // ELECTRICAL, PLUMBING, STRUCTURAL, PAINTING, LOCKSMITH, OTHER
-  priority        String    // URGENT, HIGH, MEDIUM, LOW
-  requestedBy     String    // OWNER, TENANT, BROKER, AGENCY
-  title           String
-  description     String    @db.Text
-  status          String    @default("OPEN") // OPEN, IN_PROGRESS, AWAITING_QUOTE, COMPLETED, CANCELLED
-  assigneeId      String?   // internal user
-  supplierName    String?
-  quotedAmount    Decimal?  @db.Decimal(15, 2)
-  finalAmount     Decimal?  @db.Decimal(15, 2)
-  approvedAt      DateTime?
-  completedAt     DateTime?
-  paidBy          String?   // OWNER, AGENCY, TENANT
-  beforePhotos    String[]  @default([])
-  afterPhotos     String[]  @default([])
-  serviceOrderUrl String?
-  notes           String?   @db.Text
-  deletedAt       DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  workspace       Workspace @relation(fields: [workspaceId], references: [id])
-  property        Property  @relation(fields: [propertyId], references: [id])
-
-  @@map("maintenance_orders")
+enum CashFlowType {
+  RECEITA
+  DESPESA
 }
 
-// =============================================
-// HUB DE COMUNICAÇÃO - Etapa 4
-// =============================================
-
-model Conversation {
-  id            String    @id @default(uuid())
-  workspaceId   String
-  channel       String    // WHATSAPP, EMAIL, INSTAGRAM, CHAT_INTERNO
-  status        String    @default("OPEN") // OPEN, PENDING, RESOLVED, ARCHIVED
-  contactId     String?
-  assigneeId    String?
-  subject       String?
-  externalId    String?
-  lastMessageAt DateTime?
-  tags          String[]  @default([])
-  metadata      Json      @default("{}")
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  workspace     Workspace    @relation(fields: [workspaceId], references: [id])
-  contact       Contact?     @relation(fields: [contactId], references: [id])
-  messages      Message[]
-
-  @@map("conversations")
-}
-
-model Message {
-  id             String   @id @default(uuid())
-  workspaceId    String
-  conversationId String
-  direction      String   // INBOUND, OUTBOUND
-  channel        String
-  type           String   @default("TEXT")
-  body           String?  @db.Text
-  mediaUrl       String?
-  mediaType      String?
-  status         String   @default("SENT")
-  externalId     String?
-  senderId       String?
-  errorMessage   String?
-  metadata       Json     @default("{}")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  workspace      Workspace    @relation(fields: [workspaceId], references: [id])
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
-
-  @@map("messages")
-}
-
-model EmailTemplate {
-  id          String   @id @default(uuid())
-  workspaceId String
-  name        String
-  subject     String
-  body        String   @db.Text
-  variables   String[] @default([])
-  category    String
-  isActive    Boolean  @default(true)
-  deletedAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("email_templates")
-}
-
-model Notification {
-  id          String   @id @default(uuid())
-  workspaceId String
+model CashFlowEntry {
+  id          String           @id @default(cuid())
+  user        User             @relation(fields: [userId], references: [id])
   userId      String
-  type        String
-  title       String
-  body        String
-  entityType  String?
-  entityId    String?
-  readAt      DateTime?
-  createdAt   DateTime @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("notifications")
-}
-
-model WhatsAppConfig {
-  id            String   @id @default(uuid())
-  workspaceId   String   @unique
-  phoneNumberId String
-  accessToken   String
-  webhookSecret String
-  businessId    String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  workspace     Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("whatsapp_configs")
-}
-
-// =============================================
-// BACKFILL ETAPA 3 — SUB-MÓDULOS AVANÇADOS
-// =============================================
-
-// ─── 3.3-A ASSINATURA ELETRÔNICA ────────────
-
-model SignatureEnvelope {
-  id            String   @id @default(uuid())
-  workspaceId   String
-  contractId    String?
-  title         String
-  documentUrl   String   // URL no MinIO do PDF original
-  documentHash  String   // SHA-256 do PDF antes do envio
-  signedUrl     String?  // URL do PDF assinado final
-  signedHash    String?  // SHA-256 do PDF assinado
-  certUrl       String?  // URL do certificado de conclusão
-  type          String   @default("ADVANCED") // SIMPLE, ADVANCED, QUALIFIED
-  order         String   @default("PARALLEL") // PARALLEL, SEQUENTIAL
-  deadline      DateTime?
-  message       String?  @db.Text
-  status        String   @default("DRAFT") // DRAFT, SENT, PARTIAL, COMPLETED, EXPIRED, CANCELLED
-  completedAt   DateTime?
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  workspace     Workspace  @relation(fields: [workspaceId], references: [id])
-  contract      Contract?  @relation(fields: [contractId], references: [id])
-  signatories   SignatureSignatory[]
-
-  @@map("signature_envelopes")
-}
-
-model SignatureSignatory {
-  id             String   @id @default(uuid())
-  envelopeId     String
-  name           String
-  email          String
-  phone          String?
-  cpf            String?
-  role           String   // LOCATARIO, LOCADOR, FIADOR, IMOBILIARIA, TESTEMUNHA
-  order          Int      @default(0)
-  token          String   @unique // token único de 64 chars
-  tokenExpiresAt DateTime?
-  status         String   @default("PENDING") // PENDING, SENT, VIEWED, SIGNED, REJECTED
-  otpHash        String?  // hash do OTP usado
-  signedAt       DateTime?
-  rejectedAt     DateTime?
-  rejectionReason String?
-  ipAddress      String?
-  userAgent      String?
-  latitude       Float?
-  longitude      Float?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  envelope       SignatureEnvelope @relation(fields: [envelopeId], references: [id])
-  auditEvents    SignatureAuditEvent[]
-
-  @@map("signature_signatories")
-}
-
-model SignatureAuditEvent {
-  id           String   @id @default(uuid())
-  signatoryId  String
-  event        String   // LINK_SENT, DOCUMENT_OPENED, OTP_REQUESTED, OTP_VALIDATED, SIGNED, REJECTED
-  ipAddress    String?
-  userAgent    String?
-  latitude     Float?
-  longitude    Float?
-  metadata     Json     @default("{}")
-  createdAt    DateTime @default(now())
-  signatory    SignatureSignatory @relation(fields: [signatoryId], references: [id])
-
-  @@map("signature_audit_events")
-}
-
-// ─── 3.4-C BOLETOS E COBRANÇAS ──────────────
-
-model PaymentGatewayConfig {
-  id            String   @id @default(uuid())
-  workspaceId   String
-  provider      String   // ASAAS, EFI, PAGARME, ZOOP, ITAU, BRADESCO, BB
-  name          String
-  apiKey        String   // criptografada
-  apiSecret     String?  // criptografada
-  webhookSecret String?
-  environment   String   @default("SANDBOX") // SANDBOX, PRODUCTION
-  accountId     String?
-  agencia       String?
-  conta         String?
-  convenio      String?
-  isActive      Boolean  @default(true)
-  isDefault     Boolean  @default(false)
-  metadata      Json     @default("{}")
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  workspace     Workspace @relation(fields: [workspaceId], references: [id])
-  boletos       Boleto[]
-  splitRecipients SplitRecipient[]
-
-  @@map("payment_gateway_configs")
-}
-
-model Boleto {
-  id               String   @id @default(uuid())
-  workspaceId      String
-  gatewayId        String?
-  financialEntryId String?  @unique
-  contractId       String?
-  contactId        String?
-  gatewayBoletoId  String?  // ID no gateway externo
-  nossoNumero      String?
-  linhaDigitavel   String?
-  codigoBarras     String?
-  pixQrCode        String?  @db.Text
-  pixCopiaECola    String?  @db.Text
-  amount           Float
-  dueDate          DateTime
-  issueDate        DateTime @default(now())
-  paidAt           DateTime?
-  paidAmount       Float?
-  cancelledAt      DateTime?
-  status           String   @default("PENDING") // PENDING, REGISTERED, SENT, VIEWED, PAID, OVERDUE, CANCELLED
-  registeredAt     DateTime?
-  bankslipUrl      String?
-  fine             Float    @default(2.0)   // % multa
-  interest         Float    @default(0.033) // % juros diário
-  discount         Float    @default(0.0)   // % desconto pontualidade
-  instructions     String?  @db.Text
-  description      String?
-  cnabReturnLines  Json     @default("[]")
-  deletedAt        DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  workspace        Workspace            @relation(fields: [workspaceId], references: [id])
-  gateway          PaymentGatewayConfig? @relation(fields: [gatewayId], references: [id])
-  financialEntry   FinancialEntry?       @relation(fields: [financialEntryId], references: [id])
-
-  @@map("boletos")
-}
-
-model CnabFile {
-  id          String   @id @default(uuid())
-  workspaceId String
-  gatewayId   String?
-  type        String   // REMESSA, RETORNO
-  format      String   // CNAB240, CNAB400
-  filename    String
-  fileUrl     String?  // URL no MinIO
-  fileHash    String?
-  status      String   @default("PENDING") // PENDING, PROCESSING, PROCESSED, ERROR
-  recordCount Int      @default(0)
-  processedAt DateTime?
-  errorLog    String?  @db.Text
-  metadata    Json     @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  records     CnabRecord[]
-
-  @@map("cnab_files")
-}
-
-model CnabRecord {
-  id          String   @id @default(uuid())
-  cnabFileId  String
-  lineNumber  Int
-  occurrence  String?  // 06=Liquidação, 09=Baixa, 02=Entrada Confirmada, etc.
-  nossoNumero String?
-  amount      Float?
-  paidAt      DateTime?
-  boletoId    String?
-  status      String   @default("PENDING") // PENDING, MATCHED, ERROR
-  errorMsg    String?
-  rawLine     String?  @db.Text
-  createdAt   DateTime @default(now())
-  cnabFile    CnabFile @relation(fields: [cnabFileId], references: [id])
-
-  @@map("cnab_records")
-}
-
-// ─── 3.4-D SPLIT DE PAGAMENTO ───────────────
-
-model SplitRecipient {
-  id              String   @id @default(uuid())
-  workspaceId     String
-  gatewayId       String?
-  contactId       String?
-  name            String
-  document        String   // CPF ou CNPJ
-  documentType    String   // CPF, CNPJ
-  email           String?
-  phone           String?
-  pixKeyType      String?  // CPF, CNPJ, EMAIL, PHONE, RANDOM
-  pixKey          String?
-  bankCode        String?
-  agency          String?
-  accountNumber   String?
-  accountType     String?  // CHECKING, SAVINGS
-  gatewayRecipientId String?
-  kycStatus       String   @default("PENDING") // PENDING, SUBMITTED, APPROVED, REJECTED, SUSPENDED
-  kycSubmittedAt  DateTime?
-  kycApprovedAt   DateTime?
-  kycRejectedAt   DateTime?
-  kycReason       String?
-  documentUrl     String?  // documento de identidade no MinIO
-  isActive        Boolean  @default(true)
-  deletedAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  workspace       Workspace            @relation(fields: [workspaceId], references: [id])
-  gateway         PaymentGatewayConfig? @relation(fields: [gatewayId], references: [id])
-  splitRules      SplitRule[]
-  splitTransactions SplitTransaction[]
-
-  @@map("split_recipients")
-}
-
-model SplitRule {
-  id           String   @id @default(uuid())
-  workspaceId  String
-  contractId   String
-  recipientId  String
-  type         String   @default("PERCENTAGE") // PERCENTAGE, FIXED
-  value        Float    // % ou valor fixo
-  description  String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  contract     Contract       @relation(fields: [contractId], references: [id])
-  recipient    SplitRecipient @relation(fields: [recipientId], references: [id])
-
-  @@map("split_rules")
-}
-
-model SplitTransaction {
-  id                 String   @id @default(uuid())
-  workspaceId        String
-  financialEntryId   String?
-  recipientId        String
-  gatewayTransactionId String?
-  amount             Float
-  status             String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, REVERSED
-  processedAt        DateTime?
-  failReason         String?
-  description        String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  recipient          SplitRecipient @relation(fields: [recipientId], references: [id])
-
-  @@map("split_transactions")
-}
-
-// ─── 3.4-E INTEGRAÇÃO BANCÁRIA ──────────────
-
-model BankAccount {
-  id                  String   @id @default(uuid())
-  workspaceId         String
-  name                String
-  bankCode            String?
-  bankName            String?
-  agency              String?
-  accountNumber       String?
-  accountType         String   @default("CHECKING") // CHECKING, SAVINGS
-  pixKey              String?
-  openFinanceId       String?  // ID do consentimento Open Finance
-  openFinanceConsent  String?  // token de consentimento
-  consentExpiresAt    DateTime?
-  balance             Float    @default(0)
-  balanceDate         DateTime?
-  isDefault           Boolean  @default(false)
-  isActive            Boolean  @default(true)
-  deletedAt           DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  workspace           Workspace @relation(fields: [workspaceId], references: [id])
-  transactions        BankTransaction[]
-  reconciliations     BankReconciliation[]
-
-  @@map("bank_accounts")
-}
-
-model BankTransaction {
-  id              String   @id @default(uuid())
-  workspaceId     String
-  bankAccountId   String
-  externalId      String?  // ID no banco ou Open Finance
-  date            DateTime
-  amount          Float    // positivo=crédito, negativo=débito
-  description     String?
-  type            String?  // PIX, TED, DOC, BOLETO, TARIFA, etc.
-  counterpart     String?  // nome do pagador/recebedor
-  counterpartDoc  String?
-  balance         Float?
-  reconciled      Boolean  @default(false)
-  financialEntryId String?
-  importSource    String?  // OPEN_FINANCE, OFX, CNAB, MANUAL
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  bankAccount     BankAccount    @relation(fields: [bankAccountId], references: [id])
-  reconciliations BankReconciliation[]
-
-  @@map("bank_transactions")
-}
-
-model BankReconciliation {
-  id                String   @id @default(uuid())
-  workspaceId       String
-  bankAccountId     String
-  bankTransactionId String?
-  financialEntryId  String?
-  status            String   @default("PENDING") // PENDING, AUTO, MANUAL, IGNORED
-  confidence        Float?   // 0-1 score de confiança no match automático
-  reconciledAt      DateTime?
-  reconciledBy      String?  // userId
-  notes             String?
-  createdAt         DateTime @default(now())
-  bankAccount       BankAccount       @relation(fields: [bankAccountId], references: [id])
-  bankTransaction   BankTransaction?  @relation(fields: [bankTransactionId], references: [id])
-
-  @@map("bank_reconciliations")
-}
-
-// ─── 3.4-F MÓDULO FISCAL ────────────────────
-
-model TaxConfig {
-  id                  String   @id @default(uuid())
-  workspaceId         String   @unique
-  regime              String   @default("SIMPLES") // SIMPLES, LUCRO_PRESUMIDO, LUCRO_REAL, MEI
-  cnpj                String?
-  inscricaoMunicipal  String?
-  inscricaoEstadual   String?
-  municipio           String?
-  codigoServico       String?  // CNAE/LC116
-  aliquotaISS         Float    @default(3.0)
-  aliquotaPIS         Float    @default(0.65)
-  aliquotaCOFINS      Float    @default(3.0)
-  aliquotaIRPJ        Float    @default(15.0)
-  aliquotaCSLL        Float    @default(9.0)
-  presumidoIRPJ       Float    @default(32.0) // % presunção
-  presumidoCSLL       Float    @default(32.0)
-  nfseProvider        String?  // ABRASF, SAOPAULO, RIO
-  nfseLogin           String?
-  nfsePassword        String?  // criptografada
-  nfseEnvironment     String   @default("HOMOLOG")
-  updatedAt           DateTime @updatedAt
-  workspace           Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("tax_configs")
-}
-
-model NfseRecord {
-  id              String   @id @default(uuid())
-  workspaceId     String
-  financialEntryId String?
-  number          String?  // número da NFS-e
-  serie           String?
-  verificationCode String?
-  issuerCnpj      String
-  takerDocument   String
-  takerName       String
-  serviceCode     String
-  description     String   @db.Text
-  amount          Float
-  issRate         Float
-  issAmount       Float
-  issRetained     Boolean  @default(false)
-  status          String   @default("PENDING") // PENDING, ISSUED, CANCELLED, ERROR
-  issuedAt        DateTime?
-  cancelledAt     DateTime?
-  cancelReason    String?
-  xmlUrl          String?
-  pdfUrl          String?
-  gatewayResponse Json     @default("{}")
-  retryCount      Int      @default(0)
-  deletedAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  workspace       Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("nfse_records")
-}
-
-model FiscalObligation {
-  id           String   @id @default(uuid())
-  workspaceId  String
-  type         String   // DAS, DARF_PIS, DARF_COFINS, DARF_IRPJ, DARF_CSLL, ISS, CNPJ
-  period       String   // YYYY-MM ou YYYY-QX
-  dueDate      DateTime
-  amount       Float?
-  receiptCode  String?  // código de receita DARF
-  status       String   @default("PENDING") // PENDING, GENERATED, PAID, OVERDUE
-  paidAt       DateTime?
-  paidAmount   Float?
-  receiptUrl   String?
-  calcDetails  Json     @default("{}")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  workspace    Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("fiscal_obligations")
-}
-
-model DimobRecord {
-  id           String   @id @default(uuid())
-  workspaceId  String
-  year         Int
-  contractId   String?
-  type         String   // LOCACAO, VENDA, INTERMEDIACAO
-  locadorDoc   String
-  locadorName  String
-  locatarioDoc String
-  locatarioName String
-  propertyAddress String
-  startDate    DateTime?
-  endDate      DateTime?
-  monthlyValue Float?
-  totalValue   Float?
-  commissionAmount Float?
-  exported     Boolean  @default(false)
-  exportedAt   DateTime?
-  exportHash   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  workspace    Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("dimob_records")
-}
-
-model IrrfRecord {
-  id               String   @id @default(uuid())
-  workspaceId      String
-  period           String   // YYYY-MM
-  contractId       String?
-  tenantDocument   String
-  tenantName       String
-  ownerDocument    String
-  ownerName        String
-  grossAmount      Float
-  irrfRate         Float
-  irrfAmount       Float
-  netAmount        Float
-  status           String   @default("PENDING") // PENDING, RETAINED, INFORMED
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  workspace        Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("irrf_records")
-}
-
-model CarneLeaoRecord {
-  id               String   @id @default(uuid())
-  workspaceId      String
-  period           String   // YYYY-MM
-  ownerContactId   String?
-  ownerDocument    String
-  ownerName        String
-  grossIncome      Float
-  deductions       Float    @default(0)
-  taxableBase      Float
-  rate             Float
-  taxDue           Float
-  darfAmount       Float
-  status           String   @default("CALCULATED") // CALCULATED, PAID, EXPORTED
-  paidAt           DateTime?
-  calcDetails      Json     @default("{}")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  workspace        Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@map("carne_leao_records")
-}
-
-// ── ETAPA 5 — MARKETING ──────────────────────────────────────
-
-model MarketingIntegration {
-  id           String    @id @default(uuid())
-  workspaceId  String
-  provider     String    // META_ADS, GOOGLE_ADS
-  status       String    @default("ACTIVE")
-  accessToken  String?
-  refreshToken String?
-  expiresAt    DateTime?
-  accountId    String?
-  pageId       String?
-  config       Json      @default("{}")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  workspace    Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@unique([workspaceId, provider])
-  @@map("marketing_integrations")
-}
-
-model AdCampaign {
-  id          String    @id @default(uuid())
-  workspaceId String
-  provider    String    // META_ADS, GOOGLE_ADS
-  externalId  String
-  name        String
-  status      String    @default("ACTIVE")
-  spend       Float     @default(0)
-  impressions Int       @default(0)
-  clicks      Int       @default(0)
-  leads       Int       @default(0)
-  conversions Int       @default(0)
-  revenue     Float     @default(0)
-  metrics     Json      @default("{}")
-  syncedAt    DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@unique([workspaceId, provider, externalId])
-  @@map("ad_campaigns")
-}
-
-model PortalIntegration {
-  id           String              @id @default(uuid())
-  workspaceId  String
-  portal       String              // ZAP, VIVAREAL, OLX, IMOVELWEB, I123
-  apiKey       String?
-  status       String              @default("ACTIVE")
-  config       Json                @default("{}")
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  workspace    Workspace           @relation(fields: [workspaceId], references: [id])
-  publications PortalPublication[]
-
-  @@unique([workspaceId, portal])
-  @@map("portal_integrations")
-}
-
-model PortalPublication {
-  id            String            @id @default(uuid())
-  workspaceId   String
-  portalId      String
-  propertyId    String
-  externalId    String?
-  status        String            @default("PENDING")
-  publishedAt   DateTime?
-  unpublishedAt DateTime?
-  lastError     String?
-  retryCount    Int               @default(0)
-  syncedAt      DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  workspace     Workspace         @relation(fields: [workspaceId], references: [id])
-  portal        PortalIntegration @relation(fields: [portalId], references: [id])
-  property      Property          @relation(fields: [propertyId], references: [id])
-
-  @@unique([portalId, propertyId])
-  @@map("portal_publications")
-}
-
-// ── ETAPA 6 — AUTOMAÇÕES E NOTIFICAÇÕES ──────────────────────
-
-model Automation {
-  id           String   @id @default(uuid())
-  workspaceId  String
-  name         String
-  description  String?
-  status       String   @default("ACTIVE") // ACTIVE, PAUSED
-  trigger      String   // DEAL_CREATED, DEAL_STAGE_CHANGED, DEAL_WON, DEAL_LOST, etc.
-  triggerConfig Json    @default("{}")
-  steps        Json     @default("[]") // array de ações/condições
-  executions   Int      @default(0)
-  successes    Int      @default(0)
-  failures     Int      @default(0)
-  lastRunAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  deletedAt    DateTime?
-  workspace    Workspace @relation(fields: [workspaceId], references: [id])
-  logs         AutomationLog[]
-
-  @@map("automations")
-}
-
-model AutomationLog {
-  id           String   @id @default(uuid())
-  automationId String
-  workspaceId  String
-  status       String   // SUCCESS, FAILURE, SKIPPED
-  trigger      String
-  entityId     String?
-  entityType   String?
-  steps        Json     @default("[]")
-  errorMessage String?
-  duration     Int?     // ms
-  createdAt    DateTime @default(now())
-  automation   Automation @relation(fields: [automationId], references: [id])
-
-  @@map("automation_logs")
-}
-
-model NotificationPreference {
-  id          String   @id @default(uuid())
-  workspaceId String
-  userId      String
-  type        String   // NEW_MESSAGE, LEAD_ASSIGNED, TASK_DUE, CONTRACT_EXPIRING, BOLETO_OVERDUE, DEAL_COLD
-  inApp       Boolean  @default(true)
-  email       Boolean  @default(false)
-  push        Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-
-  @@unique([workspaceId, userId, type])
-  @@map("notification_preferences")
-}
-
-model ApiKey {
-  id          String   @id @default(uuid())
-  workspaceId String
-  name        String
-  keyHash     String   @unique
-  keyPrefix   String
-  scopes      String[] @default([])
-  lastUsedAt  DateTime?
-  expiresAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  @@map("api_keys")
-}
-
-model WebhookEndpoint {
-  id          String   @id @default(uuid())
-  workspaceId String
-  url         String
-  events      String[] @default([])
-  secret      String
-  status      String   @default("ACTIVE")
-  lastTriggeredAt DateTime?
-  failureCount    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  logs        WebhookLog[]
-  @@map("webhook_endpoints")
-}
-
-model WebhookLog {
-  id         String   @id @default(uuid())
-  endpointId String
-  event      String
-  payload    Json     @default("{}")
-  status     String
-  statusCode Int?
-  response   String?
-  duration   Int?
-  createdAt  DateTime @default(now())
-  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id])
-  @@map("webhook_logs")
-}
-
-// =============================================
-// ETAPA 9 — SUPER ADMIN E CONFIGURAÇÕES AVANÇADAS
-// =============================================
-
-model PlatformConfig {
-  id          String   @id @default(uuid())
-  key         String   @unique
-  value       String
+  type        CashFlowType
+  category    CashFlowCategory
   description String?
+  amount      Decimal          @db.Decimal(18, 2)
+  month       Int
+  year        Int
+  date        DateTime?
+  isRecurring Boolean          @default(false)
+  propertyId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, year, month])
+  @@index([category])
+}
+
+model RetirementPlan {
+  id                       String  @id @default(cuid())
+  user                     User    @relation(fields: [userId], references: [id])
+  userId                   String  @unique
+  desiredMonthlyIncome     Decimal @db.Decimal(18, 2)
+  estimatedMonthlyExpenses Decimal @db.Decimal(18, 2)
+  expectedIpca             Decimal @db.Decimal(10, 4) @default(4.5)
+  expectedCdi              Decimal @db.Decimal(10, 4) @default(10.5)
+  lifeExpectancy           Int     @default(85)
+
+  targetFixedIncome Decimal @db.Decimal(10, 2) @default(50)
+  targetFii         Decimal @db.Decimal(10, 2) @default(22.5)
+  targetStocks      Decimal @db.Decimal(10, 2) @default(12.5)
+  targetReceivables Decimal @db.Decimal(10, 2) @default(12.5)
+  targetLiquidity   Decimal @db.Decimal(10, 2) @default(7.5)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MonthlySnapshot {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+  month  Int
+  year   Int
+
+  totalPatrimony      Decimal @db.Decimal(18, 2)
+  fixedIncomeTotal    Decimal @db.Decimal(18, 2)
+  fiiTotal            Decimal @db.Decimal(18, 2)
+  stocksTotal         Decimal @db.Decimal(18, 2)
+  pensionTotal        Decimal @db.Decimal(18, 2)
+  coeTotal            Decimal @db.Decimal(18, 2)
+  cashTotal           Decimal @db.Decimal(18, 2)
+  receivablesTotal    Decimal @db.Decimal(18, 2)
+  propertiesRentTotal Decimal @db.Decimal(18, 2)
+  propertiesOwnTotal  Decimal @db.Decimal(18, 2)
+  propertiesSaleTotal Decimal @db.Decimal(18, 2)
+
+  monthlyPassiveIncome Decimal @db.Decimal(18, 2)
+  monthlyExpenses      Decimal @db.Decimal(18, 2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, year, month])
+  @@index([userId, year, month])
+}
+
+enum ImportFormat {
+  OFX
+  CSV
+  XLS
+  PDF
+  JSON
+}
+
+enum ImportSource {
+  EQI
+  BRADESCO
+  ITAU
+  SANTANDER
+  BB
+  CAIXA
+  XP
+  BTG
+  RICO
+  NUINVEST
+  B3
+  OUTRO
+}
+
+model ImportLog {
+  id                      String        @id @default(cuid())
+  user                    User          @relation(fields: [userId], references: [id])
+  userId                  String
+  fileName                String
+  format                  ImportFormat
+  source                  ImportSource?
+  importedAt              DateTime      @default(now())
+  recordsTotal            Int           @default(0)
+  recordsDuplicate        Int           @default(0)
+  recordsError            Int           @default(0)
+  recordsUpdatedPortfolio Int           @default(0)
+  recordsUpdatedCashFlow  Int           @default(0)
+  rollbackAvailable       Boolean       @default(true)
+  rollbackData            Json?
+
+  entries BankStatementEntry[]
+}
+
+model BankStatementEntry {
+  id          String            @id @default(cuid())
+  importLog   ImportLog         @relation(fields: [importLogId], references: [id])
+  importLogId String
+  date        DateTime
+  description String
+  amount      Decimal           @db.Decimal(18, 2)
+  entryType   String
+  category    CashFlowCategory?
+  isDuplicate Boolean           @default(false)
+  isProcessed Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+
+  @@index([importLogId])
+}
+
+enum TargetModule {
+  CASH_FLOW
+  PORTFOLIO
+  RECEIVABLE
+}
+
+model ImportRule {
+  id             String            @id @default(cuid())
+  user           User              @relation(fields: [userId], references: [id])
+  userId         String
+  keyword        String
+  targetModule   TargetModule
+  targetCategory CashFlowCategory?
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([userId])
+}
+
+model ImportMatchingRule {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  pattern     String
+  assetId     String?
+  propertyId  String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  @@map("platform_configs")
-}
 
-model FeatureFlag {
-  id           String   @id @default(uuid())
-  key          String   @unique
-  enabled      Boolean  @default(false)
-  description  String?
-  workspaceIds String[] @default([])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  @@map("feature_flags")
-}
-
-model WorkspacePlan {
-  id            String    @id @default(uuid())
-  workspaceId   String    @unique
-  plan          String    @default("FREE")
-  maxUsers      Int       @default(3)
-  maxProperties Int       @default(50)
-  maxContacts   Int       @default(500)
-  features      String[]  @default([])
-  validUntil    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  workspace     Workspace @relation(fields: [workspaceId], references: [id])
-  @@map("workspace_plans")
-}
-
-model OnboardingStep {
-  id          String    @id @default(uuid())
-  workspaceId String
-  step        String
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  @@unique([workspaceId, step])
-  @@map("onboarding_steps")
+  @@index([userId])
 }

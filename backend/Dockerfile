@@ -1,22 +1,8 @@
 FROM node:20-alpine
-
-RUN apk add --no-cache libc6-compat openssl
-
 WORKDIR /app
-
 COPY package*.json ./
-
-# Forçar instalação de devDependencies no build (independente do NODE_ENV do Railway)
-ARG NODE_ENV=development
-RUN npm install --production=false
-
+RUN npm install --legacy-peer-deps
 COPY . .
-
 RUN npx prisma generate
-RUN npm run build
-
-RUN chmod +x start.sh
-
-EXPOSE 3000
-
-CMD ["sh", "start.sh"]
+EXPOSE 3001
+CMD ["npm", "run", "start:dev"]
