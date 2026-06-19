@@ -154,6 +154,8 @@ export function storeTokens(accessToken: string, refreshToken: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('accessToken', accessToken);
   localStorage.setItem('refreshToken', refreshToken);
+  // Cookie necessário para o middleware Next.js verificar autenticação
+  document.cookie = `accessToken=${accessToken}; path=/; max-age=900; SameSite=Lax`;
 }
 
 export function storeWorkspaceId(workspaceId: string): void {
@@ -166,6 +168,7 @@ export function clearStoredTokens(): void {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('workspaceId');
+  document.cookie = 'accessToken=; path=/; max-age=0';
 }
 
 function redirectToLogin(): void {
