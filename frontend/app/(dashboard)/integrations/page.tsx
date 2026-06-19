@@ -170,7 +170,7 @@ export default function IntegrationsPage() {
                         <Badge key={scope} variant="secondary">{scope}</Badge>
                       ))}
                     </div>
-                    {key.lastUsedAt && (
+                    {(key.lastUsedAt as string | null) && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Último uso: {new Date(key.lastUsedAt as string).toLocaleDateString('pt-BR')}
                       </p>
