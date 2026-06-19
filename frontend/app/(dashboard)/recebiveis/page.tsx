@@ -6,13 +6,13 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } fro
 interface Portfolio {
   id: string;
   name: string;
-  developer: string;
-  totalValue: number;
-  receivedToDate: number;
-  monthlyExpected: number;
-  startDate: string;
-  endDate: string;
-  notes?: string;
+  developmentName?: string;
+  presentValue: number;
+  futureTotalReceivable: number;
+  averageRemainingTerm?: number;
+  impliedMonthlyRate?: number;
+  monthlyReceivedAmount: number;
+  expectedMonthlyAmount?: number;
   monthlyHistory: { year: number; month: number; expected: number; received: number }[];
 }
 
@@ -36,19 +36,12 @@ export default function ReceiveisPage() {
   useEffect(() => { load(); }, []);
 
   const openNew = () => {
-    setForm({ name: '', developer: '', totalValue: '', receivedToDate: '', monthlyExpected: '', startDate: '', endDate: '', notes: '' });
+    setForm({ name: '', developmentName: '', presentValue: '', futureTotalReceivable: '', monthlyReceivedAmount: '', expectedMonthlyAmount: '', averageRemainingTerm: '', impliedMonthlyRate: '' });
     setModal('new');
   };
 
   const openEdit = (p: Portfolio) => {
-    setForm({
-      ...p,
-      totalValue: p.totalValue,
-      receivedToDate: p.receivedToDate,
-      monthlyExpected: p.monthlyExpected,
-      startDate: p.startDate?.split('T')[0],
-      endDate: p.endDate?.split('T')[0],
-    });
+    setForm({ ...p, impliedMonthlyRate: p.impliedMonthlyRate ? (Number(p.impliedMonthlyRate) * 100).toFixed(4) : '' });
     setModal(p);
   };
 
@@ -56,9 +49,12 @@ export default function ReceiveisPage() {
     try {
       const body = {
         ...form,
-        totalValue: parseFloat(form.totalValue),
-        receivedToDate: parseFloat(form.receivedToDate),
-        monthlyExpected: parseFloat(form.monthlyExpected),
+        presentValue: parseFloat(form.presentValue),
+        futureTotalReceivable: parseFloat(form.futureTotalReceivable),
+        monthlyReceivedAmount: parseFloat(form.monthlyReceivedAmount || '0'),
+        expectedMonthlyAmount: form.expectedMonthlyAmount ? parseFloat(form.expectedMonthlyAmount) : undefined,
+        averageRemainingTerm: form.averageRemainingTerm ? parseInt(form.averageRemainingTerm) : undefined,
+        impliedMonthlyRate: form.impliedMonthlyRate ? parseFloat(form.impliedMonthlyRate) / 100 : undefined,
       };
       if (modal === 'new') await api.receivables.create(body);
       else await api.receivables.update((modal as Portfolio).id, body);
@@ -96,9 +92,9 @@ export default function ReceiveisPage() {
     }));
   };
 
-  const totalExpected = portfolios.reduce((s, p) => s + Number(p.monthlyExpected), 0);
-  const totalReceived = portfolios.reduce((s, p) => s + Number(p.receivedToDate), 0);
-  const totalValue = portfolios.reduce((s, p) => s + Number(p.totalValue), 0);
+  const totalPresent = portfolios.reduce((s, p) => s + Number(p.presentValue), 0);
+  const totalFuture = portfolios.reduce((s, p) => s + Number(p.futureTotalReceivable), 0);
+  const totalMonthly = portfolios.reduce((s, p) => s + Number(p.monthlyReceivedAmount), 0);
 
   return (
     <div>
@@ -112,9 +108,9 @@ export default function ReceiveisPage() {
 
       <div className="kpi-grid" style={{ marginBottom: 24 }}>
         {[
-          { label: 'Valor Total', value: formatBRL(totalValue) },
-          { label: 'Recebido Acumulado', value: formatBRL(totalReceived) },
-          { label: 'Previsão Mensal', value: formatBRL(totalExpected) },
+          { label: 'Valor Presente Total', value: formatBRL(totalPresent) },
+          { label: 'Recebível Futuro Total', value: formatBRL(totalFuture) },
+          { label: 'Recebido/mês (atual)', value: formatBRL(totalMonthly) },
           { label: 'Carteiras Ativas', value: portfolios.length.toString() },
         ].map(k => (
           <div key={k.label} className="kpi-card">
@@ -127,18 +123,18 @@ export default function ReceiveisPage() {
       {loading ? (
         <p style={{ color: 'var(--muted)' }}>Carregando...</p>
       ) : portfolios.map(p => {
-        const progress = p.totalValue > 0 ? (p.receivedToDate / p.totalValue) * 100 : 0;
+        const progress = p.futureTotalReceivable > 0 ? (p.presentValue / p.futureTotalReceivable) * 100 : 0;
         const data = chartData(p);
         return (
           <div key={p.id} className="card" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: 18 }}>{p.name}</h2>
-                <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>{p.developer}</div>
+                {p.developmentName && <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>{p.developmentName}</div>}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn-outline" style={{ fontSize: 13, padding: '6px 12px' }}
-                  onClick={() => { setHistModal(p); setHistForm({ year: new Date().getFullYear(), month: new Date().getMonth() + 1, expected: String(p.monthlyExpected), received: '' }); }}>
+                  onClick={() => { setHistModal(p); setHistForm({ year: new Date().getFullYear(), month: new Date().getMonth() + 1, expected: String(p.expectedMonthlyAmount || p.monthlyReceivedAmount), received: '' }); }}>
                   + Histórico
                 </button>
                 <button className="btn-outline" style={{ fontSize: 13, padding: '6px 12px' }} onClick={() => openEdit(p)}>Editar</button>
@@ -147,21 +143,23 @@ export default function ReceiveisPage() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
-              <div><div style={{ color: 'var(--muted)', fontSize: 12 }}>Valor Total</div><div style={{ fontWeight: 600 }}>{formatBRL(p.totalValue)}</div></div>
-              <div><div style={{ color: 'var(--muted)', fontSize: 12 }}>Recebido</div><div style={{ fontWeight: 600, color: 'var(--positive)' }}>{formatBRL(p.receivedToDate)}</div></div>
-              <div><div style={{ color: 'var(--muted)', fontSize: 12 }}>A Receber</div><div style={{ fontWeight: 600, color: 'var(--gold)' }}>{formatBRL(Math.max(0, p.totalValue - p.receivedToDate))}</div></div>
-              <div><div style={{ color: 'var(--muted)', fontSize: 12 }}>Previsão/mês</div><div style={{ fontWeight: 600 }}>{formatBRL(p.monthlyExpected)}</div></div>
+              <div><div style={{ color: 'var(--muted)', fontSize: 12 }}>Valor Presente</div><div style={{ fontWeight: 600, color: 'var(--gold)' }}>{formatBRL(p.presentValue)}</div></div>
+              <div><div style={{ color: 'var(--muted)', fontSize: 12 }}>Recebível Futuro</div><div style={{ fontWeight: 600 }}>{formatBRL(p.futureTotalReceivable)}</div></div>
+              <div><div style={{ color: 'var(--muted)', fontSize: 12 }}>Recebido/mês</div><div style={{ fontWeight: 600, color: 'var(--positive)' }}>{formatBRL(p.monthlyReceivedAmount)}</div></div>
+              <div><div style={{ color: 'var(--muted)', fontSize: 12 }}>Taxa Mensal</div><div style={{ fontWeight: 600 }}>{p.impliedMonthlyRate ? formatPercent(Number(p.impliedMonthlyRate) * 100) : '-'}</div></div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-                <span>Progresso de recebimento</span>
-                <span>{formatPercent(progress)}</span>
+            {p.averageRemainingTerm && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+                  <span>Prazo restante médio: {p.averageRemainingTerm} meses</span>
+                  <span>{formatPercent(Math.min(100, 100 - (p.averageRemainingTerm / 240 * 100)))} concluído (est.)</span>
+                </div>
+                <div style={{ background: 'var(--border)', borderRadius: 4, height: 8 }}>
+                  <div style={{ width: `${Math.min(100, progress)}%`, background: 'var(--gold)', borderRadius: 4, height: 8, transition: 'width 0.3s' }} />
+                </div>
               </div>
-              <div style={{ background: 'var(--border)', borderRadius: 4, height: 8 }}>
-                <div style={{ width: `${Math.min(100, progress)}%`, background: 'var(--gold)', borderRadius: 4, height: 8, transition: 'width 0.3s' }} />
-              </div>
-            </div>
+            )}
 
             {data.length > 0 && (
               <div>
@@ -189,13 +187,13 @@ export default function ReceiveisPage() {
             <div className="form-grid">
               {[
                 { key: 'name', label: 'Nome da Carteira', span: 2 },
-                { key: 'developer', label: 'Incorporadora/Emissora', span: 2 },
-                { key: 'totalValue', label: 'Valor Total (R$)', type: 'number' },
-                { key: 'receivedToDate', label: 'Recebido Acumulado (R$)', type: 'number' },
-                { key: 'monthlyExpected', label: 'Previsão Mensal (R$)', type: 'number' },
-                { key: 'startDate', label: 'Início', type: 'date' },
-                { key: 'endDate', label: 'Previsão de Término', type: 'date' },
-                { key: 'notes', label: 'Observações', span: 2 },
+                { key: 'developmentName', label: 'Empreendimento', span: 2 },
+                { key: 'presentValue', label: 'Valor Presente (R$)', type: 'number' },
+                { key: 'futureTotalReceivable', label: 'Total a Receber Futuro (R$)', type: 'number' },
+                { key: 'monthlyReceivedAmount', label: 'Recebido/mês Atual (R$)', type: 'number' },
+                { key: 'expectedMonthlyAmount', label: 'Previsto/mês (R$)', type: 'number' },
+                { key: 'averageRemainingTerm', label: 'Prazo Restante Médio (meses)', type: 'number' },
+                { key: 'impliedMonthlyRate', label: 'Taxa Mensal Implícita (%)', type: 'number' },
               ].map(f => (
                 <div key={f.key} className={f.span === 2 ? 'span-2' : ''}>
                   <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>{f.label}</label>

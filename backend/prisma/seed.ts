@@ -51,9 +51,9 @@ async function main() {
   // Ações
   await prisma.investmentAsset.createMany({
     data: [
-      { type: 'ACAO', ticker: 'ITSA4', name: 'Itaúsa', issuer: 'Itaúsa S.A.', broker: 'EQI', investedAmount: 120000, currentValue: 138000, quantity: 5000, averagePrice: 24, currentPrice: 27.6, monthlyDY: 0.40, beta: 0.85, liquidity: 'D2' },
-      { type: 'ACAO', ticker: 'WEGE3', name: 'WEG S.A.', issuer: 'WEG S.A.', broker: 'EQI', investedAmount: 80000, currentValue: 96000, quantity: 1000, averagePrice: 80, currentPrice: 96, monthlyDY: 0.20, beta: 0.70, liquidity: 'D2' },
-      { type: 'ACAO', ticker: 'BBAS3', name: 'Banco do Brasil', issuer: 'Banco do Brasil S.A.', broker: 'EQI', investedAmount: 100000, currentValue: 118000, quantity: 2000, averagePrice: 50, currentPrice: 59, monthlyDY: 0.55, beta: 1.10, liquidity: 'D2' },
+      { type: 'ACAO', ticker: 'ITSA4', name: 'Itaúsa', issuer: 'Itaúsa S.A.', broker: 'EQI', investedAmount: 120000, currentValue: 138000, quantity: 5000, averagePrice: 24, currentPrice: 27.6, monthlyDY: 0.40, beta: 0.85, liquidity: 'D1' },
+      { type: 'ACAO', ticker: 'WEGE3', name: 'WEG S.A.', issuer: 'WEG S.A.', broker: 'EQI', investedAmount: 80000, currentValue: 96000, quantity: 1000, averagePrice: 80, currentPrice: 96, monthlyDY: 0.20, beta: 0.70, liquidity: 'D1' },
+      { type: 'ACAO', ticker: 'BBAS3', name: 'Banco do Brasil', issuer: 'Banco do Brasil S.A.', broker: 'EQI', investedAmount: 100000, currentValue: 118000, quantity: 2000, averagePrice: 50, currentPrice: 59, monthlyDY: 0.55, beta: 1.10, liquidity: 'D1' },
     ],
   });
 
