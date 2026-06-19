@@ -13,6 +13,7 @@ import {
   Delete,
   Param,
   Headers,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -200,6 +201,25 @@ export class AuthController {
   ) {
     await this.authService.revokeSession(user.sub, sessionId);
     return { message: 'Sessão revogada com sucesso.' };
+  }
+
+  // -----------------------------------------------
+  // POST /auth/admin/unlock-user
+  // Desbloqueia conta de usuário (endpoint temporário de manutenção)
+  // -----------------------------------------------
+  @Public()
+  @Post('admin/unlock-user')
+  @HttpCode(HttpStatus.OK)
+  async unlockUser(
+    @Body() body: { email: string },
+    @Headers('x-admin-secret') secret: string,
+  ) {
+    const adminSecret = process.env.ADMIN_SECRET || 'estouemcasa-admin-2024';
+    if (secret !== adminSecret) {
+      throw new UnauthorizedException('Acesso negado.');
+    }
+    await this.authService.unlockUser(body.email);
+    return { message: `Usuário ${body.email} desbloqueado.` };
   }
 
   // -----------------------------------------------

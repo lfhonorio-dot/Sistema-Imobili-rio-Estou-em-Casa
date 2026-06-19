@@ -821,4 +821,11 @@ export class AuthService {
       this.logger.error(`Erro ao enviar e-mail de reset para ${email}:`, error);
     }
   }
+
+  async unlockUser(email: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { email },
+      data: { failedLoginAttempts: 0, lockedUntil: null },
+    });
+  }
 }
