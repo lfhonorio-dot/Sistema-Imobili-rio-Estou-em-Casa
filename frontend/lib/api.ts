@@ -155,7 +155,7 @@ export function storeTokens(accessToken: string, refreshToken: string): void {
   localStorage.setItem('accessToken', accessToken);
   localStorage.setItem('refreshToken', refreshToken);
   // Cookie necessário para o middleware Next.js verificar autenticação
-  document.cookie = `accessToken=${accessToken}; path=/; max-age=900; SameSite=Lax`;
+  document.cookie = `accessToken=${accessToken}; path=/; max-age=604800; SameSite=Lax`;
 }
 
 export function storeWorkspaceId(workspaceId: string): void {
