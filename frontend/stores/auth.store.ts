@@ -17,6 +17,7 @@ interface AuthState {
   currentWorkspaceId: string | null;
   currentWorkspace: WorkspaceMembership | null;
   isAuthenticated: boolean;
+  _hasHydrated: boolean;
 
   // Ações
   setAuth: (user: User, accessToken: string, refreshToken: string, workspaceId?: string) => void;
@@ -24,6 +25,7 @@ interface AuthState {
   setCurrentWorkspace: (workspaceId: string) => void;
   logout: () => void;
   updateTokens: (accessToken: string, refreshToken: string) => void;
+  setHasHydrated: (value: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -35,6 +37,7 @@ export const useAuthStore = create<AuthState>()(
       currentWorkspaceId: null,
       currentWorkspace: null,
       isAuthenticated: false,
+      _hasHydrated: false,
 
       // Define o estado de autenticação completo após login
       setAuth: (user, accessToken, refreshToken, workspaceId) => {
@@ -83,6 +86,8 @@ export const useAuthStore = create<AuthState>()(
         set({ accessToken, refreshToken });
       },
 
+      setHasHydrated: (value) => set({ _hasHydrated: value }),
+
       // Logout: limpa todo o estado e localStorage
       logout: () => {
         clearStoredTokens();
@@ -99,12 +104,14 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'plataforma-auth',
       storage: createJSONStorage(() => localStorage),
-      // Persiste apenas dados essenciais (não tokens - esses ficam em localStorage direto)
       partialize: (state) => ({
         user: state.user,
         currentWorkspaceId: state.currentWorkspaceId,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );
