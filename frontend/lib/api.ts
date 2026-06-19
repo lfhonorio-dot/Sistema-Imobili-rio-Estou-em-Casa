@@ -174,4 +174,5 @@ function redirectToLogin(): void {
   }
 }
 
+export { api };
 export default api;

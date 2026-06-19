@@ -113,8 +113,8 @@ async function bootstrap() {
     });
   }
 
-  const port = process.env.APP_PORT || 3001;
-  await app.listen(port);
+const port = process.env.PORT ?? 3000;
+await app.listen(port, '0.0.0.0');
 
   console.log(`Servidor rodando em: http://localhost:${port}/api/v1`);
   if (process.env.NODE_ENV !== 'production') {

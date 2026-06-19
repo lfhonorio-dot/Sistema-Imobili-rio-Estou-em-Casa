@@ -1,0 +1,8 @@
+node_modules
+dist
+test
+prisma/seed.ts
+**/*.spec.ts
+**/*.e2e-spec.ts
+.git
+*.md

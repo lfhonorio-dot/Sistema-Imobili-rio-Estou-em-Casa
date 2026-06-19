@@ -2,6 +2,7 @@
 // Configura todos os módulos globais e de funcionalidade
 
 import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -45,6 +46,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 // Módulo Etapa 9 — Super Admin e Configurações Avançadas
 
 @Module({
+  controllers: [AppController],
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
     ConfigModule.forRoot({
@@ -106,3 +108,4 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
   ],
 })
 export class AppModule {}
+
