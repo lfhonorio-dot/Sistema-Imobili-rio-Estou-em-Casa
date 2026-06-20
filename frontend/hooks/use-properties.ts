@@ -62,26 +62,26 @@ export interface PropertyQuery {
 }
 
 export function useProperties(query: PropertyQuery = {}) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['properties', workspaceId, query],
     queryFn: async () => {
       const { data } = await api.get('/properties', { params: query });
-      return data as { items: Property[]; meta: { page: number; limit: number; total: number; pages: number } };
+      return data.data as { items: Property[]; meta: { page: number; limit: number; total: number; pages: number } };
     },
     enabled: !!workspaceId,
   });
 }
 
 export function useProperty(id: string) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['property', workspaceId, id],
     queryFn: async () => {
       const { data } = await api.get(`/properties/${id}`);
-      return data as Property;
+      return data.data as Property;
     },
     enabled: !!workspaceId && !!id,
   });
@@ -89,12 +89,12 @@ export function useProperty(id: string) {
 
 export function useCreateProperty() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async (dto: Partial<Property>) => {
       const { data } = await api.post('/properties', dto);
-      return data as Property;
+      return data.data as Property;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties', workspaceId] });
@@ -104,12 +104,12 @@ export function useCreateProperty() {
 
 export function useUpdateProperty() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async ({ id, ...dto }: Partial<Property> & { id: string }) => {
       const { data } = await api.patch(`/properties/${id}`, dto);
-      return data as Property;
+      return data.data as Property;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['properties', workspaceId] });
@@ -120,12 +120,12 @@ export function useUpdateProperty() {
 
 export function useChangePropertyStatus() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async ({ id, status, note }: { id: string; status: string; note?: string }) => {
       const { data } = await api.patch(`/properties/${id}/status`, { status, note });
-      return data as Property;
+      return data.data as Property;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['property', workspaceId, vars.id] });
@@ -136,7 +136,7 @@ export function useChangePropertyStatus() {
 
 export function useDeleteProperty() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async (id: string) => {
