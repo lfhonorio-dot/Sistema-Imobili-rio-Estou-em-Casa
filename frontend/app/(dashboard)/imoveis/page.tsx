@@ -124,7 +124,14 @@ function PropModal({ p, onClose, onSave }: any) {
   const save = async () => {
     setSaving(true);
     try {
-      const data = { ...form, currentValuation: Number(form.currentValuation), rentAmount: form.rentAmount ? Number(form.rentAmount) : null };
+      const toISO = (d: string) => d ? new Date(d).toISOString() : null;
+      const data = {
+        ...form,
+        currentValuation: Number(form.currentValuation),
+        rentAmount: form.rentAmount ? Number(form.rentAmount) : null,
+        lastValuationDate: toISO(form.lastValuationDate),
+        contractEndDate: toISO(form.contractEndDate),
+      };
       if (p?.id) await api.properties.update(p.id, data);
       else await api.properties.create(data);
       onSave(); onClose();
