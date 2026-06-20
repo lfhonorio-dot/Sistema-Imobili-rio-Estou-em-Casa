@@ -76,34 +76,39 @@ export default function NewPropertyPage() {
   }
 
   async function handleSubmit() {
-    const payload: Record<string, unknown> = {
-      type: formData.type,
-      purpose: formData.purpose,
-      zipCode: formData.zipCode || undefined,
-      street: formData.street || undefined,
-      number: formData.number || undefined,
-      complement: formData.complement || undefined,
-      neighborhood: formData.neighborhood || undefined,
-      city: formData.city || undefined,
-      state: formData.state || undefined,
-      totalArea: formData.totalArea ? parseFloat(formData.totalArea) : undefined,
-      privateArea: formData.privateArea ? parseFloat(formData.privateArea) : undefined,
-      bedrooms: formData.bedrooms ? parseInt(formData.bedrooms) : undefined,
-      suites: formData.suites ? parseInt(formData.suites) : undefined,
-      bathrooms: formData.bathrooms ? parseInt(formData.bathrooms) : undefined,
-      parkingSpaces: formData.parkingSpaces ? parseInt(formData.parkingSpaces) : undefined,
-      floor: formData.floor ? parseInt(formData.floor) : undefined,
-      acceptsPets: formData.acceptsPets,
-      furnished: formData.furnished,
-      salePrice: formData.salePrice ? parseFloat(formData.salePrice) : undefined,
-      rentalPrice: formData.rentalPrice ? parseFloat(formData.rentalPrice) : undefined,
-      iptuMonthly: formData.iptuMonthly ? parseFloat(formData.iptuMonthly) : undefined,
-      condoMonthly: formData.condoMonthly ? parseFloat(formData.condoMonthly) : undefined,
-      description: formData.description || undefined,
-    };
+    try {
+      const payload: Record<string, unknown> = {
+        type: formData.type,
+        purpose: formData.purpose,
+        zipCode: formData.zipCode || undefined,
+        street: formData.street || undefined,
+        number: formData.number || undefined,
+        complement: formData.complement || undefined,
+        neighborhood: formData.neighborhood || undefined,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
+        totalArea: formData.totalArea ? parseFloat(formData.totalArea) : undefined,
+        privateArea: formData.privateArea ? parseFloat(formData.privateArea) : undefined,
+        bedrooms: formData.bedrooms ? parseInt(formData.bedrooms) : undefined,
+        suites: formData.suites ? parseInt(formData.suites) : undefined,
+        bathrooms: formData.bathrooms ? parseInt(formData.bathrooms) : undefined,
+        parkingSpaces: formData.parkingSpaces ? parseInt(formData.parkingSpaces) : undefined,
+        floor: formData.floor ? parseInt(formData.floor) : undefined,
+        acceptsPets: formData.acceptsPets,
+        furnished: formData.furnished,
+        salePrice: formData.salePrice ? parseFloat(formData.salePrice) : undefined,
+        rentalPrice: formData.rentalPrice ? parseFloat(formData.rentalPrice) : undefined,
+        iptuMonthly: formData.iptuMonthly ? parseFloat(formData.iptuMonthly) : undefined,
+        condoMonthly: formData.condoMonthly ? parseFloat(formData.condoMonthly) : undefined,
+        description: formData.description || undefined,
+      };
 
-    const result = await createProperty.mutateAsync(payload);
-    router.push(`/properties/${result.id}`);
+      const result = await createProperty.mutateAsync(payload);
+      router.push(`/properties/${result.id}`);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao cadastrar imóvel.';
+      alert(msg);
+    }
   }
 
   return (
