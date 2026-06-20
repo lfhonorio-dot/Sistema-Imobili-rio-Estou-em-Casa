@@ -234,4 +234,14 @@ export class AuthController {
     const fullUser = await this.authService.getMe(user.sub);
     return fullUser;
   }
+
+  // GET /auth/workspaces - lista workspaces do usuário autenticado
+  @UseGuards(JwtAuthGuard)
+  @Get('workspaces')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Workspaces do usuário autenticado' })
+  async getMyWorkspaces(@CurrentUser() user: JwtPayload) {
+    const fullUser = await this.authService.getMe(user.sub);
+    return fullUser.workspaces;
+  }
 }
