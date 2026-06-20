@@ -45,9 +45,9 @@ export interface TokenPair {
 // Custo do bcrypt - 12 rounds para boa segurança
 const BCRYPT_ROUNDS = 12;
 // Máximo de tentativas antes de bloquear conta
-const MAX_FAILED_ATTEMPTS = 5;
+const MAX_FAILED_ATTEMPTS = 20;
 // Tempo de bloqueio em minutos
-const LOCK_DURATION_MINUTES = 30;
+const LOCK_DURATION_MINUTES = 5;
 
 @Injectable()
 export class AuthService {
