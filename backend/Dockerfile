@@ -10,6 +10,7 @@ COPY package*.json ./
 ARG NODE_ENV=development
 RUN npm install --production=false
 
+# cache-bust: 2026-06-20-v2
 COPY . .
 
 RUN npx prisma generate
