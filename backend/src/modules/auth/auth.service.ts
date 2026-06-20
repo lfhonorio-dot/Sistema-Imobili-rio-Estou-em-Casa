@@ -222,9 +222,15 @@ export class AuthService {
     dto: LoginDto,
     req: Request,
   ): Promise<TokenPair & { requires2FA?: boolean }> {
-    // Busca usuário
+    // Busca usuário com workspace
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email, deletedAt: null },
+      include: {
+        workspaces: {
+          include: { workspace: { select: { id: true } } },
+          take: 1,
+        },
+      },
     });
 
     if (!user) {
@@ -306,7 +312,8 @@ export class AuthService {
       userAgent: req.get('user-agent'),
     });
 
-    return tokens;
+    const workspaceId = user.workspaces[0]?.workspaceId ?? null;
+    return { ...tokens, workspaceId };
   }
 
   // -----------------------------------------------
@@ -783,6 +790,41 @@ export class AuthService {
     } catch (error) {
       this.logger.error(`Erro ao enviar e-mail de reset para ${email}:`, error);
     }
+  }
+
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        lastLoginAt: true,
+        workspaces: {
+          include: {
+            workspace: {
+              select: { id: true, name: true, slug: true, logoUrl: true },
+            },
+            role: {
+              select: { id: true, name: true, permissions: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user) throw new Error('Usuário não encontrado');
+
+    return {
+      ...user,
+      workspaces: user.workspaces.map((m) => ({
+        workspaceId: m.workspaceId,
+        isOwner: m.isOwner,
+        workspace: m.workspace,
+        role: m.role,
+      })),
+    };
   }
 
   async unlockUser(email: string): Promise<void> {

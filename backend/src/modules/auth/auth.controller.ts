@@ -224,17 +224,14 @@ export class AuthController {
 
   // -----------------------------------------------
   // GET /auth/me
-  // Retorna dados do usuário autenticado
+  // Retorna dados do usuário autenticado com workspaces
   // -----------------------------------------------
   @UseGuards(JwtAuthGuard)
   @Get('me')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Dados do usuário autenticado' })
   async getMe(@CurrentUser() user: JwtPayload) {
-    return {
-      id: user.sub,
-      email: user.email,
-      name: user.name,
-    };
+    const fullUser = await this.authService.getMe(user.sub);
+    return fullUser;
   }
 }
