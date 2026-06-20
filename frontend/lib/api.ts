@@ -147,7 +147,17 @@ export function getStoredRefreshToken(): string | null {
 
 export function getStoredWorkspaceId(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('workspaceId');
+  const direct = localStorage.getItem('workspaceId');
+  if (direct) return direct;
+  // Fallback: lê do Zustand persist
+  try {
+    const stored = localStorage.getItem('plataforma-auth');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed?.state?.currentWorkspaceId || null;
+    }
+  } catch {}
+  return null;
 }
 
 export function storeTokens(accessToken: string, refreshToken: string): void {
