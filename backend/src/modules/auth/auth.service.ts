@@ -233,47 +233,10 @@ export class AuthService {
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
-    // Verifica bloqueio por tentativas falhas
-    if (user.lockedUntil && user.lockedUntil > new Date()) {
-      const minutesLeft = Math.ceil(
-        (user.lockedUntil.getTime() - Date.now()) / 60000,
-      );
-      throw new UnauthorizedException(
-        `Conta temporariamente bloqueada. Tente novamente em ${minutesLeft} minutos.`,
-      );
-    }
-
     // Valida senha
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!isPasswordValid) {
-      // Incrementa tentativas falhas
-      const newFailedAttempts = user.failedLoginAttempts + 1;
-      const shouldLock = newFailedAttempts >= MAX_FAILED_ATTEMPTS;
-
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          failedLoginAttempts: newFailedAttempts,
-          lockedUntil: shouldLock
-            ? new Date(Date.now() + LOCK_DURATION_MINUTES * 60000)
-            : null,
-        },
-      });
-
-      if (shouldLock) {
-        await this.auditService.log({
-          userId: user.id,
-          action: 'ACCOUNT_LOCKED',
-          entity: 'User',
-          entityId: user.id,
-          ipAddress: req.ip,
-        });
-        throw new UnauthorizedException(
-          `Conta bloqueada por ${LOCK_DURATION_MINUTES} minutos após ${MAX_FAILED_ATTEMPTS} tentativas inválidas.`,
-        );
-      }
-
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
