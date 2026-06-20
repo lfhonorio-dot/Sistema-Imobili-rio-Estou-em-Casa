@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 import { api, formatBRL, MONTH_NAMES, CATEGORY_LABELS } from '@/lib/api';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
-const CATEGORIES_RECEITA = ['SALARIO', 'ALUGUEL', 'DIVIDENDO', 'RENDIMENTO_RF', 'RECEITA_RECEBIVEIS', 'OUTRAS_RECEITAS'];
-const CATEGORIES_DESPESA = ['MORADIA', 'ALIMENTACAO', 'SAUDE', 'EDUCACAO', 'TRANSPORTE', 'LAZER', 'INVESTIMENTO', 'IMPOSTOS', 'OUTRAS_DESPESAS'];
+const CATEGORIES_RECEITA = ['SALARIO', 'ALUGUEL', 'DIVIDENDO', 'RENDIMENTO_FII', 'RENDIMENTO_RENDA_FIXA', 'RECEBIVEIS_LOTEAMENTO', 'APOSENTADORIA', 'OUTRAS_RECEITAS'];
+const CATEGORIES_DESPESA = ['IPTU', 'CONDOMINIO', 'SEGURO', 'MANUTENCAO_IMOVEL', 'IMPOSTOS_ESCRITORIO', 'IR_DARF', 'CUSTO_VIDA', 'PLANO_SAUDE', 'OUTRAS_DESPESAS'];
 
 interface Entry {
   id: string;
@@ -64,7 +64,8 @@ export default function FluxoCaixaPage() {
 
   const save = async () => {
     try {
-      const body = { ...form, amount: parseFloat(form.amount) };
+      const toISO = (d: string) => d ? new Date(d).toISOString() : null;
+      const body = { ...form, amount: parseFloat(form.amount), date: toISO(form.date) };
       if (modal === 'new') await api.cashFlow.create(body);
       else await api.cashFlow.update((modal as Entry).id, body);
       setModal(null);

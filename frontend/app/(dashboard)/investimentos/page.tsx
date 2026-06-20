@@ -145,7 +145,21 @@ function AssetModal({ asset, onClose, onSave }: { asset: any; onClose: () => voi
   const save = async () => {
     setSaving(true);
     try {
-      const data = { ...form, investedAmount: Number(form.investedAmount), currentValue: Number(form.currentValue) };
+      const toISO = (d: string) => d ? new Date(d).toISOString() : null;
+      const data = {
+        ...form,
+        investedAmount: Number(form.investedAmount),
+        currentValue: Number(form.currentValue),
+        quantity: form.quantity ? Number(form.quantity) : undefined,
+        monthlyDY: form.monthlyDY ? Number(form.monthlyDY) : undefined,
+        rate: form.rate ? Number(form.rate) : undefined,
+        monthlyContribution: form.monthlyContribution ? Number(form.monthlyContribution) : undefined,
+        applicationDate: toISO(form.applicationDate),
+        maturityDate: toISO(form.maturityDate),
+        exDividendDate: toISO(form.exDividendDate),
+        indexer: form.indexer || undefined,
+        liquidity: form.liquidity || undefined,
+      };
       if (asset?.id) await api.assets.update(asset.id, data);
       else await api.assets.create(data);
       onSave(); onClose();
