@@ -21,17 +21,24 @@ export class WorkspaceGuard implements CanActivate {
       workspaceId?: string;
     }>();
 
-    const workspaceId = request.headers['x-workspace-id'];
-
-    if (!workspaceId) {
-      throw new BadRequestException(
-        'Header X-Workspace-Id é obrigatório para esta operação.',
-      );
-    }
+    let workspaceId = request.headers['x-workspace-id'];
 
     const userId = request.user?.sub || request.user?.id;
     if (!userId) {
       throw new ForbiddenException('Usuário não autenticado.');
+    }
+
+    // Se header não enviado, usa o primeiro workspace do usuário
+    if (!workspaceId) {
+      const membership = await this.prisma.workspaceUser.findFirst({
+        where: { userId },
+        select: { workspaceId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!membership) {
+        throw new BadRequestException('Header X-Workspace-Id é obrigatório para esta operação.');
+      }
+      workspaceId = membership.workspaceId;
     }
 
     // Verifica se o usuário pertence ao workspace
