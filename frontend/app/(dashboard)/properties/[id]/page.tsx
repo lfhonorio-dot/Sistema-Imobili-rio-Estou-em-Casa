@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, MapPin, Bed, Bath, Car, Maximize, QrCode, Copy } from 'lucide-react';
+import { ArrowLeft, MapPin, Bed, Bath, Car, Maximize, QrCode, Copy, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,7 +13,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { PropertyStatusBadge } from '@/components/erp/property-status-badge';
-import { useProperty, useChangePropertyStatus } from '@/hooks/use-properties';
+import { useProperty, useChangePropertyStatus, useDeleteProperty } from '@/hooks/use-properties';
+import { toast } from 'sonner';
 import api from '@/lib/api';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -41,10 +42,18 @@ export default function PropertyDetailPage() {
 
   const { data: property, isLoading } = useProperty(id);
   const changeStatus = useChangePropertyStatus();
+  const deleteProperty = useDeleteProperty();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   async function loadQrCode() {
     const { data } = await api.get(`/properties/${id}/qrcode`);
     setQrData(data.dataUrl);
+  }
+
+  async function handleDelete() {
+    await deleteProperty.mutateAsync(id);
+    toast.success('Imóvel excluído com sucesso.');
+    router.push('/properties');
   }
 
   async function handleChangeStatus() {
@@ -107,6 +116,34 @@ export default function PropertyDetailPage() {
                   </p>
                 </div>
               )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Excluir imóvel */}
+          <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-destructive border-destructive hover:bg-destructive hover:text-white">
+                <Trash2 className="w-4 h-4 mr-1.5" />
+                Excluir
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Excluir Imóvel</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Tem certeza que deseja excluir o imóvel <strong>{property.code}</strong>? Esta ação não pode ser desfeita.
+              </p>
+              <div className="flex gap-2 justify-end mt-2">
+                <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancelar</Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={deleteProperty.isPending}
+                >
+                  {deleteProperty.isPending ? 'Excluindo...' : 'Confirmar Exclusão'}
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
 
