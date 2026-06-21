@@ -226,7 +226,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email, deletedAt: null },
       include: {
-        workspaceUsers: {
+        workspaces: {
           select: { workspaceId: true },
           take: 1,
         },
@@ -312,7 +312,7 @@ export class AuthService {
       userAgent: req.get('user-agent'),
     });
 
-    const workspaceId = user.workspaceUsers[0]?.workspaceId ?? null;
+    const workspaceId = user.workspaces[0]?.workspaceId ?? null;
     return { ...tokens, workspaceId };
   }
 
@@ -801,7 +801,7 @@ export class AuthService {
         name: true,
         avatar: true,
         lastLoginAt: true,
-        workspaceUsers: {
+        workspaces: {
           include: {
             workspace: {
               select: { id: true, name: true, slug: true },
@@ -818,7 +818,7 @@ export class AuthService {
 
     return {
       ...user,
-      workspaces: user.workspaceUsers.map((m: { workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string }; role: { id: string; name: string; permissions: unknown } }) => ({
+      workspaces: user.workspaces.map((m: { workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string }; role: { id: string; name: string; permissions: unknown } }) => ({
         workspaceId: m.workspaceId,
         isOwner: m.isOwner,
         workspace: m.workspace,
