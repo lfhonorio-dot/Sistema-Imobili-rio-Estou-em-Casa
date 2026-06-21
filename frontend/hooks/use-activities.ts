@@ -57,10 +57,10 @@ export function useActivities(query: ActivityQuery = {}) {
       if (query.startDate) params.set('startDate', query.startDate);
       if (query.endDate) params.set('endDate', query.endDate);
 
-      const res = await api.get<{ success: boolean; data: Activity[]; meta: unknown }>(`/activities?${params}`, {
+      const res = await api.get<{ success: boolean; data: { items: Activity[]; meta: { page: number; limit: number; total: number; pages: number } } }>(`/activities?${params}`, {
         headers: { 'x-workspace-id': workspaceId },
       });
-      return res.data;
+      return res.data.data;
     },
     enabled: !!workspaceId,
   });

@@ -37,7 +37,7 @@ export default function DealDetailPage() {
 
   const { data: deal, isLoading } = useDeal(id);
   const { data: activitiesResult } = useActivities({ dealId: id });
-  const activities = activitiesResult?.data ?? [];
+  const activities = activitiesResult?.items ?? [];
   const moveStage = useMoveStage();
 
   const [showMoveModal, setShowMoveModal] = useState(false);

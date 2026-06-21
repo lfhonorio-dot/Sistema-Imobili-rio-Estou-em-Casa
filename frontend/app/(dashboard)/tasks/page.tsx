@@ -48,7 +48,7 @@ export default function TasksPage() {
     calendarDate.getMonth() + 1,
   );
 
-  const weekTasks = weekActivities?.data ?? [];
+  const weekTasks = weekActivities?.items ?? [];
   const calendarByDay = calendarData?.byDay ?? {};
 
   const handleMarkDone = async (id: string) => {
