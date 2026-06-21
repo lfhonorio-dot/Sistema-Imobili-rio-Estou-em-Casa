@@ -111,3 +111,82 @@ export function useCreatePipeline() {
     },
   });
 }
+
+export function useUpdatePipeline() {
+  const workspaceId = useWorkspaceId();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: string; name?: string; isDefault?: boolean }) => {
+      const res = await api.patch<{ success: boolean; data: Pipeline }>(`/pipelines/${id}`, data, {
+        headers: { 'x-workspace-id': workspaceId },
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['pipelines', workspaceId] });
+    },
+  });
+}
+
+export function useDeletePipeline() {
+  const workspaceId = useWorkspaceId();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/pipelines/${id}`, { headers: { 'x-workspace-id': workspaceId } });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['pipelines', workspaceId] });
+    },
+  });
+}
+
+export function useCreateStage() {
+  const workspaceId = useWorkspaceId();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ pipelineId, ...data }: { pipelineId: string; name: string; color: string; order?: number }) => {
+      const res = await api.post<{ success: boolean; data: PipelineStage }>(`/pipelines/${pipelineId}/stages`, data, {
+        headers: { 'x-workspace-id': workspaceId },
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['pipelines', workspaceId] });
+    },
+  });
+}
+
+export function useUpdateStage() {
+  const workspaceId = useWorkspaceId();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ pipelineId, stageId, ...data }: { pipelineId: string; stageId: string; name?: string; color?: string }) => {
+      const res = await api.patch<{ success: boolean; data: PipelineStage }>(`/pipelines/${pipelineId}/stages/${stageId}`, data, {
+        headers: { 'x-workspace-id': workspaceId },
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['pipelines', workspaceId] });
+    },
+  });
+}
+
+export function useDeleteStage() {
+  const workspaceId = useWorkspaceId();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ pipelineId, stageId }: { pipelineId: string; stageId: string }) => {
+      await api.delete(`/pipelines/${pipelineId}/stages/${stageId}`, { headers: { 'x-workspace-id': workspaceId } });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['pipelines', workspaceId] });
+    },
+  });
+}

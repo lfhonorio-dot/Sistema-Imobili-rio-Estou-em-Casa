@@ -166,6 +166,12 @@ const settingsItems = [
     icon: ClipboardList,
     permission: 'audit:read',
   },
+  {
+    label: 'Pipelines',
+    href: '/settings/pipelines',
+    icon: KanbanSquare,
+    permission: 'workspace:read',
+  },
 ];
 
 export function Sidebar() {
