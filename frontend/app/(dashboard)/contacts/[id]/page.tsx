@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Phone, Mail, MapPin, Building, Edit, Plus, Tag } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, MapPin, Building, Edit, Plus, Tag, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,11 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ActivityFeed } from '@/components/crm/activity-feed';
 import { TaskForm } from '@/components/crm/task-form';
 import { ContactForm } from '@/components/crm/contact-form';
-import { useContact, useContactTimeline } from '@/hooks/use-contacts';
+import { useContact, useContactTimeline, useDeleteContact } from '@/hooks/use-contacts';
 import Link from 'next/link';
 import type { Activity } from '@/hooks/use-activities';
 
@@ -27,9 +28,17 @@ export default function ContactDetailPage() {
   const id = params.id as string;
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { data: contact, isLoading } = useContact(id);
   const { data: timeline = [] } = useContactTimeline(id);
+  const deleteContact = useDeleteContact();
+
+  async function handleDelete() {
+    await deleteContact.mutateAsync(id);
+    toast.success('Contato excluído com sucesso.');
+    router.push('/contacts');
+  }
 
   if (isLoading) {
     return (
@@ -90,6 +99,15 @@ export default function ContactDetailPage() {
           <Button variant="outline" size="sm" onClick={() => setShowEditModal(true)}>
             <Edit className="w-4 h-4 mr-1.5" />
             Editar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive border-destructive hover:bg-destructive hover:text-white"
+            onClick={() => setShowDeleteDialog(true)}
+          >
+            <Trash2 className="w-4 h-4 mr-1.5" />
+            Excluir
           </Button>
         </div>
       </div>
@@ -221,6 +239,24 @@ export default function ContactDetailPage() {
             onSuccess={() => setShowEditModal(false)}
             onCancel={() => setShowEditModal(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmação de exclusão */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir Contato</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tem certeza que deseja excluir <strong>{contact.name}</strong>? Esta ação não pode ser desfeita.
+          </p>
+          <div className="flex gap-2 justify-end mt-2">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleteContact.isPending}>
+              {deleteContact.isPending ? 'Excluindo...' : 'Confirmar Exclusão'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
