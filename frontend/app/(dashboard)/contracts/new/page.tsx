@@ -19,7 +19,7 @@ export default function NewContractPage() {
   const createContract = useCreateContract();
   const generateInstallments = useGenerateInstallments();
 
-  const { data: propertiesData } = useProperties({ limit: 200, status: 'AVAILABLE' });
+  const { data: propertiesData } = useProperties({ limit: 200 });
   const { data: contactsData } = useContacts({ limit: 200 });
 
   const properties = propertiesData?.items ?? [];
@@ -137,10 +137,10 @@ export default function NewContractPage() {
           {/* Proprietário */}
           <div className="space-y-1.5">
             <Label>Proprietário</Label>
-            <Select value={form.ownerId} onValueChange={(v) => setField('ownerId', v)}>
+            <Select value={form.ownerId || 'NONE'} onValueChange={(v) => setField('ownerId', v === 'NONE' ? '' : v)}>
               <SelectTrigger><SelectValue placeholder="Selecione o proprietário..." /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhum</SelectItem>
+                <SelectItem value="NONE">Nenhum</SelectItem>
                 {contacts.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</SelectItem>
                 ))}
@@ -152,10 +152,10 @@ export default function NewContractPage() {
           {(isRental || isSale) && (
             <div className="space-y-1.5">
               <Label>{isRental ? 'Locatário' : 'Comprador'}</Label>
-              <Select value={form.tenantId} onValueChange={(v) => setField('tenantId', v)}>
+              <Select value={form.tenantId || 'NONE'} onValueChange={(v) => setField('tenantId', v === 'NONE' ? '' : v)}>
                 <SelectTrigger><SelectValue placeholder={`Selecione o ${isRental ? 'locatário' : 'comprador'}...`} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="NONE">Nenhum</SelectItem>
                   {contacts.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</SelectItem>
                   ))}
