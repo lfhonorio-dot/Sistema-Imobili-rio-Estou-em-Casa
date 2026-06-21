@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, MapPin, Bed, Bath, Car, Maximize, QrCode, Copy, Trash2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Bed, Bath, Car, Maximize, QrCode, Copy, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -96,6 +96,12 @@ export default function PropertyDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {/* Editar */}
+          <Button variant="outline" size="sm" onClick={() => router.push(`/properties/${id}/edit`)}>
+            <Pencil className="w-4 h-4 mr-1.5" />
+            Editar
+          </Button>
+
           {/* QR Code */}
           <Dialog>
             <DialogTrigger asChild>
