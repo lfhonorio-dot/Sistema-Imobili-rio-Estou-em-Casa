@@ -38,8 +38,7 @@ export interface ActivityQuery {
 }
 
 function useWorkspaceId() {
-  const { currentWorkspace } = useAuthStore();
-  return currentWorkspace?.workspace.id ?? '';
+  return useAuthStore((s) => s.currentWorkspaceId) ?? '';
 }
 
 export function useActivities(query: ActivityQuery = {}) {

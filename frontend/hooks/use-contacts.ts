@@ -58,8 +58,7 @@ export interface ContactQuery {
 }
 
 function useWorkspaceId() {
-  const { currentWorkspace } = useAuthStore();
-  return currentWorkspace?.workspace.id ?? '';
+  return useAuthStore((s) => s.currentWorkspaceId) ?? '';
 }
 
 // Lista contatos com paginação e filtros

@@ -17,8 +17,7 @@ export interface Notification {
 }
 
 export function useNotifications() {
-  const { currentWorkspace } = useAuthStore();
-  const workspaceId = currentWorkspace?.workspace.id || '';
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId) ?? '';
   const headers = { 'x-workspace-id': workspaceId };
 
   const [notifications, setNotifications] = useState<Notification[]>([]);

@@ -45,7 +45,7 @@ export interface MaintenanceQuery {
 }
 
 export function useMaintenanceOrders(query: MaintenanceQuery = {}) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['maintenance', workspaceId, query],
@@ -58,7 +58,7 @@ export function useMaintenanceOrders(query: MaintenanceQuery = {}) {
 }
 
 export function useMaintenanceOrder(id: string) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['maintenance-order', workspaceId, id],
@@ -72,7 +72,7 @@ export function useMaintenanceOrder(id: string) {
 
 export function useCreateMaintenanceOrder() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async (dto: Partial<MaintenanceOrder>) => {
@@ -87,7 +87,7 @@ export function useCreateMaintenanceOrder() {
 
 export function useChangeMaintenanceStatus() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {

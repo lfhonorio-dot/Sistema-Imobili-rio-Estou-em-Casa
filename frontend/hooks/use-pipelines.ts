@@ -62,8 +62,7 @@ export interface Deal {
 }
 
 function useWorkspaceId() {
-  const { currentWorkspace } = useAuthStore();
-  return currentWorkspace?.workspace.id ?? '';
+  return useAuthStore((s) => s.currentWorkspaceId) ?? '';
 }
 
 export function usePipelines() {

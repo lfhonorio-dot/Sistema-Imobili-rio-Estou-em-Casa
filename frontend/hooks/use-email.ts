@@ -17,8 +17,7 @@ export interface EmailTemplate {
 }
 
 export function useEmail() {
-  const { currentWorkspace } = useAuthStore();
-  const workspaceId = currentWorkspace?.workspace.id || '';
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId) ?? '';
   const headers = { 'x-workspace-id': workspaceId };
 
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);

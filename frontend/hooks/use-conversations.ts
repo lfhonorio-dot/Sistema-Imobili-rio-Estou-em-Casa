@@ -26,8 +26,7 @@ export interface Conversation {
 }
 
 export function useConversations() {
-  const { currentWorkspace } = useAuthStore();
-  const workspaceId = currentWorkspace?.workspace.id || '';
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId) ?? '';
   const headers = { 'x-workspace-id': workspaceId };
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
