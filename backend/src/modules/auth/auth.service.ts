@@ -275,10 +275,10 @@ export class AuthService {
       },
     });
 
-    // Gera fingerprint de sessão para detecção de roubo de sessão
+    // Gera fingerprint de sessão (apenas user-agent; IP é excluído pois muda em redes móveis/WiFi)
     const fingerprint = this.hmacService.generateSessionFingerprint(
       req.get('user-agent') || '',
-      req.ip || '',
+      '',
     );
 
     // Gera par de tokens
@@ -373,15 +373,11 @@ export class AuthService {
       );
     }
 
-    // Verifica fingerprint para detectar roubo de token
+    // Verifica fingerprint para detectar roubo de token (apenas user-agent)
     if (session.fingerprint) {
-      const currentFingerprint = this.hmacService.generateSessionFingerprint(
-        req.get('user-agent') || '',
-        req.ip || '',
-      );
       const fingerprintValid = this.hmacService.verifySessionFingerprint(
         req.get('user-agent') || '',
-        req.ip || '',
+        '',
         session.fingerprint,
       );
 
@@ -419,7 +415,7 @@ export class AuthService {
 
     const newFingerprint = this.hmacService.generateSessionFingerprint(
       req.get('user-agent') || '',
-      req.ip || '',
+      '',
     );
 
     await this.prisma.userSession.update({
@@ -718,7 +714,7 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
+        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '2h'),
       }),
       this.jwtService.signAsync(
         { sub: user.id }, // Refresh token tem payload mínimo
