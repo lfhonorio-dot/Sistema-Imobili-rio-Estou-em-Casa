@@ -37,10 +37,10 @@ export function useDeals(query: DealQuery = {}) {
       if (query.assigneeId) params.set('assigneeId', query.assigneeId);
       if (query.search) params.set('search', query.search);
 
-      const res = await api.get<{ success: boolean; data: Deal[]; meta: unknown }>(`/deals?${params}`, {
+      const res = await api.get(`/deals?${params}`, {
         headers: { 'x-workspace-id': workspaceId },
       });
-      return res.data;
+      return res.data.data as { items: Deal[]; meta: { page: number; limit: number; total: number; pages: number } };
     },
     enabled: !!workspaceId,
   });

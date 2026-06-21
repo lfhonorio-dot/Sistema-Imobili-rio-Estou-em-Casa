@@ -34,7 +34,7 @@ export default function PipelinePage() {
     pipelineId: activePipelineId,
     limit: 200,
   });
-  const deals = dealsResult?.data ?? [];
+  const deals = dealsResult?.items ?? [];
 
   if (loadingPipelines) {
     return (

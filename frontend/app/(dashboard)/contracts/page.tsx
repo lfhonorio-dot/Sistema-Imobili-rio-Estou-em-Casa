@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { useContracts } from '@/hooks/use-contracts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -57,6 +57,12 @@ export default function ContractsPage() {
             {meta ? `${meta.total} contratos` : 'Carregando...'}
           </p>
         </div>
+        <Button asChild>
+          <Link href="/contracts/new">
+            <Plus className="w-4 h-4 mr-1.5" />
+            Novo Contrato
+          </Link>
+        </Button>
       </div>
 
       {/* Filtros */}

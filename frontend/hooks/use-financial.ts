@@ -53,39 +53,39 @@ export interface FinancialSummary {
 }
 
 export function useFinancialEntries(query: FinancialQuery = {}) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['financial-entries', workspaceId, query],
     queryFn: async () => {
       const { data } = await api.get('/financial/entries', { params: query });
-      return data as { items: FinancialEntry[]; meta: { page: number; limit: number; total: number; pages: number } };
+      return data.data as { items: FinancialEntry[]; meta: { page: number; limit: number; total: number; pages: number } };
     },
     enabled: !!workspaceId,
   });
 }
 
 export function useFinancialSummary() {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['financial-summary', workspaceId],
     queryFn: async () => {
       const { data } = await api.get('/financial/summary');
-      return data as FinancialSummary;
+      return data.data as FinancialSummary;
     },
     enabled: !!workspaceId,
   });
 }
 
 export function useFinancialForecast() {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['financial-forecast', workspaceId],
     queryFn: async () => {
       const { data } = await api.get('/financial/forecast');
-      return data as {
+      return data.data as {
         next30Days: { amount: number; count: number };
         next60Days: { amount: number; count: number };
         next90Days: { amount: number; count: number };
@@ -96,13 +96,13 @@ export function useFinancialForecast() {
 }
 
 export function useOverdueEntries() {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['financial-overdue', workspaceId],
     queryFn: async () => {
       const { data } = await api.get('/financial/overdue');
-      return data as Array<FinancialEntry & { daysOverdue: number }>;
+      return data.data as Array<FinancialEntry & { daysOverdue: number }>;
     },
     enabled: !!workspaceId,
   });
@@ -110,7 +110,7 @@ export function useOverdueEntries() {
 
 export function usePayEntry() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async ({
@@ -129,7 +129,7 @@ export function usePayEntry() {
         paidAmount,
         paymentMethod,
       });
-      return data as FinancialEntry;
+      return data.data as FinancialEntry;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['financial-entries', workspaceId] });
@@ -140,13 +140,13 @@ export function usePayEntry() {
 }
 
 export function useCommissions(query: { userId?: string; status?: string } = {}) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['commissions', workspaceId, query],
     queryFn: async () => {
       const { data } = await api.get('/financial/commissions', { params: query });
-      return data;
+      return data.data as { items: Array<{ id: string; rate: number; amount: number; status: string; contract?: { type: string; property?: { street?: string | null } } | null }> };
     },
     enabled: !!workspaceId,
   });

@@ -250,7 +250,7 @@ export default function FinancialPage() {
             </SelectContent>
           </Select>
 
-          {(commissionsData as any)?.items?.length === 0 ? (
+          {commissionsData?.items?.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nenhuma comissão encontrada</p>
           ) : (
             <div className="border rounded-lg overflow-hidden">
@@ -264,7 +264,7 @@ export default function FinancialPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(commissionsData as any)?.items?.map((c: any) => (
+                  {commissionsData?.items?.map((c) => (
                     <tr key={c.id} className="border-t hover:bg-gray-50/50">
                       <td className="py-3 px-4 text-sm">
                         {c.contract?.property?.street ?? '-'}

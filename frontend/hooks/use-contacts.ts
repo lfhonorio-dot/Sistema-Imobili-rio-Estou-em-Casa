@@ -41,8 +41,7 @@ export interface Contact {
 }
 
 export interface ContactsListResponse {
-  success: boolean;
-  data: Contact[];
+  items: Contact[];
   meta: { page: number; limit: number; total: number; pages: number };
 }
 
@@ -80,10 +79,10 @@ export function useContacts(query: ContactQuery = {}) {
       if (query.sortBy) params.set('sortBy', query.sortBy);
       if (query.sortOrder) params.set('sortOrder', query.sortOrder);
 
-      const res = await api.get<ContactsListResponse>(`/contacts?${params}`, {
+      const res = await api.get(`/contacts?${params}`, {
         headers: { 'x-workspace-id': workspaceId },
       });
-      return res.data;
+      return res.data.data as ContactsListResponse;
     },
     enabled: !!workspaceId,
   });

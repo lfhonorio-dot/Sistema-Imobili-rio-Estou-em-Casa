@@ -35,7 +35,7 @@ export function DealForm({ defaultPipelineId, onSuccess, onCancel }: DealFormPro
   const { data: pipelines = [] } = usePipelines();
   const [contactSearch, setContactSearch] = useState('');
   const { data: contactsResult } = useContacts({ search: contactSearch, limit: 10 });
-  const contacts = contactsResult?.data ?? [];
+  const contacts = contactsResult?.items ?? [];
 
   const {
     register,

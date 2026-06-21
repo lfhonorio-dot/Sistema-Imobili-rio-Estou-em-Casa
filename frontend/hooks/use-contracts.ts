@@ -48,26 +48,26 @@ export interface ContractQuery {
 }
 
 export function useContracts(query: ContractQuery = {}) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['contracts', workspaceId, query],
     queryFn: async () => {
       const { data } = await api.get('/contracts', { params: query });
-      return data as { items: Contract[]; meta: { page: number; limit: number; total: number; pages: number } };
+      return data.data as { items: Contract[]; meta: { page: number; limit: number; total: number; pages: number } };
     },
     enabled: !!workspaceId,
   });
 }
 
 export function useContract(id: string) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['contract', workspaceId, id],
     queryFn: async () => {
       const { data } = await api.get(`/contracts/${id}`);
-      return data as Contract;
+      return data.data as Contract;
     },
     enabled: !!workspaceId && !!id,
   });
@@ -75,14 +75,46 @@ export function useContract(id: string) {
 
 export function useCreateContract() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async (dto: Partial<Contract>) => {
       const { data } = await api.post('/contracts', dto);
-      return data as Contract;
+      return data.data as Contract;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts', workspaceId] });
+    },
+  });
+}
+
+export function useUpdateContract() {
+  const queryClient = useQueryClient();
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+
+  return useMutation({
+    mutationFn: async ({ id, ...dto }: Partial<Contract> & { id: string }) => {
+      const { data } = await api.patch(`/contracts/${id}`, dto);
+      return data.data as Contract;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['contracts', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['contract', workspaceId, vars.id] });
+    },
+  });
+}
+
+export function useChangeContractStatus() {
+  const queryClient = useQueryClient();
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+
+  return useMutation({
+    mutationFn: async ({ id, status, reason }: { id: string; status: string; reason?: string }) => {
+      const { data } = await api.patch(`/contracts/${id}/status`, { status, reason });
+      return data.data as Contract;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['contract', workspaceId, vars.id] });
       queryClient.invalidateQueries({ queryKey: ['contracts', workspaceId] });
     },
   });
@@ -90,27 +122,28 @@ export function useCreateContract() {
 
 export function useGenerateInstallments() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
     mutationFn: async ({ id, months }: { id: string; months: number }) => {
       const { data } = await api.post(`/contracts/${id}/generate-installments`, { months });
-      return data as { created: number };
+      return data.data as { created: number };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contracts', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['financial-entries', workspaceId] });
     },
   });
 }
 
 export function useContractStatement(id: string) {
-  const workspaceId = useAuthStore((s) => s.currentWorkspace?.id);
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useQuery({
     queryKey: ['contract-statement', workspaceId, id],
     queryFn: async () => {
       const { data } = await api.get(`/contracts/${id}/statement`);
-      return data;
+      return data.data;
     },
     enabled: !!workspaceId && !!id,
   });

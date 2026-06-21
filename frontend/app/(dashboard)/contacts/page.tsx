@@ -54,7 +54,7 @@ export default function ContactsPage() {
 
   const { data: duplicates } = useContactDuplicates();
 
-  const contacts = data?.data ?? [];
+  const contacts = data?.items ?? [];
   const meta = data?.meta;
   const hasDuplicates = Array.isArray(duplicates) && duplicates.length > 0;
 
