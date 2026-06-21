@@ -28,8 +28,9 @@ import {
 } from '@/hooks/use-pipelines';
 
 const PIPELINE_TYPES = [
-  { value: 'SALES', label: 'Vendas' },
+  { value: 'SALE', label: 'Vendas' },
   { value: 'RENTAL', label: 'Locação' },
+  { value: 'COMMERCIAL', label: 'Comercial' },
   { value: 'CUSTOM', label: 'Personalizado' },
 ];
 
@@ -70,7 +71,7 @@ export default function PipelinesSettingsPage() {
   const [editPipeline, setEditPipeline] = useState<Pipeline | null>(null);
   const [deletePipelineTarget, setDeletePipelineTarget] = useState<Pipeline | null>(null);
   const [pipelineName, setPipelineName] = useState('');
-  const [pipelineType, setPipelineType] = useState('SALES');
+  const [pipelineType, setPipelineType] = useState('SALE');
 
   // Stage modals
   const [showNewStage, setShowNewStage] = useState<string | null>(null); // pipelineId
@@ -132,8 +133,10 @@ export default function PipelinesSettingsPage() {
 
   async function handleCreateStage() {
     if (!showNewStage || !stageName.trim()) { toast.error('Nome é obrigatório'); return; }
+    const pipeline = pipelines.find((p) => p.id === showNewStage);
+    const nextOrder = pipeline ? Math.max(0, ...pipeline.stages.map((s) => s.order)) + 1 : 0;
     try {
-      await createStage.mutateAsync({ pipelineId: showNewStage, name: stageName.trim(), color: stageColor });
+      await createStage.mutateAsync({ pipelineId: showNewStage, name: stageName.trim(), color: stageColor, order: nextOrder });
       toast.success('Estágio criado!');
       setShowNewStage(null);
     } catch {

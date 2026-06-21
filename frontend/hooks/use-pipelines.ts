@@ -148,8 +148,8 @@ export function useCreateStage() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ pipelineId, ...data }: { pipelineId: string; name: string; color: string; order?: number }) => {
-      const res = await api.post<{ success: boolean; data: PipelineStage }>(`/pipelines/${pipelineId}/stages`, data, {
+    mutationFn: async ({ pipelineId, order, ...data }: { pipelineId: string; name: string; color: string; order: number }) => {
+      const res = await api.post<{ success: boolean; data: PipelineStage }>(`/pipelines/${pipelineId}/stages`, { ...data, order }, {
         headers: { 'x-workspace-id': workspaceId },
       });
       return res.data.data;
