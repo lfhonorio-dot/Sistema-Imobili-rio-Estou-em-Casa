@@ -94,7 +94,8 @@ api.interceptors.response.use(
       const refreshToken = getStoredRefreshToken();
 
       if (!refreshToken) {
-        // Sem refresh token: redireciona para login
+        // Sem refresh token: limpa tokens (inclusive cookie) e redireciona
+        clearStoredTokens();
         redirectToLogin();
         return Promise.reject(error);
       }

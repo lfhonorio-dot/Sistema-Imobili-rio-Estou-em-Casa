@@ -15,6 +15,16 @@ const PUBLIC_ROUTES = [
 // Rotas de API (não gerenciadas pelo middleware de páginas)
 const API_ROUTES = ['/api'];
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    // exp é em segundos, Date.now() em ms
+    return payload.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -33,18 +43,23 @@ export function middleware(request: NextRequest) {
     (route) => pathname === route || pathname.startsWith(route + '/'),
   );
 
-  // Verifica presença do token (cookie ou localStorage não acessível aqui)
-  // Usamos um cookie httpOnly para verificação no middleware
   const accessToken = request.cookies.get('accessToken')?.value;
 
-  if (!isPublicRoute && !accessToken) {
-    // Redireciona para login preservando a URL de destino
+  // Considera token inválido se expirado (evita loop após reiniciar o browser)
+  const hasValidToken = !!accessToken && !isTokenExpired(accessToken);
+
+  if (!isPublicRoute && !hasValidToken) {
+    // Limpa cookie expirado e redireciona para login
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    const response = NextResponse.redirect(loginUrl);
+    if (accessToken) {
+      response.cookies.set('accessToken', '', { maxAge: 0, path: '/' });
+    }
+    return response;
   }
 
-  if (isPublicRoute && accessToken) {
+  if (isPublicRoute && hasValidToken) {
     // Usuário já autenticado tentando acessar página de login/registro
     return NextResponse.redirect(new URL('/', request.url));
   }
