@@ -80,7 +80,7 @@ export class FinancialQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(500)
   limit?: number = 20;
 
   @IsOptional()
@@ -119,7 +119,7 @@ export class CommissionQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(500)
   limit?: number = 20;
 
   @IsOptional()
