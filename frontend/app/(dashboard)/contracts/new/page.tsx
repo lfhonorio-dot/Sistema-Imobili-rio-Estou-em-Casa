@@ -19,8 +19,8 @@ export default function NewContractPage() {
   const createContract = useCreateContract();
   const generateInstallments = useGenerateInstallments();
 
-  const { data: propertiesData } = useProperties({ limit: 200 });
-  const { data: contactsData } = useContacts({ limit: 200 });
+  const { data: propertiesData } = useProperties({ limit: 500 });
+  const { data: contactsData } = useContacts({ limit: 500 });
 
   const properties = propertiesData?.items ?? [];
   const contacts = contactsData?.items ?? [];
@@ -125,11 +125,15 @@ export default function NewContractPage() {
             <Select value={form.propertyId} onValueChange={(v) => setField('propertyId', v)}>
               <SelectTrigger><SelectValue placeholder="Selecione o imóvel..." /></SelectTrigger>
               <SelectContent>
-                {properties.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.code} — {p.street ? `${p.street}${p.number ? `, ${p.number}` : ''}` : 'Endereço não informado'} ({p.city})
-                  </SelectItem>
-                ))}
+                {properties.map((p) => {
+                  const statusLabel: Record<string, string> = { AVAILABLE: 'Disponível', RENTED: 'Alugado', SOLD: 'Vendido', INACTIVE: 'Inativo' };
+                  const addr = p.street ? `${p.street}${p.number ? `, ${p.number}` : ''}` : 'Endereço não informado';
+                  return (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.code} — {addr}{p.city ? ` (${p.city})` : ''}{p.status !== 'AVAILABLE' ? ` [${statusLabel[p.status] ?? p.status}]` : ''}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>

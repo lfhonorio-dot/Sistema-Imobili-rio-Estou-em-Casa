@@ -25,7 +25,7 @@ function formatCurrency(value: number | null | undefined) {
 export default function FinancialPage() {
   const [receivablePage, setReceivablePage] = useState(1);
   const [payablePage, setPayablePage] = useState(1);
-  const [commissionStatus, setCommissionStatus] = useState('');
+  const [commissionStatus, setCommissionStatus] = useState('ALL');
 
   const { data: summary } = useFinancialSummary();
   const { data: forecast } = useFinancialForecast();
@@ -40,7 +40,7 @@ export default function FinancialPage() {
     page: payablePage,
     limit: 20,
   });
-  const { data: commissionsData } = useCommissions({ status: commissionStatus || undefined });
+  const { data: commissionsData } = useCommissions({ status: commissionStatus === 'ALL' ? undefined : commissionStatus });
   const payEntry = usePayEntry();
 
   const kpis = [
@@ -244,7 +244,7 @@ export default function FinancialPage() {
               <SelectValue placeholder="Filtrar status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos</SelectItem>
+              <SelectItem value="ALL">Todos</SelectItem>
               <SelectItem value="PENDING">Pendentes</SelectItem>
               <SelectItem value="PAID">Pagas</SelectItem>
             </SelectContent>

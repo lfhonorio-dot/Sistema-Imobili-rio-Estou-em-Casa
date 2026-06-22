@@ -51,7 +51,7 @@ export function useMaintenanceOrders(query: MaintenanceQuery = {}) {
     queryKey: ['maintenance', workspaceId, query],
     queryFn: async () => {
       const { data } = await api.get('/maintenance', { params: query });
-      return data as { items: MaintenanceOrder[]; meta: { page: number; limit: number; total: number; pages: number } };
+      return data.data as { items: MaintenanceOrder[]; meta: { page: number; limit: number; total: number; pages: number } };
     },
     enabled: !!workspaceId,
   });
@@ -64,7 +64,7 @@ export function useMaintenanceOrder(id: string) {
     queryKey: ['maintenance-order', workspaceId, id],
     queryFn: async () => {
       const { data } = await api.get(`/maintenance/${id}`);
-      return data as MaintenanceOrder;
+      return data.data as MaintenanceOrder;
     },
     enabled: !!workspaceId && !!id,
   });
@@ -77,7 +77,7 @@ export function useCreateMaintenanceOrder() {
   return useMutation({
     mutationFn: async (dto: Partial<MaintenanceOrder>) => {
       const { data } = await api.post('/maintenance', dto);
-      return data as MaintenanceOrder;
+      return data.data as MaintenanceOrder;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance', workspaceId] });
@@ -92,7 +92,7 @@ export function useChangeMaintenanceStatus() {
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const { data } = await api.patch(`/maintenance/${id}/status`, { status });
-      return data as MaintenanceOrder;
+      return data.data as MaintenanceOrder;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['maintenance', workspaceId] });

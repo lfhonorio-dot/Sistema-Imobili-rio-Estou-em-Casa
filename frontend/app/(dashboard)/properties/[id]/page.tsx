@@ -47,7 +47,7 @@ export default function PropertyDetailPage() {
 
   async function loadQrCode() {
     const { data } = await api.get(`/properties/${id}/qrcode`);
-    setQrData(data.dataUrl);
+    setQrData(data.data?.dataUrl ?? data.dataUrl);
   }
 
   async function handleDelete() {
