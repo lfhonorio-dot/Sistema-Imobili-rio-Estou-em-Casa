@@ -114,6 +114,7 @@ export const api = {
   advisor: {
     analyze: () => fetchAPI('/advisor/analyze', { method: 'POST' }),
     history: () => fetchAPI('/advisor/analyses'),
+    list: () => fetchAPI('/advisor/analyses'),
     get: (id: string) => fetchAPI(`/advisor/analyses/${id}`),
     chat: (id: string, question: string) =>
       fetchAPI(`/advisor/analyses/${id}/chat`, { method: 'POST', body: JSON.stringify({ question }) }),
