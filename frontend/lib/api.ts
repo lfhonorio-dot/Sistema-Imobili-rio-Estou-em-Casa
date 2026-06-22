@@ -111,6 +111,16 @@ export const api = {
     confirm: (logId: string, entries: any[]) =>
       fetchAPI(`/import/${logId}/confirm`, { method: 'POST', body: JSON.stringify({ entries }) }),
   },
+  advisor: {
+    analyze: () => fetchAPI('/advisor/analyze', { method: 'POST' }),
+    history: () => fetchAPI('/advisor/analyses'),
+    get: (id: string) => fetchAPI(`/advisor/analyses/${id}`),
+    chat: (id: string, question: string) =>
+      fetchAPI(`/advisor/analyses/${id}/chat`, { method: 'POST', body: JSON.stringify({ question }) }),
+    quickChat: (question: string) =>
+      fetchAPI('/advisor/chat', { method: 'POST', body: JSON.stringify({ question }) }),
+    usage: () => fetchAPI('/advisor/usage'),
+  },
 };
 
 export function formatBRL(value: number | string | null | undefined): string {

@@ -10,6 +10,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { RetirementModule } from './retirement/retirement.module';
 import { ImportModule } from './import/import.module';
 import { SnapshotModule } from './snapshot/snapshot.module';
+import { AdvisorModule } from './advisor/advisor.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SnapshotModule } from './snapshot/snapshot.module';
     RetirementModule,
     ImportModule,
     SnapshotModule,
+    AdvisorModule,
   ],
 })
 export class AppModule {}

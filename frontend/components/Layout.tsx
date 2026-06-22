@@ -12,6 +12,7 @@ const navItems = [
   { href: '/aposentadoria', label: 'Aposentadoria', icon: '🎯' },
   { href: '/importacao', label: 'Importar Extrato', icon: '📤' },
   { href: '/relatorios', label: 'Relatórios', icon: '📄' },
+  { href: '/consultor', label: 'Consultor IA', icon: '🧠' },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

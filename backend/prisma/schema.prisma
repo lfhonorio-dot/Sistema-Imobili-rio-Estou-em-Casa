@@ -385,3 +385,31 @@ model ImportMatchingRule {
 
   @@index([userId])
 }
+
+model PatrimonialAnalysis {
+  id            String   @id @default(cuid())
+  userId        String
+  generatedAt   DateTime @default(now())
+  dataSnapshot  Json
+  agentResponse Json
+  modelUsed     String   @default("claude-opus-4-6")
+  tokensUsed    Int      @default(0)
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+
+  conversations AnalysisConversation[]
+
+  @@index([userId, generatedAt])
+}
+
+model AnalysisConversation {
+  id         String              @id @default(cuid())
+  analysis   PatrimonialAnalysis @relation(fields: [analysisId], references: [id])
+  analysisId String
+  question   String
+  response   String
+  askedAt    DateTime            @default(now())
+  tokensUsed Int                 @default(0)
+
+  @@index([analysisId])
+}
