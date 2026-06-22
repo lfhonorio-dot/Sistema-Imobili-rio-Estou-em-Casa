@@ -5,6 +5,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { User, AuthTokens } from '@/types';
@@ -18,16 +19,25 @@ export function useAuth() {
   const { user, isAuthenticated, setAuth, setUser, logout: clearAuth } = useAuthStore();
 
   // Busca dados atualizados do usuário
-  const { data: profile, isLoading: isLoadingProfile } = useQuery({
+  const { data: profile, isLoading: isLoadingProfile, isError: profileError } = useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
       const response = await api.get<{ data: User }>('/auth/me');
       return response.data.data;
     },
     enabled: isAuthenticated,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 5 * 60 * 1000,
     retry: false,
   });
+
+  // Se /auth/me falhar com token inválido, limpa estado stale do Zustand
+  // Isso quebra o loop: isAuthenticated volta a false e a query para de rodar
+  useEffect(() => {
+    if (profileError && isAuthenticated) {
+      clearAuth();
+      queryClient.clear();
+    }
+  }, [profileError, isAuthenticated, clearAuth, queryClient]);
 
   // Atualiza usuário no store quando os dados chegarem
   if (profile && profile.id !== user?.id) {

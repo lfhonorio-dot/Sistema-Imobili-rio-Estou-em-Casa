@@ -179,6 +179,8 @@ export function clearStoredTokens(): void {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('workspaceId');
+  // Limpa o estado persistido do Zustand para que isAuthenticated volte a false
+  localStorage.removeItem('plataforma-auth');
   document.cookie = 'accessToken=; path=/; max-age=0';
 }
 
