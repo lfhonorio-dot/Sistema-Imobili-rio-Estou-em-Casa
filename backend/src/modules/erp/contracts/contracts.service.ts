@@ -6,6 +6,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
@@ -15,6 +16,7 @@ import {
   ContractQueryDto,
   ChangeContractStatusDto,
   GenerateInstallmentsDto,
+  RequestSignatureDto,
 } from './contracts.dto';
 
 @Injectable()
@@ -100,6 +102,13 @@ export class ContractsService {
         documents: {
           where: { deletedAt: null },
         },
+        signatureEnvelopes: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            signatories: { select: { id: true, name: true, role: true, status: true } },
+          },
+        },
       },
     });
 
@@ -143,11 +152,53 @@ export class ContractsService {
         keyDeliveryDate: dto.keyDeliveryDate ? new Date(dto.keyDeliveryDate) : undefined,
       },
       include: {
-        property: true,
-        owner: { select: { id: true, name: true } },
-        tenant: { select: { id: true, name: true } },
+        property: { select: { id: true, code: true, street: true } },
+        owner: { select: { id: true, name: true, email: true, phone: true } },
+        tenant: { select: { id: true, name: true, email: true, phone: true } },
       },
     });
+
+    // Auto-gera lançamento financeiro para contratos de venda
+    if (contract.type === 'SALE' && contract.saleValue) {
+      const dueDate = contract.startDate ?? new Date();
+      await this.prisma.financialEntry.create({
+        data: {
+          workspaceId,
+          type: 'RECEIVABLE',
+          category: 'SALE',
+          description: `Compra e venda — ${(contract.property as any)?.code ?? contract.propertyId}`,
+          amount: contract.saleValue,
+          dueDate,
+          status: 'PENDING',
+          contractId: contract.id,
+          propertyId: contract.propertyId,
+          contactId: contract.tenantId ?? undefined,
+        },
+      });
+    }
+
+    // Auto-gera comissão se taxa definida
+    if (contract.commissionRate) {
+      const baseValue = contract.saleValue ?? contract.rentalValue;
+      if (baseValue) {
+        const commissionAmount = (Number(baseValue) * Number(contract.commissionRate)) / 100;
+        const workspaceUser = await this.prisma.workspaceUser.findFirst({
+          where: { workspaceId, userId },
+        });
+        if (workspaceUser) {
+          await this.prisma.commission.create({
+            data: {
+              workspaceId,
+              contractId: contract.id,
+              userId: workspaceUser.id,
+              rate: contract.commissionRate,
+              amount: commissionAmount,
+              status: 'PENDING',
+            },
+          });
+        }
+      }
+    }
 
     await this.auditService.log({
       workspaceId,
@@ -159,6 +210,105 @@ export class ContractsService {
     });
 
     return contract;
+  }
+
+  // Solicita assinatura eletrônica para o contrato
+  async requestSignature(workspaceId: string, id: string, dto: RequestSignatureDto, userId: string) {
+    const contract = await this.prisma.contract.findFirst({
+      where: { id, workspaceId, deletedAt: null },
+      include: {
+        owner: { select: { id: true, name: true, email: true, phone: true, cpf: true } },
+        tenant: { select: { id: true, name: true, email: true, phone: true, cpf: true } },
+        property: { select: { id: true, code: true, street: true, city: true } },
+      },
+    });
+    if (!contract) throw new NotFoundException('Contrato não encontrado');
+
+    if (!contract.owner?.email && !contract.tenant?.email) {
+      throw new BadRequestException('Proprietário ou inquilino precisam ter e-mail cadastrado para assinatura eletrônica');
+    }
+
+    // Monta a lista de signatários com base nos contatos do contrato
+    const signatories: Array<{
+      name: string; email: string; role: string; phone?: string; cpf?: string; order: number;
+    }> = [];
+
+    if (contract.owner?.email) {
+      signatories.push({
+        name: contract.owner.name,
+        email: contract.owner.email,
+        phone: contract.owner.phone ?? undefined,
+        cpf: (contract.owner as any).cpf ?? undefined,
+        role: 'LOCADOR',
+        order: 0,
+      });
+    }
+
+    if (contract.tenant?.email) {
+      signatories.push({
+        name: contract.tenant.name,
+        email: contract.tenant.email,
+        phone: contract.tenant.phone ?? undefined,
+        cpf: (contract.tenant as any).cpf ?? undefined,
+        role: contract.type === 'SALE' ? 'LOCATARIO' : 'LOCATARIO',
+        order: 1,
+      });
+    }
+
+    if (dto.additionalSignatories?.length) {
+      signatories.push(...dto.additionalSignatories.map((s, i) => ({ ...s, order: signatories.length + i })));
+    }
+
+    const typeLabel = {
+      SALE: 'Compra e Venda',
+      RENTAL_RESIDENTIAL: 'Locação Residencial',
+      RENTAL_COMMERCIAL: 'Locação Comercial',
+      BROKERAGE: 'Intermediação',
+    }[contract.type] ?? contract.type;
+
+    const prop = contract.property as any;
+    const title = `${typeLabel} — ${prop?.code ?? ''} ${prop?.street ? `(${prop.street}${prop?.city ? ', ' + prop.city : ''})` : ''}`.trim();
+
+    // documentUrl: usa URL fornecida ou placeholder identificável
+    const documentUrl = dto.documentUrl ?? `contract-template://${contract.id}`;
+    const documentHash = crypto.createHash('sha256').update(documentUrl + Date.now()).digest('hex');
+
+    const envelope = await this.prisma.signatureEnvelope.create({
+      data: {
+        workspaceId,
+        contractId: contract.id,
+        title,
+        documentUrl,
+        documentHash,
+        type: dto.type ?? 'ADVANCED',
+        order: 'PARALLEL',
+        deadline: dto.deadline ? new Date(dto.deadline) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        message: dto.message ?? `Contrato de ${typeLabel} — sua assinatura é necessária.`,
+        status: 'DRAFT',
+        signatories: {
+          create: signatories.map((s) => ({
+            name: s.name,
+            email: s.email,
+            phone: s.phone,
+            cpf: s.cpf,
+            role: s.role,
+            order: s.order,
+            token: crypto.randomBytes(32).toString('hex'),
+            tokenExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            status: 'PENDING',
+          })),
+        },
+      },
+      include: { signatories: true },
+    });
+
+    await this.auditService.log({
+      workspaceId, userId, action: 'CREATE',
+      entity: 'SignatureEnvelope', entityId: envelope.id,
+      after: { contractId: id, signatories: signatories.length },
+    });
+
+    return envelope;
   }
 
   // Atualiza contrato

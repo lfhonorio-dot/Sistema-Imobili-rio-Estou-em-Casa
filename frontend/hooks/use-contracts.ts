@@ -136,6 +136,21 @@ export function useGenerateInstallments() {
   });
 }
 
+export function useRequestSignature() {
+  const queryClient = useQueryClient();
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+
+  return useMutation({
+    mutationFn: async ({ id, documentUrl, message, deadline }: { id: string; documentUrl?: string; message?: string; deadline?: string }) => {
+      const { data } = await api.post(`/contracts/${id}/request-signature`, { documentUrl, message, deadline });
+      return data.data;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['contract', workspaceId, vars.id] });
+    },
+  });
+}
+
 export function useContractStatement(id: string) {
   const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 

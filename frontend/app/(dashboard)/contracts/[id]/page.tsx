@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileSignature } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useContract, useChangeContractStatus, useGenerateInstallments } from '@/hooks/use-contracts';
+import { useContract, useChangeContractStatus, useGenerateInstallments, useRequestSignature } from '@/hooks/use-contracts';
 import { usePayEntry } from '@/hooks/use-financial';
 import { FinancialEntryRow } from '@/components/erp/financial-entry-row';
 import { format } from 'date-fns';
@@ -46,11 +46,14 @@ export default function ContractDetailPage() {
   const { data: contract, isLoading } = useContract(id);
   const changeStatus = useChangeContractStatus();
   const generateInstallments = useGenerateInstallments();
+  const requestSignature = useRequestSignature();
   const payEntry = usePayEntry();
 
   const [newStatus, setNewStatus] = useState('');
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showInstallmentsDialog, setShowInstallmentsDialog] = useState(false);
+  const [showSignatureDialog, setShowSignatureDialog] = useState(false);
+  const [signatureMessage, setSignatureMessage] = useState('');
   const [months, setMonths] = useState('12');
 
   async function handleChangeStatus() {
@@ -59,6 +62,17 @@ export default function ContractDetailPage() {
     toast.success('Status atualizado!');
     setShowStatusDialog(false);
     setNewStatus('');
+  }
+
+  async function handleRequestSignature() {
+    try {
+      await requestSignature.mutateAsync({ id, message: signatureMessage || undefined });
+      toast.success('Envelope de assinatura criado! Acesse o módulo de Assinaturas para enviar.');
+      setShowSignatureDialog(false);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message || 'Erro ao criar envelope de assinatura.';
+      toast.error(Array.isArray(msg) ? msg[0] : msg);
+    }
   }
 
   async function handleGenerateInstallments() {
@@ -73,6 +87,7 @@ export default function ContractDetailPage() {
   const isRental = contract.type === 'RENTAL_RESIDENTIAL' || contract.type === 'RENTAL_COMMERCIAL';
   const financialEntries = (contract as any).financialEntries ?? [];
   const commissions = (contract as any).commissions ?? [];
+  const envelopes = (contract as any).signatureEnvelopes ?? [];
 
   return (
     <div className="p-6 space-y-6">
@@ -121,6 +136,40 @@ export default function ContractDetailPage() {
             </DialogContent>
           </Dialog>
 
+          {/* Solicitar Assinatura Eletrônica */}
+          <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <FileSignature className="w-4 h-4 mr-1.5" />
+                Solicitar Assinatura
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Solicitar Assinatura Eletrônica</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Será criado um envelope de assinatura com o proprietário e inquilino/comprador cadastrados no contrato.
+                </p>
+                <div className="space-y-1.5">
+                  <Label>Mensagem para os signatários (opcional)</Label>
+                  <textarea
+                    className="w-full border rounded p-2 text-sm"
+                    rows={3}
+                    placeholder="Prezado(a), solicitamos sua assinatura no contrato..."
+                    value={signatureMessage}
+                    onChange={(e) => setSignatureMessage(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setShowSignatureDialog(false)}>Cancelar</Button>
+                  <Button onClick={handleRequestSignature} disabled={requestSignature.isPending}>
+                    {requestSignature.isPending ? 'Criando...' : 'Criar Envelope'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           {/* Gerar Parcelas (só para locação) */}
           {isRental && (
             <Dialog open={showInstallmentsDialog} onOpenChange={setShowInstallmentsDialog}>
@@ -161,6 +210,7 @@ export default function ContractDetailPage() {
           <TabsTrigger value="info">Informações</TabsTrigger>
           <TabsTrigger value="financial">Financeiro {financialEntries.length > 0 && `(${financialEntries.length})`}</TabsTrigger>
           <TabsTrigger value="commissions">Comissões</TabsTrigger>
+          <TabsTrigger value="signatures">Assinaturas {envelopes.length > 0 && `(${envelopes.length})`}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="mt-4">
@@ -257,6 +307,38 @@ export default function ContractDetailPage() {
                     <Badge variant={c.status === 'PAID' ? 'default' : 'secondary'}>
                       {c.status === 'PAID' ? 'Pago' : 'Pendente'}
                     </Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="signatures" className="mt-4">
+          {envelopes.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground text-sm mb-3">Nenhum envelope de assinatura criado</p>
+              <Button size="sm" onClick={() => setShowSignatureDialog(true)}>
+                <FileSignature className="w-4 h-4 mr-1.5" />
+                Solicitar Assinatura
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {envelopes.map((env: any) => (
+                <Card key={env.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium text-sm">{env.title}</p>
+                      <Badge variant={env.status === 'COMPLETED' ? 'default' : env.status === 'SENT' ? 'secondary' : 'outline'}>
+                        {env.status === 'DRAFT' ? 'Rascunho' : env.status === 'SENT' ? 'Enviado' : env.status === 'COMPLETED' ? 'Concluído' : env.status}
+                      </Badge>
+                    </div>
+                    {env.signatories?.map((s: any) => (
+                      <p key={s.id} className="text-xs text-muted-foreground">
+                        {s.name} ({s.role}) — {s.status === 'SIGNED' ? '✓ Assinado' : s.status === 'PENDING' ? 'Aguardando' : s.status}
+                      </p>
+                    ))}
                   </CardContent>
                 </Card>
               ))}

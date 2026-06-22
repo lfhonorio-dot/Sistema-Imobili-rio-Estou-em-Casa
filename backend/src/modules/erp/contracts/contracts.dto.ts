@@ -191,3 +191,44 @@ export class ContractQueryDto {
   @IsString()
   search?: string;
 }
+
+export class SignatoryInputDto {
+  @IsString()
+  name!: string;
+
+  @IsString()
+  email!: string;
+
+  @IsString()
+  role!: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  cpf?: string;
+}
+
+export class RequestSignatureDto {
+  @IsOptional()
+  @IsString()
+  documentUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @IsOptional()
+  @IsString()
+  deadline?: string;
+
+  @IsOptional()
+  @IsString()
+  message?: string;
+
+  @IsOptional()
+  @IsArray()
+  additionalSignatories?: SignatoryInputDto[];
+}

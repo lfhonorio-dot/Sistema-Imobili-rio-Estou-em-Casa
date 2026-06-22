@@ -20,6 +20,7 @@ import {
   ContractQueryDto,
   ChangeContractStatusDto,
   GenerateInstallmentsDto,
+  RequestSignatureDto,
 } from './contracts.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
@@ -107,5 +108,15 @@ export class ContractsController {
     @Param('id') id: string,
   ) {
     return this.contractsService.getStatement(workspaceId, id);
+  }
+
+  @Post(':id/request-signature')
+  requestSignature(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+    @Body() dto: RequestSignatureDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.contractsService.requestSignature(workspaceId, id, dto, user.sub);
   }
 }
