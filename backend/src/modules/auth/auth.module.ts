@@ -21,7 +21,7 @@ import { AuditModule } from '../audit/audit.module';
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_ACCESS_SECRET'),
         signOptions: {
-          expiresIn: configService.get<string>('JWT_ACCESS_EXPIRES_IN', '2h'),
+          expiresIn: configService.get<string>('JWT_ACCESS_EXPIRES_IN', '7d'),
         },
       }),
     }),

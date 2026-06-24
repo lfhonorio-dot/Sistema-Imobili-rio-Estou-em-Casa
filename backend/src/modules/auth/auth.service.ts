@@ -714,7 +714,7 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '2h'),
+        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '7d'),
       }),
       this.jwtService.signAsync(
         { sub: user.id }, // Refresh token tem payload mínimo
