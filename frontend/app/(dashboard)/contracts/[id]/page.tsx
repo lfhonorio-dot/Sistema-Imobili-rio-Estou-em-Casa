@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, FileSignature, FileText } from 'lucide-react';
+import { ArrowLeft, FileSignature, FileText, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,9 @@ import { usePayEntry } from '@/hooks/use-financial';
 import { FinancialEntryRow } from '@/components/erp/financial-entry-row';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import api from '@/lib/api';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '@/stores/auth.store';
 
 const TYPE_LABELS: Record<string, string> = {
   SALE: 'Venda', RENTAL_RESIDENTIAL: 'Locação Residencial',
@@ -41,6 +44,8 @@ function formatDate(d: string | null | undefined) {
 export default function ContractDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
   const id = params.id as string;
 
   const { data: contract, isLoading } = useContract(id);
@@ -49,12 +54,43 @@ export default function ContractDetailPage() {
   const requestSignature = useRequestSignature();
   const payEntry = usePayEntry();
 
+  const deleteContract = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/contracts/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts', workspaceId] });
+      toast.success('Contrato excluído com sucesso.');
+      router.push('/contracts');
+    },
+  });
+
   const [newStatus, setNewStatus] = useState('');
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showInstallmentsDialog, setShowInstallmentsDialog] = useState(false);
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [signatureMessage, setSignatureMessage] = useState('');
   const [months, setMonths] = useState('12');
+  const [loadingDoc, setLoadingDoc] = useState(false);
+
+  async function handleViewContract() {
+    setLoadingDoc(true);
+    try {
+      const { data } = await api.get(`/contracts/${id}/document`, {
+        responseType: 'text',
+        headers: { Accept: 'text/html' },
+      });
+      const blob = new Blob([data], { type: 'text/html; charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      toast.error('Erro ao gerar o contrato.');
+    } finally {
+      setLoadingDoc(false);
+    }
+  }
 
   async function handleChangeStatus() {
     if (!newStatus) return;
@@ -104,50 +140,18 @@ export default function ContractDetailPage() {
             </div>
             {contract.property && (
               <p className="text-sm text-muted-foreground">
-                {contract.property.street}, {contract.property.number} — {contract.property.city}
+                {contract.property.street}{contract.property.number ? `, ${contract.property.number}` : ''}{contract.property.city ? ` — ${contract.property.city}` : ''}
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
           {/* Ver Contrato */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
-              window.open(`${apiBase}/contracts/${id}/document`, '_blank');
-            }}
-          >
+          <Button variant="outline" size="sm" onClick={handleViewContract} disabled={loadingDoc}>
             <FileText className="w-4 h-4 mr-1.5" />
-            Ver Contrato
+            {loadingDoc ? 'Gerando...' : 'Ver Contrato'}
           </Button>
-
-          {/* Alterar Status */}
-          <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">Alterar Status</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Alterar Status do Contrato</DialogTitle></DialogHeader>
-              <Select value={newStatus} onValueChange={setNewStatus}>
-                <SelectTrigger><SelectValue placeholder="Novo status..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DRAFT">Rascunho</SelectItem>
-                  <SelectItem value="ACTIVE">Ativo</SelectItem>
-                  <SelectItem value="TERMINATED">Encerrado</SelectItem>
-                  <SelectItem value="RESCINDED">Rescindido</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="flex gap-2 justify-end mt-2">
-                <Button variant="outline" onClick={() => setShowStatusDialog(false)}>Cancelar</Button>
-                <Button onClick={handleChangeStatus} disabled={!newStatus || changeStatus.isPending}>
-                  {changeStatus.isPending ? 'Salvando...' : 'Confirmar'}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
 
           {/* Solicitar Assinatura Eletrônica */}
           <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
@@ -194,13 +198,7 @@ export default function ContractDetailPage() {
                 <div className="space-y-3">
                   <div className="space-y-1.5">
                     <Label>Quantidade de meses</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={60}
-                      value={months}
-                      onChange={(e) => setMonths(e.target.value)}
-                    />
+                    <Input type="number" min={1} max={60} value={months} onChange={(e) => setMonths(e.target.value)} />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Serão geradas {months} parcelas de {formatCurrency(contract.rentalValue)} cada.
@@ -215,6 +213,58 @@ export default function ContractDetailPage() {
               </DialogContent>
             </Dialog>
           )}
+
+          {/* Alterar Status */}
+          <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">Alterar Status</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Alterar Status do Contrato</DialogTitle></DialogHeader>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger><SelectValue placeholder="Novo status..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DRAFT">Rascunho</SelectItem>
+                  <SelectItem value="ACTIVE">Ativo</SelectItem>
+                  <SelectItem value="TERMINATED">Encerrado</SelectItem>
+                  <SelectItem value="RESCINDED">Rescindido</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex gap-2 justify-end mt-2">
+                <Button variant="outline" onClick={() => setShowStatusDialog(false)}>Cancelar</Button>
+                <Button onClick={handleChangeStatus} disabled={!newStatus || changeStatus.isPending}>
+                  {changeStatus.isPending ? 'Salvando...' : 'Confirmar'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Excluir Contrato */}
+          <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-destructive border-destructive hover:bg-destructive hover:text-white">
+                <Trash2 className="w-4 h-4 mr-1.5" />
+                Excluir
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Excluir Contrato</DialogTitle></DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Tem certeza que deseja excluir este contrato? Esta ação não pode ser desfeita.
+                Os lançamentos financeiros e comissões associados não serão removidos automaticamente.
+              </p>
+              <div className="flex gap-2 justify-end mt-2">
+                <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancelar</Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => deleteContract.mutate()}
+                  disabled={deleteContract.isPending}
+                >
+                  {deleteContract.isPending ? 'Excluindo...' : 'Confirmar Exclusão'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -231,7 +281,7 @@ export default function ContractDetailPage() {
             <Card>
               <CardHeader><CardTitle className="text-sm">Partes</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <div><span className="text-muted-foreground">Proprietário: </span>{contract.owner?.name ?? '-'}</div>
+                <div><span className="text-muted-foreground">Proprietário/Vendedor: </span>{contract.owner?.name ?? '-'}</div>
                 <div><span className="text-muted-foreground">{isRental ? 'Inquilino' : 'Comprador'}: </span>{contract.tenant?.name ?? '-'}</div>
               </CardContent>
             </Card>
@@ -315,7 +365,6 @@ export default function ContractDetailPage() {
                   <CardContent className="p-4 flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">{formatCurrency(c.amount)} ({c.rate}%)</p>
-                      <p className="text-xs text-muted-foreground">Usuário: {c.userId}</p>
                     </div>
                     <Badge variant={c.status === 'PAID' ? 'default' : 'secondary'}>
                       {c.status === 'PAID' ? 'Pago' : 'Pendente'}
