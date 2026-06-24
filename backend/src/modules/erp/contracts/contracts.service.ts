@@ -162,50 +162,61 @@ export class ContractsService {
       },
     });
 
-    // Auto-gera lançamento financeiro para contratos de venda
+    // Auto-gera lançamento financeiro para contratos de venda (não bloqueia se falhar)
     if (contract.type === 'SALE' && contract.saleValue) {
       const dueDate = contract.startDate ?? new Date();
-      await this.prisma.financialEntry.create({
-        data: {
-          workspaceId,
-          type: 'RECEIVABLE',
-          category: 'SALE',
-          description: `Compra e venda — ${(contract.property as any)?.code ?? contract.propertyId}`,
-          amount: contract.saleValue,
-          dueDate,
-          status: 'PENDING',
-          contractId: contract.id,
-          propertyId: contract.propertyId,
-          contactId: contract.tenantId ?? undefined,
-        },
-      });
+      try {
+        await this.prisma.financialEntry.create({
+          data: {
+            workspaceId,
+            type: 'RECEIVABLE',
+            category: 'SALE',
+            description: `Compra e venda — ${(contract.property as any)?.code ?? contract.propertyId}`,
+            amount: contract.saleValue,
+            dueDate,
+            status: 'PENDING',
+            contractId: contract.id,
+            contactId: contract.tenantId ?? undefined,
+          },
+        });
+      } catch (e) {
+        console.error('[ContractsService] Erro ao gerar lançamento financeiro:', e);
+      }
     }
 
-    // Auto-gera comissão se taxa definida
+    // Auto-gera comissão se taxa definida (não bloqueia se falhar)
     if (contract.commissionRate) {
       const baseValue = contract.saleValue ?? contract.rentalValue;
       if (baseValue) {
-        const commissionAmount = (Number(baseValue) * Number(contract.commissionRate)) / 100;
-        const workspaceUser = await this.prisma.workspaceUser.findFirst({
-          where: { workspaceId, userId },
-        });
-        if (workspaceUser) {
-          await this.prisma.commission.create({
-            data: {
-              workspaceId,
-              contractId: contract.id,
-              userId: workspaceUser.id,
-              rate: contract.commissionRate,
-              amount: commissionAmount,
-              status: 'PENDING',
-            },
+        try {
+          const commissionAmount = (Number(baseValue) * Number(contract.commissionRate)) / 100;
+          const workspaceUser = await this.prisma.workspaceUser.findFirst({
+            where: { workspaceId, userId },
           });
+          if (workspaceUser) {
+            await this.prisma.commission.create({
+              data: {
+                workspaceId,
+                contractId: contract.id,
+                userId: workspaceUser.id,
+                rate: contract.commissionRate,
+                amount: commissionAmount,
+                status: 'PENDING',
+              },
+            });
+          }
+        } catch (e) {
+          console.error('[ContractsService] Erro ao gerar comissão:', e);
         }
       }
     }
 
-    // Gera documento HTML do contrato e envia por email
-    await this.sendContractByEmail(workspaceId, contract);
+    // Gera documento HTML do contrato e envia por email (não bloqueia se falhar)
+    try {
+      await this.sendContractByEmail(workspaceId, contract);
+    } catch (e) {
+      console.error('[ContractsService] Erro ao enviar contrato por email:', e);
+    }
 
     await this.auditService.log({
       workspaceId,
