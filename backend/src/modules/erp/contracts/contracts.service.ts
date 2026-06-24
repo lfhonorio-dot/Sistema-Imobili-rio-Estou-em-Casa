@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { EmailService } from '../../hub/email/email.service';
+import { ContractTemplateService } from './contract-template.service';
 import {
   CreateContractDto,
   UpdateContractDto,
@@ -26,6 +27,7 @@ export class ContractsService {
     private prisma: PrismaService,
     private auditService: AuditService,
     private emailService: EmailService,
+    private contractTemplate: ContractTemplateService,
   ) {}
 
   // Lista contratos com filtros
@@ -217,87 +219,78 @@ export class ContractsService {
     return contract;
   }
 
+  // Gera o HTML do contrato e retorna para visualização/download
+  async getContractDocument(workspaceId: string, id: string): Promise<string> {
+    return this.contractTemplate.generateSaleContract(workspaceId, id);
+  }
+
   private async sendContractByEmail(workspaceId: string, contract: any) {
     const owner = contract.owner as { name: string; email?: string | null } | null;
     const tenant = contract.tenant as { name: string; email?: string | null } | null;
     const property = contract.property as { code: string; street?: string | null; city?: string | null } | null;
 
-    const recipients = [
-      owner?.email,
-      tenant?.email,
-    ].filter((e): e is string => !!e);
-
+    const recipients: { email: string; name: string }[] = [];
+    if (owner?.email) recipients.push({ email: owner.email, name: owner.name });
+    if (tenant?.email) recipients.push({ email: tenant.email, name: tenant.name });
     if (recipients.length === 0) return;
 
     const typeLabel: Record<string, string> = {
-      SALE: 'Compra e Venda',
+      SALE: 'Compromisso de Compra e Venda',
       RENTAL_RESIDENTIAL: 'Locação Residencial',
       RENTAL_COMMERCIAL: 'Locação Comercial',
       BROKERAGE: 'Intermediação',
     };
 
-    const formatCurrency = (v: unknown) =>
-      v ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v)) : '-';
+    const subject = `${typeLabel[contract.type] ?? contract.type} — Imóvel ${property?.code ?? contract.propertyId}`;
 
-    const formatDate = (d: unknown) =>
-      d ? new Date(d as string).toLocaleDateString('pt-BR') : '-';
+    // Gera o contrato completo no formato do modelo oficial
+    let contractHtml: string;
+    try {
+      contractHtml = await this.contractTemplate.generateSaleContract(workspaceId, contract.id);
+    } catch {
+      contractHtml = `<p>Não foi possível gerar o contrato automaticamente. Por favor, acesse o sistema para visualizá-lo.</p>`;
+    }
 
-    const subject = `Contrato de ${typeLabel[contract.type] ?? contract.type} — ${property?.code ?? contract.propertyId}`;
-
-    const html = `<!DOCTYPE html>
+    // Envelope de e-mail: aviso + contrato completo em anexo inline
+    const emailBody = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><style>
-  body { font-family: Arial, sans-serif; color: #333; max-width: 720px; margin: 0 auto; padding: 24px; }
-  h1 { color: #1a1a2e; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }
-  h2 { color: #2d3748; font-size: 14px; margin-top: 24px; text-transform: uppercase; letter-spacing: 0.05em; }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-  td { padding: 8px 0; font-size: 14px; }
-  td:first-child { color: #718096; width: 40%; }
-  td:last-child { font-weight: 500; }
-  .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #a0aec0; }
+  body { font-family: Arial, sans-serif; color: #333; max-width: 680px; margin: 0 auto; padding: 24px; }
+  .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+  .btn { display:inline-block; background:#2563eb; color:#fff; padding:10px 24px; border-radius:6px; text-decoration:none; font-weight:600; }
+  .footer { margin-top:24px; font-size:11px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:12px; }
 </style></head>
 <body>
-  <h1>Contrato de ${typeLabel[contract.type] ?? contract.type}</h1>
-  <p style="color:#718096;font-size:13px;">Número do contrato: <strong>${contract.id}</strong></p>
+  <div class="card">
+    <h2 style="margin-bottom:8px;">${typeLabel[contract.type] ?? contract.type}</h2>
+    <p style="color:#64748b;font-size:14px;">
+      Seu contrato foi gerado no sistema imobiliário. O documento completo está disponível abaixo.
+    </p>
+    <p style="margin-top:12px;font-size:14px;">
+      <strong>Imóvel:</strong> ${property?.street ?? property?.code ?? '-'}${property?.city ? ', ' + (property as any).city : ''}<br>
+      <strong>Vendedor:</strong> ${owner?.name ?? '-'}<br>
+      <strong>Comprador:</strong> ${tenant?.name ?? '-'}
+    </p>
+  </div>
 
-  <h2>Imóvel</h2>
-  <table>
-    <tr><td>Código</td><td>${property?.code ?? '-'}</td></tr>
-    <tr><td>Endereço</td><td>${property?.street ?? '-'}${property?.city ? ', ' + property.city : ''}</td></tr>
-  </table>
-
-  <h2>Partes</h2>
-  <table>
-    <tr><td>Proprietário</td><td>${owner?.name ?? '-'}</td></tr>
-    <tr><td>${contract.type === 'SALE' ? 'Comprador' : 'Locatário'}</td><td>${tenant?.name ?? '-'}</td></tr>
-  </table>
-
-  <h2>Condições</h2>
-  <table>
-    <tr><td>Data de início</td><td>${formatDate(contract.startDate)}</td></tr>
-    ${contract.endDate ? `<tr><td>Data de encerramento</td><td>${formatDate(contract.endDate)}</td></tr>` : ''}
-    ${contract.saleValue ? `<tr><td>Valor de venda</td><td>${formatCurrency(contract.saleValue)}</td></tr>` : ''}
-    ${contract.rentalValue ? `<tr><td>Valor do aluguel</td><td>${formatCurrency(contract.rentalValue)}/mês</td></tr>` : ''}
-    ${contract.dueDay ? `<tr><td>Dia de vencimento</td><td>Dia ${contract.dueDay}</td></tr>` : ''}
-    ${contract.commissionRate ? `<tr><td>Taxa de comissão</td><td>${contract.commissionRate}%</td></tr>` : ''}
-  </table>
-
-  ${contract.notes ? `<h2>Observações</h2><p style="font-size:14px;">${contract.notes}</p>` : ''}
-
-  <p style="margin-top:32px;font-size:14px;color:#4a5568;">
-    Este contrato foi gerado automaticamente pelo sistema imobiliário.<br>
-    Status atual: <strong>Rascunho (DRAFT)</strong> — aguarda ativação e assinatura das partes.
-  </p>
+  <hr style="border:none;border-top:2px solid #e2e8f0;margin:24px 0;">
+  <h3 style="margin-bottom:16px;">Contrato Completo:</h3>
+  ${contractHtml.replace(/<!DOCTYPE html>[\s\S]*?<body[^>]*>/, '').replace(/<\/body>[\s\S]*?<\/html>/, '')}
 
   <div class="footer">
-    Gerado em ${new Date().toLocaleString('pt-BR')} · Sistema Imobiliário Estou em Casa
+    Este e-mail foi enviado automaticamente pelo Sistema Imobiliário Estou em Casa.<br>
+    Data de geração: ${new Date().toLocaleString('pt-BR')}
   </div>
 </body>
 </html>`;
 
-    for (const to of recipients) {
+    for (const recipient of recipients) {
       try {
-        await this.emailService.sendEmail(workspaceId, { to, subject, body: html });
+        await this.emailService.sendEmail(workspaceId, {
+          to: recipient.email,
+          subject,
+          body: emailBody,
+        });
       } catch {
         // falha no envio não bloqueia criação do contrato
       }

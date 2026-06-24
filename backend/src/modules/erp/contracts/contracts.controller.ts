@@ -11,7 +11,9 @@ import {
   Query,
   Headers,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { ContractsService } from './contracts.service';
 import {
@@ -108,6 +110,18 @@ export class ContractsController {
     @Param('id') id: string,
   ) {
     return this.contractsService.getStatement(workspaceId, id);
+  }
+
+  @Get(':id/document')
+  async getDocument(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const html = await this.contractsService.getContractDocument(workspaceId, id);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="contrato-${id}.html"`);
+    res.send(html);
   }
 
   @Post(':id/request-signature')

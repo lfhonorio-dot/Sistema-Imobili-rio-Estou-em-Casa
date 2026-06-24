@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, FileSignature } from 'lucide-react';
+import { ArrowLeft, FileSignature, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -111,6 +111,19 @@ export default function ContractDetailPage() {
         </div>
 
         <div className="flex gap-2">
+          {/* Ver Contrato */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+              window.open(`${apiBase}/contracts/${id}/document`, '_blank');
+            }}
+          >
+            <FileText className="w-4 h-4 mr-1.5" />
+            Ver Contrato
+          </Button>
+
           {/* Alterar Status */}
           <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
             <DialogTrigger asChild>
