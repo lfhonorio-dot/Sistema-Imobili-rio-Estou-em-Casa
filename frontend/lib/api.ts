@@ -165,8 +165,9 @@ export function storeTokens(accessToken: string, refreshToken: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('accessToken', accessToken);
   localStorage.setItem('refreshToken', refreshToken);
-  // Cookie necessário para o middleware Next.js verificar autenticação
+  // Cookies necessários para o middleware Next.js verificar autenticação e fazer refresh
   document.cookie = `accessToken=${accessToken}; path=/; max-age=604800; SameSite=Lax`;
+  document.cookie = `refreshToken=${refreshToken}; path=/; max-age=604800; SameSite=Lax`;
 }
 
 export function storeWorkspaceId(workspaceId: string): void {
@@ -182,6 +183,7 @@ export function clearStoredTokens(): void {
   // Limpa o estado persistido do Zustand para que isAuthenticated volte a false
   localStorage.removeItem('plataforma-auth');
   document.cookie = 'accessToken=; path=/; max-age=0';
+  document.cookie = 'refreshToken=; path=/; max-age=0';
 }
 
 function redirectToLogin(): void {
