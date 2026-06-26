@@ -2,7 +2,9 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/auth.store';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -33,8 +35,15 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const { login, isLoggingIn } = useAuth();
+  const { isAuthenticated, _hasHydrated } = useAuthStore();
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [requires2FA, setRequires2FA] = useState(false);
+
+  // Se já está autenticado, vai direto para o dashboard
+  useEffect(() => {
+    if (_hasHydrated && isAuthenticated) router.replace('/');
+  }, [isAuthenticated, _hasHydrated, router]);
 
   const {
     register,

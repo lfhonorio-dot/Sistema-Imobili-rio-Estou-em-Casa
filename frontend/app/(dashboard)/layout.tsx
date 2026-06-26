@@ -1,8 +1,9 @@
 // Layout do dashboard com sidebar e header
-// A proteção de rotas é feita pelo middleware Next.js (middleware.ts)
+// Proteção de rota feita pelo AuthGuard (client-side) — sem middleware server-side.
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { AuthInitializer } from '@/components/providers/auth-initializer';
+import { AuthGuard } from '@/components/providers/auth-guard';
 
 export default function DashboardLayout({
   children,
@@ -11,6 +12,7 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="flex h-screen overflow-hidden">
+      <AuthGuard />
       <AuthInitializer />
       <Sidebar />
       <main className="flex-1 overflow-y-auto bg-gray-50">
