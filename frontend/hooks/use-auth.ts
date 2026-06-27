@@ -19,25 +19,28 @@ export function useAuth() {
   const { user, isAuthenticated, setAuth, setUser, logout: clearAuth } = useAuthStore();
 
   // Busca dados atualizados do usuário
-  const { data: profile, isLoading: isLoadingProfile, isError: profileError } = useQuery({
+  const { data: profile, isLoading: isLoadingProfile, error: profileQueryError } = useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
       const response = await api.get<{ data: User }>('/auth/me');
       return response.data.data;
     },
     enabled: isAuthenticated,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
+    staleTime: 30 * 60 * 1000, // 30 min — evita re-fetch desnecessário
+    retry: 2,                   // tenta 2x antes de considerar falha (erros de rede transitórios)
+    retryDelay: 2000,
   });
 
-  // Se /auth/me falhar com token inválido, limpa estado stale do Zustand
-  // Isso quebra o loop: isAuthenticated volta a false e a query para de rodar
+  // Só limpa a sessão se for 401 (token realmente inválido).
+  // Erros de rede (CORS, timeout, 500) NÃO devem deslogar o usuário.
   useEffect(() => {
-    if (profileError && isAuthenticated) {
+    if (!profileQueryError || !isAuthenticated) return;
+    const status = (profileQueryError as any)?.response?.status;
+    if (status === 401) {
       clearAuth();
       queryClient.clear();
     }
-  }, [profileError, isAuthenticated, clearAuth, queryClient]);
+  }, [profileQueryError, isAuthenticated, clearAuth, queryClient]);
 
   // Atualiza usuário no store quando os dados chegarem
   if (profile && profile.id !== user?.id) {

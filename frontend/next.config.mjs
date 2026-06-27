@@ -1,53 +1,46 @@
 // Configuração do Next.js 14
-// Headers de segurança, redirecionamentos e otimizações
-
-
 
 const nextConfig = {
-  // Habilita o modo de compilação standalone para Docker
   output: 'standalone',
 
-  // Headers de segurança para todas as rotas
+  // Proxy reverso: o frontend chama /api-proxy/* e o Next.js repassa ao backend.
+  // Permite configurar o backend via variável de ambiente em TEMPO DE EXECUÇÃO
+  // no Railway (não de build). Defina: BACKEND_URL=https://seu-backend.railway.app/api/v1
+  async rewrites() {
+    const backendUrl =
+      process.env.BACKEND_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://localhost:3001/api/v1';
+
+    return [
+      {
+        source: '/api-proxy/:path*',
+        destination: `${backendUrl}/:path*`,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
         source: '/(.*)',
         headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(self)',
-          },
+          { key: 'X-Frame-Options',        value: 'DENY' },
+          { key: 'X-Content-Type-Options',  value: 'nosniff' },
+          { key: 'Referrer-Policy',         value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy',      value: 'camera=(), microphone=(), geolocation=(self)' },
         ],
       },
     ];
   },
 
-  // Configuração de imagens externas permitidas
   images: {
     domains: ['localhost'],
     remotePatterns: [
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '9000',
-        pathname: '/**',
-      },
+      { protocol: 'http', hostname: 'localhost', port: '9000', pathname: '/**' },
     ],
   },
 
-  // Variáveis de ambiente públicas
   env: {
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'Plataforma Imobiliária',
   },

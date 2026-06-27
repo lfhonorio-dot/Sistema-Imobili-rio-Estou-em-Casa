@@ -7,8 +7,16 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios';
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+// Em desenvolvimento: usa NEXT_PUBLIC_API_URL diretamente (sem proxy).
+// Em produção (Railway): usa /api-proxy que o Next.js rewrites para BACKEND_URL.
+// Isso evita que NEXT_PUBLIC_API_URL (fixo em build) aponte para localhost em produção.
+const IS_BROWSER = typeof window !== 'undefined';
+const API_URL = (() => {
+  if (process.env.NODE_ENV === 'production' && IS_BROWSER) {
+    return '/api-proxy'; // URL relativa — Next.js rewrites para BACKEND_URL
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+})();
 
 // Instância principal do Axios
 const api: AxiosInstance = axios.create({
