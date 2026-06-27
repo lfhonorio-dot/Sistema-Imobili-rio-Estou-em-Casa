@@ -106,7 +106,10 @@ export default function ConsultorPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [kb, setKb] = useState<{fileName: string, contentLength: number, updatedAt: string} | null>(null);
+  const [kbLoading, setKbLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
@@ -135,6 +138,7 @@ export default function ConsultorPage() {
     } finally {
       setInitialLoading(false);
     }
+    api.advisor.getKnowledgeBase().then(setKb).catch(() => {});
   }
 
   async function handleGenerate() {
@@ -176,6 +180,39 @@ export default function ConsultorPage() {
     } finally {
       setChatLoading(false);
     }
+  }
+
+  async function handleKbUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setKbLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001'}/api/advisor/knowledge-base/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.message); }
+      const result = await res.json();
+      setKb({ fileName: result.fileName, contentLength: result.content?.length || 0, updatedAt: result.updatedAt });
+      alert('Base de conhecimento carregada com sucesso!');
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    } finally {
+      setKbLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleKbDelete() {
+    if (!confirm('Remover a base de conhecimento?')) return;
+    try {
+      await api.advisor.deleteKnowledgeBase();
+      setKb(null);
+    } catch (e: any) { alert(e.message); }
   }
 
   function formatDate(iso: string) {
@@ -239,6 +276,40 @@ export default function ConsultorPage() {
           ))}
         </div>
       )}
+
+      {/* Knowledge Base */}
+      <div className="card" style={{ marginBottom: 24, padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>📚 Base de Conhecimento</div>
+            {kb ? (
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                {kb.fileName} • {Math.round((kb.contentLength || 0) / 1000)}k caracteres • Atualizado em {new Date(kb.updatedAt).toLocaleDateString('pt-BR')}
+              </div>
+            ) : (
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Nenhum documento carregado. Suba seu material de alocação de ativos para o Consultor usar como referência.
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleKbUpload} style={{ display: 'none' }} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={kbLoading}
+              className="btn-gold"
+              style={{ fontSize: 13, padding: '6px 14px' }}
+            >
+              {kbLoading ? 'Processando...' : kb ? '🔄 Substituir' : '📤 Carregar Documento'}
+            </button>
+            {kb && (
+              <button onClick={handleKbDelete} className="btn-danger" style={{ fontSize: 13, padding: '6px 14px' }}>
+                Remover
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Error */}
       {error && (

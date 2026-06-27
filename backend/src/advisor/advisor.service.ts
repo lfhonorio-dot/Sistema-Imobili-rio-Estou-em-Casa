@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import Anthropic from '@anthropic-ai/sdk';
+import * as pdfParse from 'pdf-parse';
 
 const SYSTEM_PROMPT = `Você é um consultor patrimonial sênior, com 25+ anos de experiência em gestão de fortunas no Brasil, especializado em ativos imobiliários, renda fixa estruturada e planejamento de aposentadoria para empresários do setor imobiliário.
 
@@ -108,7 +109,10 @@ export class AdvisorService {
     const client = this.getClient();
     const payload = await this.buildDataPayload(userId);
 
-    const userMessage = `Analise criticamente este patrimônio:\n\n${JSON.stringify(payload, null, 2)}`;
+    const kb = await this.prisma.advisorKnowledgeBase.findFirst({ where: { userId } });
+    const kbContext = kb ? `\n\nBASE DE CONHECIMENTO DO INVESTIDOR (diretrizes de alocação definidas por ele):\n${kb.content}\n\nConsidere estas diretrizes ao analisar e fazer recomendações.` : '';
+
+    const userMessage = `Analise criticamente este patrimônio:\n\n${JSON.stringify(payload, null, 2)}${kbContext}`;
 
     try {
       const response = await client.messages.create({
@@ -223,5 +227,57 @@ export class AdvisorService {
       estimatedCostUSD: (totalTokens / 1000000 * 15).toFixed(2),
       lastAnalysis: analyses[0]?.generatedAt || null,
     };
+  }
+
+  async uploadKnowledgeBase(file: Express.Multer.File, userId: string) {
+    if (!file) throw new Error('Nenhum arquivo enviado');
+
+    let content = '';
+    const mime = file.mimetype;
+
+    if (mime === 'application/pdf') {
+      try {
+        const pdfData = await pdfParse(file.buffer);
+        content = pdfData.text;
+      } catch (e) {
+        throw new Error('Erro ao processar PDF. Tente converter para .txt ou cole o texto manualmente.');
+      }
+    } else if (mime === 'text/plain' || mime === 'text/csv') {
+      content = file.buffer.toString('utf-8');
+    } else if (mime.includes('word') || mime.includes('officedocument')) {
+      content = file.buffer.toString('utf-8').replace(/[^\x20-\x7E\xC0-\xFF\n\r\t]/g, ' ').replace(/\s{3,}/g, '\n');
+      if (content.trim().length < 50) {
+        throw new Error('Não foi possível extrair texto do Word. Por favor, salve como PDF e tente novamente.');
+      }
+    } else {
+      throw new Error('Formato não suportado. Use PDF, Word ou TXT.');
+    }
+
+    if (!content || content.trim().length < 20) {
+      throw new Error('Não foi possível extrair texto do arquivo. Tente um formato diferente.');
+    }
+
+    const existing = await this.prisma.advisorKnowledgeBase.findFirst({ where: { userId } });
+    if (existing) {
+      return this.prisma.advisorKnowledgeBase.update({
+        where: { id: existing.id },
+        data: { fileName: file.originalname, content: content.slice(0, 100000), updatedAt: new Date() },
+      });
+    }
+    return this.prisma.advisorKnowledgeBase.create({
+      data: { userId, fileName: file.originalname, content: content.slice(0, 100000) },
+    });
+  }
+
+  async getKnowledgeBase(userId: string) {
+    const kb = await this.prisma.advisorKnowledgeBase.findFirst({ where: { userId } });
+    if (!kb) return null;
+    return { id: kb.id, fileName: kb.fileName, contentLength: kb.content.length, updatedAt: kb.updatedAt };
+  }
+
+  async deleteKnowledgeBase(userId: string) {
+    const kb = await this.prisma.advisorKnowledgeBase.findFirst({ where: { userId } });
+    if (kb) await this.prisma.advisorKnowledgeBase.delete({ where: { id: kb.id } });
+    return { deleted: true };
   }
 }

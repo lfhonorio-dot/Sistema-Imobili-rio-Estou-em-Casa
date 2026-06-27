@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, Req, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AdvisorService } from './advisor.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -35,5 +36,21 @@ export class AdvisorController {
   @Get('usage')
   usage(@Req() req: any) {
     return this.advisorService.getUsage(req.user.id);
+  }
+
+  @Post('knowledge-base/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadKnowledgeBase(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
+    return this.advisorService.uploadKnowledgeBase(file, req.user.id);
+  }
+
+  @Get('knowledge-base')
+  getKnowledgeBase(@Req() req: any) {
+    return this.advisorService.getKnowledgeBase(req.user.id);
+  }
+
+  @Delete('knowledge-base')
+  deleteKnowledgeBase(@Req() req: any) {
+    return this.advisorService.deleteKnowledgeBase(req.user.id);
   }
 }

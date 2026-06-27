@@ -413,3 +413,14 @@ model AnalysisConversation {
 
   @@index([analysisId])
 }
+
+model AdvisorKnowledgeBase {
+  id          String   @id @default(cuid())
+  userId      String
+  fileName    String
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}

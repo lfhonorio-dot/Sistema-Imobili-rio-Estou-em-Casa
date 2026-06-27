@@ -121,6 +121,8 @@ export const api = {
     quickChat: (question: string) =>
       fetchAPI('/advisor/chat', { method: 'POST', body: JSON.stringify({ question }) }),
     usage: () => fetchAPI('/advisor/usage'),
+    getKnowledgeBase: () => fetchAPI('/advisor/knowledge-base'),
+    deleteKnowledgeBase: () => fetchAPI('/advisor/knowledge-base', { method: 'DELETE' }),
   },
 };
 
