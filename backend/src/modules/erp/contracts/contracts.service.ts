@@ -143,24 +143,36 @@ export class ContractsService {
       if (!tenant) throw new BadRequestException('Inquilino/Comprador não encontrado');
     }
 
-    const contract = await this.prisma.contract.create({
-      data: {
-        workspaceId,
-        ...dto,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-        signedAt: dto.signedAt ? new Date(dto.signedAt) : undefined,
-        proposalDate: dto.proposalDate ? new Date(dto.proposalDate) : undefined,
-        acceptanceDate: dto.acceptanceDate ? new Date(dto.acceptanceDate) : undefined,
-        deedDate: dto.deedDate ? new Date(dto.deedDate) : undefined,
-        keyDeliveryDate: dto.keyDeliveryDate ? new Date(dto.keyDeliveryDate) : undefined,
-      },
-      include: {
-        property: { select: { id: true, code: true, street: true } },
-        owner: { select: { id: true, name: true, email: true, phone: true } },
-        tenant: { select: { id: true, name: true, email: true, phone: true } },
-      },
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let contract: any;
+    try {
+      contract = await this.prisma.contract.create({
+        data: {
+          workspaceId,
+          ...dto,
+          startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+          endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+          signedAt: dto.signedAt ? new Date(dto.signedAt) : undefined,
+          proposalDate: dto.proposalDate ? new Date(dto.proposalDate) : undefined,
+          acceptanceDate: dto.acceptanceDate ? new Date(dto.acceptanceDate) : undefined,
+          deedDate: dto.deedDate ? new Date(dto.deedDate) : undefined,
+          keyDeliveryDate: dto.keyDeliveryDate ? new Date(dto.keyDeliveryDate) : undefined,
+        },
+        include: {
+          property: { select: { id: true, code: true, street: true } },
+          owner: { select: { id: true, name: true, email: true, phone: true } },
+          tenant: { select: { id: true, name: true, email: true, phone: true } },
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+        const field = String((err.meta as any)?.field_name ?? '');
+        if (field.includes('owner')) throw new BadRequestException('Proprietário inválido ou não encontrado.');
+        if (field.includes('tenant')) throw new BadRequestException('Inquilino/Comprador inválido ou não encontrado.');
+        throw new BadRequestException('Referência inválida: verifique os dados do contrato.');
+      }
+      throw err;
+    }
 
     // Auto-gera lançamento financeiro para contratos de venda (não bloqueia se falhar)
     if (contract.type === 'SALE' && contract.saleValue) {
