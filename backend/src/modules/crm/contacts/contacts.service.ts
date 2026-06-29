@@ -136,37 +136,54 @@ export class ContactsService {
       console.warn(`Possíveis duplicatas (email/telefone) no workspace ${workspaceId}:`, duplicateCheck.map(d => d.id));
     }
 
-    const contact = await this.prisma.contact.create({
-      data: {
-        workspaceId,
-        type: dto.type,
-        name: dto.name,
-        email: dto.email,
-        phone: dto.phone,
-        cpf: dto.cpf,
-        cnpj: dto.cnpj,
-        birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
-        profession: dto.profession,
-        income: dto.income,
-        companyName: dto.companyName,
-        tradeName: dto.tradeName,
-        zipCode: dto.zipCode,
-        street: dto.street,
-        number: dto.number,
-        complement: dto.complement,
-        neighborhood: dto.neighborhood,
-        city: dto.city,
-        state: dto.state,
-        marketingConsent: dto.marketingConsent ?? false,
-        origin: dto.origin ?? 'MANUAL',
-        utmSource: dto.utmSource,
-        utmCampaign: dto.utmCampaign,
-        utmContent: dto.utmContent,
-        utmAdset: dto.utmAdset,
-        utmAd: dto.utmAd,
-        customFields: (dto.customFields ?? {}) as Prisma.JsonObject,
-      },
-    });
+    let contact;
+    try {
+      contact = await this.prisma.contact.create({
+        data: {
+          workspaceId,
+          type: dto.type,
+          name: dto.name,
+          email: dto.email,
+          phone: dto.phone,
+          cpf: dto.cpf,
+          cnpj: dto.cnpj,
+          birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
+          profession: dto.profession,
+          income: dto.income,
+          companyName: dto.companyName,
+          tradeName: dto.tradeName,
+          zipCode: dto.zipCode,
+          street: dto.street,
+          number: dto.number,
+          complement: dto.complement,
+          neighborhood: dto.neighborhood,
+          city: dto.city,
+          state: dto.state,
+          marketingConsent: dto.marketingConsent ?? false,
+          origin: dto.origin ?? 'MANUAL',
+          utmSource: dto.utmSource,
+          utmCampaign: dto.utmCampaign,
+          utmContent: dto.utmContent,
+          utmAdset: dto.utmAdset,
+          utmAd: dto.utmAd,
+          customFields: (dto.customFields ?? {}) as Prisma.JsonObject,
+        },
+      });
+    } catch (err) {
+      // P2002 = violação de índice único (CPF/CNPJ já existente, inclusive em registros antigos)
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const fields = (err.meta as { target?: string[] | string })?.target;
+        const fieldStr = Array.isArray(fields) ? fields.join(',') : String(fields ?? '');
+        if (fieldStr.includes('cnpj')) {
+          throw new ConflictException('Já existe um contato com este CNPJ neste workspace.');
+        }
+        if (fieldStr.includes('cpf')) {
+          throw new ConflictException('Já existe um contato com este CPF neste workspace.');
+        }
+        throw new ConflictException('Já existe um contato com estes dados (documento duplicado).');
+      }
+      throw err;
+    }
 
     await this.auditService.log({
       workspaceId,
