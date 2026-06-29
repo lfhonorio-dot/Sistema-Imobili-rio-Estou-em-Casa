@@ -83,3 +83,34 @@ export function useReports(token: string, workspaceId: string) {
     getActivityHeatmap,
   };
 }
+
+// --- Hook React Query para KPIs do dashboard (usa o api compartilhado com proxy) ---
+import { useQuery } from '@tanstack/react-query';
+import sharedApi from '@/lib/api';
+import { useAuthStore } from '@/stores/auth.store';
+
+export interface DashboardKpis {
+  totalContacts: number;
+  totalDeals: number;
+  openDeals: number;
+  wonDeals: number;
+  lostDeals: number;
+  totalProperties: number;
+  activeContracts: number;
+  totalRevenue: number;
+  overdueCount: number;
+  automationRuns: number;
+}
+
+export function useDashboardKpis() {
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+  return useQuery({
+    queryKey: ['dashboard-kpis', workspaceId],
+    queryFn: async () => {
+      const { data } = await sharedApi.get('/reports/dashboard');
+      return data.data as DashboardKpis;
+    },
+    enabled: !!workspaceId,
+    staleTime: 60 * 1000,
+  });
+}

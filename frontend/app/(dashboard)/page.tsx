@@ -2,42 +2,55 @@
 
 'use client';
 
-import { Building2, Users, Shield, ClipboardList } from 'lucide-react';
+import { Users, Home, FileText, DollarSign } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/auth.store';
+import { useDashboardKpis } from '@/hooks/use-reports';
 import { formatDateTime } from '@/lib/utils';
 
-// Cards de métricas (placeholder para estágio 1)
-const metricsCards = [
-  {
-    title: 'Workspace Ativo',
-    icon: Building2,
-    color: 'text-blue-500',
-    bg: 'bg-blue-50',
-  },
-  {
-    title: 'Usuários',
-    icon: Users,
-    color: 'text-green-500',
-    bg: 'bg-green-50',
-  },
-  {
-    title: 'Conformidade LGPD',
-    icon: Shield,
-    color: 'text-purple-500',
-    bg: 'bg-purple-50',
-  },
-  {
-    title: 'Auditoria',
-    icon: ClipboardList,
-    color: 'text-orange-500',
-    bg: 'bg-orange-50',
-  },
-];
+function brl(v: number | null | undefined) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v ?? 0));
+}
 
 export default function DashboardPage() {
   const { user, currentWorkspace } = useAuthStore();
+  const { data: kpis } = useDashboardKpis();
+
+  const metricsCards = [
+    {
+      title: 'Contatos',
+      value: kpis ? String(kpis.totalContacts) : '—',
+      icon: Users,
+      color: 'text-green-500',
+      bg: 'bg-green-50',
+      hint: kpis ? `${kpis.openDeals} negócios abertos` : 'Carregando...',
+    },
+    {
+      title: 'Imóveis',
+      value: kpis ? String(kpis.totalProperties) : '—',
+      icon: Home,
+      color: 'text-blue-500',
+      bg: 'bg-blue-50',
+      hint: kpis ? 'Total cadastrado' : 'Carregando...',
+    },
+    {
+      title: 'Contratos Ativos',
+      value: kpis ? String(kpis.activeContracts) : '—',
+      icon: FileText,
+      color: 'text-purple-500',
+      bg: 'bg-purple-50',
+      hint: kpis && kpis.overdueCount > 0 ? `${kpis.overdueCount} em atraso` : (kpis ? 'Em dia' : 'Carregando...'),
+    },
+    {
+      title: 'Receita Recebida',
+      value: kpis ? brl(kpis.totalRevenue) : '—',
+      icon: DollarSign,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
+      hint: kpis ? 'Lançamentos pagos' : 'Carregando...',
+    },
+  ];
 
   return (
     <div>
@@ -68,9 +81,9 @@ export default function DashboardPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-muted-foreground">—</div>
+                <div className="text-2xl font-bold">{card.value}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Disponível em breve
+                  {card.hint}
                 </p>
               </CardContent>
             </Card>
