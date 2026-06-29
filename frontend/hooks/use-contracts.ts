@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth.store';
 export interface Contract {
   id: string;
   workspaceId: string;
+  code?: string | null;
   type: string;
   status: string;
   propertyId: string;

@@ -662,6 +662,7 @@ model PropertyStatusHistory {
 model Contract {
   id               String    @id @default(uuid())
   workspaceId      String
+  code             String?   // Código sequencial: C-{ano}-{NNNN}
   type             String    // SALE, RENTAL_RESIDENTIAL, RENTAL_COMMERCIAL, BROKERAGE
   status           String    @default("DRAFT") // DRAFT, ACTIVE, TERMINATED, RESCINDED
   propertyId       String
@@ -710,6 +711,7 @@ model Contract {
   signatureEnvelopes SignatureEnvelope[]
   splitRules       SplitRule[]
 
+  @@unique([workspaceId, code])
   @@map("contracts")
 }
 

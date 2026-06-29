@@ -121,7 +121,38 @@ export class ContractsService {
   }
 
   // Cria contrato validando entidades do workspace
+  // Validação de campos obrigatórios específicos por tipo de contrato
+  private validateByType(dto: CreateContractDto) {
+    const errors: string[] = [];
+
+    if (dto.type === 'SALE') {
+      if (!dto.saleValue || dto.saleValue <= 0) {
+        errors.push('Valor de venda é obrigatório para contratos de venda.');
+      }
+    }
+
+    if (dto.type === 'RENTAL_RESIDENTIAL' || dto.type === 'RENTAL_COMMERCIAL') {
+      if (!dto.rentalValue || dto.rentalValue <= 0) {
+        errors.push('Valor do aluguel é obrigatório para contratos de locação.');
+      }
+      if (!dto.dueDay || dto.dueDay < 1 || dto.dueDay > 31) {
+        errors.push('Dia de vencimento (1-31) é obrigatório para contratos de locação.');
+      }
+    }
+
+    if (dto.commissionRate !== undefined && (dto.commissionRate < 0 || dto.commissionRate > 100)) {
+      errors.push('Taxa de comissão deve estar entre 0 e 100%.');
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException(errors);
+    }
+  }
+
   async create(workspaceId: string, dto: CreateContractDto, userId: string) {
+    // Valida campos obrigatórios por tipo de contrato
+    this.validateByType(dto);
+
     // Valida imóvel
     const property = await this.prisma.property.findFirst({
       where: { id: dto.propertyId, workspaceId, deletedAt: null },
@@ -143,26 +174,86 @@ export class ContractsService {
       if (!tenant) throw new BadRequestException('Inquilino/Comprador não encontrado');
     }
 
+    // Cria contrato + código sequencial + lançamento financeiro + comissão
+    // dentro de UMA transação atômica: se qualquer etapa falhar, tudo é revertido.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let contract: any;
     try {
-      contract = await this.prisma.contract.create({
-        data: {
-          workspaceId,
-          ...dto,
-          startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-          endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-          signedAt: dto.signedAt ? new Date(dto.signedAt) : undefined,
-          proposalDate: dto.proposalDate ? new Date(dto.proposalDate) : undefined,
-          acceptanceDate: dto.acceptanceDate ? new Date(dto.acceptanceDate) : undefined,
-          deedDate: dto.deedDate ? new Date(dto.deedDate) : undefined,
-          keyDeliveryDate: dto.keyDeliveryDate ? new Date(dto.keyDeliveryDate) : undefined,
-        },
-        include: {
-          property: { select: { id: true, code: true, street: true } },
-          owner: { select: { id: true, name: true, email: true, phone: true } },
-          tenant: { select: { id: true, name: true, email: true, phone: true } },
-        },
+      contract = await this.prisma.$transaction(async (tx) => {
+        // Código sequencial C-{ano}-{NNNN} (dentro da transação para reduzir corrida)
+        const year = new Date().getFullYear();
+        const lastContract = await tx.contract.findFirst({
+          where: { workspaceId, code: { startsWith: `C-${year}-` } },
+          orderBy: { code: 'desc' },
+          select: { code: true },
+        });
+        let sequence = 1;
+        if (lastContract?.code) {
+          sequence = parseInt(lastContract.code.split('-')[2] || '0', 10) + 1;
+        }
+        const code = `C-${year}-${String(sequence).padStart(4, '0')}`;
+
+        const created = await tx.contract.create({
+          data: {
+            workspaceId,
+            code,
+            ...dto,
+            startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+            endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+            signedAt: dto.signedAt ? new Date(dto.signedAt) : undefined,
+            proposalDate: dto.proposalDate ? new Date(dto.proposalDate) : undefined,
+            acceptanceDate: dto.acceptanceDate ? new Date(dto.acceptanceDate) : undefined,
+            deedDate: dto.deedDate ? new Date(dto.deedDate) : undefined,
+            keyDeliveryDate: dto.keyDeliveryDate ? new Date(dto.keyDeliveryDate) : undefined,
+          },
+          include: {
+            property: { select: { id: true, code: true, street: true } },
+            owner: { select: { id: true, name: true, email: true, phone: true } },
+            tenant: { select: { id: true, name: true, email: true, phone: true } },
+          },
+        });
+
+        // Lançamento financeiro para contratos de venda (atômico)
+        if (created.type === 'SALE' && created.saleValue) {
+          await tx.financialEntry.create({
+            data: {
+              workspaceId,
+              type: 'RECEIVABLE',
+              category: 'SALE',
+              description: `Compra e venda — ${(created.property as any)?.code ?? created.propertyId}`,
+              amount: created.saleValue,
+              dueDate: created.startDate ?? new Date(),
+              status: 'PENDING',
+              contractId: created.id,
+              contactId: created.tenantId ?? undefined,
+            },
+          });
+        }
+
+        // Comissão se taxa definida (atômico)
+        if (created.commissionRate) {
+          const baseValue = created.saleValue ?? created.rentalValue;
+          if (baseValue) {
+            const commissionAmount = (Number(baseValue) * Number(created.commissionRate)) / 100;
+            const workspaceUser = await tx.workspaceUser.findFirst({
+              where: { workspaceId, userId },
+            });
+            if (workspaceUser) {
+              await tx.commission.create({
+                data: {
+                  workspaceId,
+                  contractId: created.id,
+                  userId: workspaceUser.id,
+                  rate: created.commissionRate,
+                  amount: commissionAmount,
+                  status: 'PENDING',
+                },
+              });
+            }
+          }
+        }
+
+        return created;
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
@@ -174,56 +265,7 @@ export class ContractsService {
       throw err;
     }
 
-    // Auto-gera lançamento financeiro para contratos de venda (não bloqueia se falhar)
-    if (contract.type === 'SALE' && contract.saleValue) {
-      const dueDate = contract.startDate ?? new Date();
-      try {
-        await this.prisma.financialEntry.create({
-          data: {
-            workspaceId,
-            type: 'RECEIVABLE',
-            category: 'SALE',
-            description: `Compra e venda — ${(contract.property as any)?.code ?? contract.propertyId}`,
-            amount: contract.saleValue,
-            dueDate,
-            status: 'PENDING',
-            contractId: contract.id,
-            contactId: contract.tenantId ?? undefined,
-          },
-        });
-      } catch (e) {
-        console.error('[ContractsService] Erro ao gerar lançamento financeiro:', e);
-      }
-    }
-
-    // Auto-gera comissão se taxa definida (não bloqueia se falhar)
-    if (contract.commissionRate) {
-      const baseValue = contract.saleValue ?? contract.rentalValue;
-      if (baseValue) {
-        try {
-          const commissionAmount = (Number(baseValue) * Number(contract.commissionRate)) / 100;
-          const workspaceUser = await this.prisma.workspaceUser.findFirst({
-            where: { workspaceId, userId },
-          });
-          if (workspaceUser) {
-            await this.prisma.commission.create({
-              data: {
-                workspaceId,
-                contractId: contract.id,
-                userId: workspaceUser.id,
-                rate: contract.commissionRate,
-                amount: commissionAmount,
-                status: 'PENDING',
-              },
-            });
-          }
-        } catch (e) {
-          console.error('[ContractsService] Erro ao gerar comissão:', e);
-        }
-      }
-    }
-
-    // Gera documento HTML do contrato e envia por email (não bloqueia se falhar)
+    // Envio de e-mail FORA da transação: falha no e-mail não deve reverter o contrato
     try {
       await this.sendContractByEmail(workspaceId, contract);
     } catch (e) {
