@@ -113,6 +113,13 @@ export class ContactsService {
 
   // Cria novo contato com verificação de duplicatas
   async create(workspaceId: string, userId: string, dto: CreateContactDto) {
+    // Normaliza campos vazios para NULL: string vazia ("") conta como valor no
+    // índice único e faria dois contatos "sem CNPJ" colidirem. NULL permite vários.
+    dto.cpf = dto.cpf?.trim() || undefined;
+    dto.cnpj = dto.cnpj?.trim() || undefined;
+    dto.email = dto.email?.trim() || undefined;
+    dto.phone = dto.phone?.trim() || undefined;
+
     // Bloqueia duplicata por documento (CPF/CNPJ) — identidade única da pessoa/empresa
     if (dto.cpf || dto.cnpj) {
       const docConditions: Prisma.ContactWhereInput[] = [];
