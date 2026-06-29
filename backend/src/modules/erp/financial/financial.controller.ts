@@ -97,6 +97,15 @@ export class FinancialController {
     return this.financialService.receiveCommission(workspaceId, id, dto);
   }
 
+  // POST /financial/commissions/:id/process-split - gera repasses aos parceiros
+  @Post('commissions/:id/process-split')
+  processCommissionSplit(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.financialService.processCommissionSplit(workspaceId, id);
+  }
+
   // GET /financial/entries/:id - detalhe
   @Get('entries/:id')
   findOneEntry(

@@ -176,6 +176,22 @@ export function useReceiveCommission() {
       queryClient.invalidateQueries({ queryKey: ['commissions', workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['financial-entries', workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['split-transactions', workspaceId] });
+    },
+  });
+}
+
+export function useProcessCommissionSplit() {
+  const queryClient = useQueryClient();
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await api.post(`/financial/commissions/${id}/process-split`, {});
+      return data.data as { processed: number; totalRules: number };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['split-transactions', workspaceId] });
     },
   });
 }

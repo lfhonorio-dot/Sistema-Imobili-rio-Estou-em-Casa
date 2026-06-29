@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCommissions, useReceiveCommission, type CommissionItem } from '@/hooks/use-financial';
+import { useCommissions, useReceiveCommission, useProcessCommissionSplit, type CommissionItem } from '@/hooks/use-financial';
 import { useSplitTransactions, useConfirmSplitTransaction } from '@/hooks/use-split';
 
 function brl(v: number | null | undefined) {
@@ -32,7 +32,22 @@ export default function CommissionsPage() {
 
   const { data: splitData } = useSplitTransactions();
   const confirmSplit = useConfirmSplitTransaction();
+  const processSplit = useProcessCommissionSplit();
   const splitTransactions = splitData?.items ?? [];
+
+  async function processRepasse(commissionId: string) {
+    try {
+      const res = await processSplit.mutateAsync(commissionId);
+      if (res.processed > 0) {
+        toast.success(`${res.processed} repasse(s) gerado(s) para os corretores parceiros.`);
+      } else {
+        toast.info('Os repasses deste contrato já haviam sido gerados.');
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao processar repasse.';
+      toast.error(Array.isArray(msg) ? msg[0] : msg);
+    }
+  }
 
   async function confirmRepasse(id: string) {
     try {
@@ -158,9 +173,13 @@ export default function CommissionsPage() {
                       )}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {!isReceived && (
+                      {!isReceived ? (
                         <Button size="sm" variant="outline" onClick={() => openModal(c)}>
                           Marcar como Recebida
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" disabled={processSplit.isPending} onClick={() => processRepasse(c.id)}>
+                          Processar Repasse
                         </Button>
                       )}
                     </td>

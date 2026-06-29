@@ -382,4 +382,53 @@ export class FinancialService {
   async payCommission(workspaceId: string, id: string) {
     return this.receiveCommission(workspaceId, id, {});
   }
+
+  // Processa (ou reprocessa) os repasses de uma comissão já recebida.
+  // Útil para comissões recebidas antes da geração automática de split.
+  async processCommissionSplit(workspaceId: string, id: string) {
+    const commission = await this.prisma.commission.findFirst({
+      where: { id, workspaceId },
+    });
+    if (!commission) throw new NotFoundException('Comissão não encontrada');
+    if (commission.status !== 'RECEIVED' && commission.status !== 'PAID') {
+      throw new BadRequestException('Marque a comissão como recebida antes de processar o repasse.');
+    }
+
+    const rules = await this.prisma.splitRule.findMany({
+      where: { contractId: commission.contractId, isActive: true },
+    });
+    if (rules.length === 0) {
+      throw new BadRequestException('Este contrato não possui corretores parceiros para repasse.');
+    }
+
+    const base = Number(commission.receivedValue ?? commission.amount);
+    // Vincula ao lançamento de comissão recebida, se existir
+    const entry = await this.prisma.financialEntry.findFirst({
+      where: { workspaceId, contractId: commission.contractId, category: 'COMMISSION', deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+
+    let created = 0;
+    for (const rule of rules) {
+      const existing = await this.prisma.splitTransaction.findFirst({
+        where: { workspaceId, recipientId: rule.recipientId, ...(entry ? { financialEntryId: entry.id } : {}) },
+        select: { id: true },
+      });
+      if (existing) continue;
+      const amount = rule.type === 'FIXED' ? Number(rule.value) : (base * Number(rule.value)) / 100;
+      await this.prisma.splitTransaction.create({
+        data: {
+          workspaceId,
+          financialEntryId: entry?.id,
+          recipientId: rule.recipientId,
+          amount,
+          status: 'PENDING',
+        },
+      });
+      created++;
+    }
+
+    return { processed: created, totalRules: rules.length };
+  }
 }
