@@ -450,14 +450,24 @@ export class ContractsService {
         </div>
       `;
 
+      let emailSent = false;
       try {
         await this.emailService.sendEmail(workspaceId, {
           to: sig.email,
           subject: `[Assinatura Pendente] ${envelope.title}`,
           body: emailBody,
         });
+        emailSent = true;
       } catch (e) {
         console.error(`[ContractsService] Erro ao enviar e-mail de assinatura para ${sig.email}:`, e);
+      }
+
+      // Atualiza status do signatário para SENT quando e-mail foi enviado
+      if (emailSent) {
+        await this.prisma.signatureSignatory.update({
+          where: { id: sig.id },
+          data: { status: 'SENT' },
+        }).catch(() => {});
       }
     }
 
