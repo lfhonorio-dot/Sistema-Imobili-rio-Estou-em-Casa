@@ -87,8 +87,22 @@ export default function NewContractPage() {
 
       router.push(`/contracts/${contract.id}`);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao criar contrato.';
-      toast.error(Array.isArray(msg) ? msg[0] : msg);
+      const errAny = err as { response?: { data?: { message?: string | string[]; error?: string }; status?: number }; message?: string };
+      const apiMsg = errAny?.response?.data?.message;
+      const httpStatus = errAny?.response?.data?.error || (errAny?.response?.status ? `HTTP ${errAny.response.status}` : null);
+      const networkMsg = errAny?.message;
+
+      let displayMsg: string;
+      if (apiMsg) {
+        displayMsg = Array.isArray(apiMsg) ? apiMsg[0] : apiMsg;
+      } else if (httpStatus) {
+        displayMsg = `Erro do servidor: ${httpStatus}`;
+      } else if (networkMsg) {
+        displayMsg = `Erro de conexão: ${networkMsg}`;
+      } else {
+        displayMsg = 'Erro ao criar contrato. Verifique sua conexão.';
+      }
+      toast.error(displayMsg);
     }
   }
 
