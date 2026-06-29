@@ -194,6 +194,27 @@ export class ContractsService {
       if (!tenant) throw new BadRequestException('Inquilino/Comprador não encontrado');
     }
 
+    // Valida repasses de comissão para corretores parceiros
+    const { partnerSplits, ...contractDto } = dto;
+    const partnerContacts: Record<string, { name: string; cpf: string | null; cnpj: string | null; email: string | null; phone: string | null }> = {};
+    if (partnerSplits?.length) {
+      const totalPct = partnerSplits.reduce((s, p) => s + Number(p.percentage), 0);
+      if (totalPct > 100) {
+        throw new BadRequestException('A soma dos repasses aos corretores parceiros não pode exceder 100% da comissão.');
+      }
+      if (!dto.commissionRate || dto.commissionRate <= 0) {
+        throw new BadRequestException('Defina a taxa de comissão antes de configurar o repasse aos corretores parceiros.');
+      }
+      for (const split of partnerSplits) {
+        const c = await this.prisma.contact.findFirst({
+          where: { id: split.contactId, workspaceId, deletedAt: null },
+          select: { id: true, name: true, cpf: true, cnpj: true, email: true, phone: true },
+        });
+        if (!c) throw new BadRequestException('Corretor parceiro não encontrado nos contatos.');
+        partnerContacts[split.contactId] = c;
+      }
+    }
+
     // Cria contrato + código sequencial + lançamento financeiro + comissão
     // dentro de UMA transação atômica: se qualquer etapa falhar, tudo é revertido.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -217,7 +238,7 @@ export class ContractsService {
           data: {
             workspaceId,
             code,
-            ...dto,
+            ...contractDto,
             startDate: dto.startDate ? new Date(dto.startDate) : undefined,
             endDate: dto.endDate ? new Date(dto.endDate) : undefined,
             signedAt: dto.signedAt ? new Date(dto.signedAt) : undefined,
@@ -270,6 +291,50 @@ export class ContractsService {
                 },
               });
             }
+          }
+        }
+
+        // Repasse de comissão para corretores parceiros: cria/recupera o
+        // recebedor (a partir do contato) e a regra de split por % da comissão.
+        if (partnerSplits?.length) {
+          for (const split of partnerSplits) {
+            const c = partnerContacts[split.contactId];
+            const document = (c.cpf || c.cnpj || '').trim();
+            const documentType = c.cpf ? 'CPF' : c.cnpj ? 'CNPJ' : 'CPF';
+
+            // Find-or-create do recebedor vinculado ao contato
+            let recipient = await tx.splitRecipient.findFirst({
+              where: { workspaceId, contactId: split.contactId, deletedAt: null },
+              select: { id: true },
+            });
+            if (!recipient) {
+              recipient = await tx.splitRecipient.create({
+                data: {
+                  workspaceId,
+                  contactId: split.contactId,
+                  name: c.name,
+                  document: document || '00000000000',
+                  documentType,
+                  email: c.email ?? undefined,
+                  phone: c.phone ?? undefined,
+                  kycStatus: 'PENDING',
+                },
+                select: { id: true },
+              });
+            }
+
+            // Regra de split: % da COMISSÃO para este parceiro
+            await tx.splitRule.create({
+              data: {
+                workspaceId,
+                contractId: created.id,
+                recipientId: recipient.id,
+                type: 'PERCENTAGE',
+                value: Number(split.percentage),
+                description: split.note ?? `Repasse de ${split.percentage}% da comissão ao corretor parceiro ${c.name}`,
+                isActive: true,
+              },
+            });
           }
         }
 

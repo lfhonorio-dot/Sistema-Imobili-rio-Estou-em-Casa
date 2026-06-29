@@ -11,8 +11,24 @@ import {
   IsInt,
   Min,
   Max,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+// Repasse de parte da comissão para um corretor parceiro (% da comissão)
+export class PartnerSplitDto {
+  @IsString()
+  contactId!: string;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percentage!: number; // % da COMISSÃO destinado a este parceiro
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
 
 export enum ContractType {
   SALE = 'SALE',
@@ -117,6 +133,13 @@ export class CreateContractDto {
   @IsOptional()
   @IsNumber()
   commissionRate?: number;
+
+  // Corretores parceiros que recebem repasse de parte da comissão
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartnerSplitDto)
+  partnerSplits?: PartnerSplitDto[];
 
   @IsOptional()
   @IsDateString()

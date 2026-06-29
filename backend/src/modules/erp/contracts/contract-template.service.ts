@@ -36,6 +36,10 @@ export class ContractTemplateService {
         property: true,
         owner: true,
         tenant: true,
+        splitRules: {
+          where: { isActive: true },
+          include: { recipient: { select: { name: true } } },
+        },
       },
     });
 
@@ -71,6 +75,38 @@ export class ContractTemplateService {
 
     const saleValue = this.fmtCurrency(contract.saleValue);
     const commissionRate = contract.commissionRate ? `${Number(contract.commissionRate)}%` : '______________';
+
+    // Repasse da comissão entre corretores parceiros
+    const commissionAmountNum = contract.saleValue && contract.commissionRate
+      ? (Number(contract.saleValue) * Number(contract.commissionRate)) / 100
+      : 0;
+    const splitRules = (contract as any).splitRules ?? [];
+    let partnerSplitClause = '';
+    if (splitRules.length > 0 && commissionAmountNum > 0) {
+      let partnersPct = 0;
+      const rows = splitRules.map((r: any) => {
+        const pct = Number(r.value);
+        partnersPct += pct;
+        const valor = (commissionAmountNum * pct) / 100;
+        return `<li>${this.fmt(r.recipient?.name)} — <span class="bold">${pct}%</span> da comissão (${this.fmtCurrency(valor)})</li>`;
+      }).join('');
+      const agencyPct = Math.max(0, 100 - partnersPct);
+      const agencyValor = (commissionAmountNum * agencyPct) / 100;
+      partnerSplitClause = `
+<h2 class="clause-title">Cláusula 8ª-A — Da Distribuição da Comissão entre Corretores Parceiros</h2>
+<p class="clause-text">
+  A comissão de corretagem total, no valor de <span class="bold">${this.fmtCurrency(commissionAmountNum)}</span>,
+  será distribuída entre os corretores envolvidos na intermediação na seguinte proporção:
+</p>
+<ul class="clause-text">
+  ${rows}
+  <li>Imobiliária intermediadora — <span class="bold">${agencyPct}%</span> da comissão (${this.fmtCurrency(agencyValor)})</li>
+</ul>
+<p class="clause-text">
+  O repasse aos corretores parceiros será efetuado após o recebimento da comissão pela imobiliária,
+  observadas as condições de habilitação e os dados bancários informados por cada parceiro.
+</p>`;
+    }
     const startDate = this.fmtDate(contract.startDate);
     const deedDate = this.fmtDate(contract.deedDate ?? contract.endDate);
     const contractDate = this.fmtDate(contract.createdAt);
@@ -303,6 +339,7 @@ ${commissionRate !== '______________' ? `
   A comissão de corretagem, no percentual de <span class="bold">${commissionRate}</span> sobre o
   valor total da transação, será devida nos termos da legislação vigente (Lei n.º 6.530/78).
 </p>
+${partnerSplitClause}
 ` : ''}
 
 <h2 class="clause-title">Cláusula ${commissionRate !== '______________' ? '9ª' : '8ª'} — Do Foro</h2>

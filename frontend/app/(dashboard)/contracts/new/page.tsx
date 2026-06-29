@@ -40,9 +40,33 @@ export default function NewContractPage() {
   });
   const [generateMonths, setGenerateMonths] = useState('12');
 
+  // Corretores parceiros que recebem repasse de % da comissão
+  const [partnerSplits, setPartnerSplits] = useState<Array<{ contactId: string; percentage: string }>>([]);
+
   function setField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
+
+  function addPartner() {
+    setPartnerSplits((prev) => [...prev, { contactId: '', percentage: '' }]);
+  }
+  function updatePartner(index: number, key: 'contactId' | 'percentage', value: string) {
+    setPartnerSplits((prev) => prev.map((p, i) => (i === index ? { ...p, [key]: value } : p)));
+  }
+  function removePartner(index: number) {
+    setPartnerSplits((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  const parseNum = (v: string) => {
+    const n = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? 0 : n;
+  };
+  const commissionPctNum = parseNum(form.commissionRate);
+  const saleValueNum = parseNum(form.saleValue);
+  const commissionAmount = (saleValueNum * commissionPctNum) / 100;
+  const partnersPctTotal = partnerSplits.reduce((s, p) => s + parseNum(p.percentage), 0);
+  const agencyPct = Math.max(0, 100 - partnersPctTotal);
+  const brl = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
   const isRental = form.type === 'RENTAL_RESIDENTIAL' || form.type === 'RENTAL_COMMERCIAL';
   const isSale = form.type === 'SALE';
@@ -74,6 +98,19 @@ export default function NewContractPage() {
         commissionRate: parseBR(form.commissionRate),
         notes: form.notes || undefined,
       };
+
+      // Repasses aos corretores parceiros (% da comissão)
+      const validSplits = partnerSplits.filter((p) => p.contactId && parseNum(p.percentage) > 0);
+      if (validSplits.length > 0) {
+        if (partnersPctTotal > 100) {
+          toast.error('A soma dos repasses aos parceiros não pode exceder 100% da comissão.');
+          return;
+        }
+        payload.partnerSplits = validSplits.map((p) => ({
+          contactId: p.contactId,
+          percentage: parseNum(p.percentage),
+        }));
+      }
 
       const contract = await createContract.mutateAsync(payload as any);
 
@@ -226,6 +263,61 @@ export default function NewContractPage() {
           <div className="space-y-1.5">
             <Label>Taxa de Comissão (%)</Label>
             <Input type="text" inputMode="decimal" placeholder="5,0" value={form.commissionRate} onChange={(e) => setField('commissionRate', e.target.value)} />
+            {commissionAmount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Comissão total: <span className="font-medium">{brl(commissionAmount)}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Corretores parceiros (repasse da comissão) */}
+          <div className="space-y-2 rounded-lg border p-3">
+            <div className="flex items-center justify-between">
+              <Label>Corretores Parceiros (repasse da comissão)</Label>
+              <Button type="button" variant="outline" size="sm" onClick={addPartner} disabled={commissionPctNum <= 0}>
+                + Adicionar parceiro
+              </Button>
+            </div>
+            {commissionPctNum <= 0 && (
+              <p className="text-xs text-muted-foreground">Informe a taxa de comissão para configurar repasses.</p>
+            )}
+
+            {partnerSplits.map((p, i) => {
+              const valor = (commissionAmount * parseNum(p.percentage)) / 100;
+              return (
+                <div key={i} className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">Corretor parceiro</Label>
+                    <Select value={p.contactId || undefined} onValueChange={(v) => updatePartner(i, 'contactId', v)}>
+                      <SelectTrigger><SelectValue placeholder="Selecione o contato..." /></SelectTrigger>
+                      <SelectContent>
+                        {contacts.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-24 space-y-1">
+                    <Label className="text-xs">% comissão</Label>
+                    <Input type="text" inputMode="decimal" placeholder="30" value={p.percentage} onChange={(e) => updatePartner(i, 'percentage', e.target.value)} />
+                  </div>
+                  <div className="w-28 pb-2 text-xs text-muted-foreground">
+                    {valor > 0 ? brl(valor) : '—'}
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" className="pb-2 text-red-500" onClick={() => removePartner(i)}>
+                    Remover
+                  </Button>
+                </div>
+              );
+            })}
+
+            {partnerSplits.length > 0 && (
+              <div className={`text-xs ${partnersPctTotal > 100 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                Parceiros: {partnersPctTotal}% da comissão · Imobiliária fica com {agencyPct}%
+                {commissionAmount > 0 && ` (${brl((commissionAmount * agencyPct) / 100)})`}
+                {partnersPctTotal > 100 && ' — soma excede 100%!'}
+              </div>
+            )}
           </div>
 
           {/* Gerar parcelas automáticas (só para locação) */}
