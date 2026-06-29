@@ -24,6 +24,13 @@ npx prisma migrate resolve --applied "20260611213202_etapa6_automacoes" 2>/dev/n
 npx prisma migrate resolve --applied "20260612002552_etapa8_integracoes" 2>/dev/null || true
 npx prisma migrate resolve --applied "20260612004328_etapa9_admin_configs" 2>/dev/null || true
 
+echo "==> Auto-cura de migrações que falharam em tentativas anteriores..."
+# Se uma migration ficou marcada como FALHA (P3009), o migrate deploy recusa
+# aplicar qualquer coisa. Marcamos como revertida para reaplicar a versão
+# corrigida. Em migrations já aplicadas com sucesso, o comando falha e é
+# ignorado (|| true). As operações são idempotentes (IF NOT EXISTS / soft-delete).
+npx prisma migrate resolve --rolled-back "20260629201000_unique_contact_document" 2>/dev/null || true
+
 echo "==> Aplicando migrações..."
 npx prisma migrate deploy
 
