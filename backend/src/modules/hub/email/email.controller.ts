@@ -22,6 +22,12 @@ import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 export class EmailController {
   constructor(private readonly service: EmailService) {}
 
+  // Diagnóstico de conectividade SMTP (autenticado)
+  @Get('smtp-health')
+  smtpHealth() {
+    return this.service.verifySmtp();
+  }
+
   @Get('templates')
   findAllTemplates(
     @Headers('x-workspace-id') workspaceId: string,

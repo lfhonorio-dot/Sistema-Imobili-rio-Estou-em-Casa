@@ -6,6 +6,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -479,6 +480,7 @@ export class ContractsService {
 
     // Envia e-mail de assinatura para cada signatário
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    let sentCount = 0;
     for (const sig of envelope.signatories) {
       const signLink = `${appUrl}/sign/${sig.token}`;
       const deadlineDate = envelope.deadline
@@ -525,6 +527,7 @@ export class ContractsService {
 
       // Atualiza status do signatário para SENT quando e-mail foi enviado
       if (emailSent) {
+        sentCount++;
         await this.prisma.signatureSignatory.update({
           where: { id: sig.id },
           data: { status: 'SENT' },
@@ -532,13 +535,21 @@ export class ContractsService {
       }
     }
 
-    // Atualiza status do envelope para PENDING após envio dos e-mails
+    // Envelope só vai a SENT se ao menos um e-mail foi entregue; senão fica DRAFT
+    // (evita marcar como enviado quando o SMTP está indisponível).
+    const envelopeStatus = sentCount > 0 ? 'SENT' : 'DRAFT';
     await this.prisma.signatureEnvelope.update({
       where: { id: envelope.id },
-      data: { status: 'PENDING' },
+      data: { status: envelopeStatus },
     });
 
-    return { ...envelope, status: 'PENDING' };
+    if (sentCount === 0) {
+      throw new ServiceUnavailableException(
+        'Nenhum e-mail de assinatura pôde ser enviado. Verifique a configuração de SMTP do servidor.',
+      );
+    }
+
+    return { ...envelope, status: envelopeStatus, emailsSent: sentCount };
   }
 
   // Atualiza contrato

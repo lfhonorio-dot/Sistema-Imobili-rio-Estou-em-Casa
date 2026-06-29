@@ -1,5 +1,5 @@
 // Serviço de Email — templates e envio via nodemailer
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -100,13 +100,18 @@ export class EmailService {
 
     const from = process.env.SMTP_FROM || process.env.SMTP_USER;
 
+    // Falha de SMTP é propagada para o chamador decidir (não engolir silenciosamente).
+    // Sem isso, status de envio (ex.: assinatura SENT) ficava sempre verde sem entrega real.
     try {
       await this.transporter.sendMail({ from, to: dto.to, subject, html: body });
     } catch (err) {
-      console.error('Falha ao enviar email:', err);
+      console.error('Falha ao enviar email (SMTP):', (err as Error).message);
+      throw new ServiceUnavailableException(
+        'Falha ao enviar e-mail. Verifique a configuração de SMTP do servidor.',
+      );
     }
 
-    // Registrar mensagem na conversa se fornecida
+    // Registrar mensagem na conversa se fornecida (só após envio bem-sucedido)
     if (dto.conversationId) {
       await this.prisma.message.create({
         data: {
@@ -121,6 +126,23 @@ export class EmailService {
     }
 
     return { message: 'Email enviado com sucesso', to: dto.to, subject };
+  }
+
+  // Diagnóstico: verifica conectividade SMTP sem expor credenciais
+  async verifySmtp() {
+    const config = {
+      host: process.env.SMTP_HOST || '(não configurado)',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      user: process.env.SMTP_USER ? 'configurado' : 'NÃO configurado',
+      from: process.env.SMTP_FROM ? 'configurado' : 'NÃO configurado',
+    };
+    try {
+      await this.transporter.verify();
+      return { ok: true, message: 'Conexão SMTP bem-sucedida.', config };
+    } catch (err) {
+      return { ok: false, message: (err as Error).message, config };
+    }
   }
 
   private interpolate(text: string, vars: Record<string, string>): string {
