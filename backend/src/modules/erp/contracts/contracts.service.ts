@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -158,6 +159,24 @@ export class ContractsService {
       where: { id: dto.propertyId, workspaceId, deletedAt: null },
     });
     if (!property) throw new BadRequestException('Imóvel não encontrado neste workspace');
+
+    // Bloqueia contrato ATIVO duplicado para o mesmo imóvel + tipo
+    // (rascunhos e encerrados não contam — permite histórico e renegociação)
+    const activeDuplicate = await this.prisma.contract.findFirst({
+      where: {
+        workspaceId,
+        propertyId: dto.propertyId,
+        type: dto.type,
+        status: 'ACTIVE',
+        deletedAt: null,
+      },
+      select: { id: true, code: true },
+    });
+    if (activeDuplicate) {
+      throw new ConflictException(
+        `Já existe um contrato ativo (${activeDuplicate.code ?? activeDuplicate.id}) deste tipo para o imóvel selecionado.`,
+      );
+    }
 
     // Valida contatos se informados
     if (dto.ownerId) {

@@ -113,11 +113,27 @@ export class ContactsService {
 
   // Cria novo contato com verificação de duplicatas
   async create(workspaceId: string, userId: string, dto: CreateContactDto) {
-    // Verifica duplicatas por CPF, CNPJ, email ou telefone
+    // Bloqueia duplicata por documento (CPF/CNPJ) — identidade única da pessoa/empresa
+    if (dto.cpf || dto.cnpj) {
+      const docConditions: Prisma.ContactWhereInput[] = [];
+      if (dto.cpf) docConditions.push({ cpf: dto.cpf });
+      if (dto.cnpj) docConditions.push({ cnpj: dto.cnpj });
+      const existingDoc = await this.prisma.contact.findFirst({
+        where: { workspaceId, deletedAt: null, OR: docConditions },
+        select: { id: true, name: true, cpf: true, cnpj: true },
+      });
+      if (existingDoc) {
+        const doc = dto.cpf ? 'CPF' : 'CNPJ';
+        throw new ConflictException(
+          `Já existe um contato com este ${doc} neste workspace: ${existingDoc.name}.`,
+        );
+      }
+    }
+
+    // Email/telefone podem ser compartilhados (família, empresa) — apenas avisa
     const duplicateCheck = await this.checkDuplicates(workspaceId, dto);
     if (duplicateCheck.length > 0) {
-      // Avisa mas não bloqueia - permite criar mesmo com duplicata
-      console.warn(`Possíveis duplicatas encontradas para workspace ${workspaceId}:`, duplicateCheck.map(d => d.id));
+      console.warn(`Possíveis duplicatas (email/telefone) no workspace ${workspaceId}:`, duplicateCheck.map(d => d.id));
     }
 
     const contact = await this.prisma.contact.create({
