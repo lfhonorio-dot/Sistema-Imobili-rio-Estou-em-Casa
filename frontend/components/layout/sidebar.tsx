@@ -20,6 +20,7 @@ import {
   FileText,
   DollarSign,
   Percent,
+  Handshake,
   Wrench,
   MessageSquare,
   Mail,
@@ -87,6 +88,11 @@ const navItems = [
     label: 'Comissões',
     href: '/commissions',
     icon: Percent,
+  },
+  {
+    label: 'Corretores Parceiros',
+    href: '/partners',
+    icon: Handshake,
   },
   {
     label: 'Boletos',
