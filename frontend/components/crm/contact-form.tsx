@@ -96,8 +96,10 @@ export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) 
         toast.success('Contato criado');
       }
       onSuccess?.();
-    } catch {
-      toast.error('Erro ao salvar contato');
+    } catch (err: unknown) {
+      const apiMsg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      const displayMsg = Array.isArray(apiMsg) ? apiMsg[0] : apiMsg;
+      toast.error(displayMsg || 'Erro ao salvar contato. Verifique os dados e tente novamente.');
     }
   };
 
