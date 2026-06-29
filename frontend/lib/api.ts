@@ -21,7 +21,7 @@ const API_URL = (() => {
 // Instância principal do Axios
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -76,6 +76,14 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // Retry automático em timeout (Railway cold start pode demorar até 60s)
+    const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+    if (isTimeout && !originalRequest._timeoutRetry) {
+      originalRequest._timeoutRetry = true;
+      originalRequest.timeout = 90000; // 90s na segunda tentativa
+      return api(originalRequest);
+    }
 
     // Verifica se é 401 e não é a rota de refresh (evita loop infinito)
     if (
