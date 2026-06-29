@@ -21,7 +21,7 @@ const API_URL = (() => {
 // Instância principal do Axios
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
