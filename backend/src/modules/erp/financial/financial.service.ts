@@ -333,7 +333,7 @@ export class FinancialService {
       });
 
       // Lançamento financeiro de comissão recebida
-      await tx.financialEntry.create({
+      const entry = await tx.financialEntry.create({
         data: {
           workspaceId,
           type: 'RECEIVABLE',
@@ -348,6 +348,31 @@ export class FinancialService {
           contractId: commission.contractId,
         },
       });
+
+      // Repasse aos corretores parceiros: gera as transações de split a partir
+      // das regras ativas do contrato (% sobre a comissão recebida).
+      const rules = await tx.splitRule.findMany({
+        where: { contractId: commission.contractId, isActive: true },
+      });
+      for (const rule of rules) {
+        const existing = await tx.splitTransaction.findFirst({
+          where: { financialEntryId: entry.id, recipientId: rule.recipientId },
+          select: { id: true },
+        });
+        if (existing) continue; // evita duplicar repasse
+        const amount = rule.type === 'FIXED'
+          ? Number(rule.value)
+          : (Number(receivedValue) * Number(rule.value)) / 100;
+        await tx.splitTransaction.create({
+          data: {
+            workspaceId,
+            financialEntryId: entry.id,
+            recipientId: rule.recipientId,
+            amount,
+            status: 'PENDING',
+          },
+        });
+      }
 
       return updated;
     });

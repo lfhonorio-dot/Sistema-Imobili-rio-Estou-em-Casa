@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCommissions, useReceiveCommission, type CommissionItem } from '@/hooks/use-financial';
+import { useSplitTransactions, useConfirmSplitTransaction } from '@/hooks/use-split';
 
 function brl(v: number | null | undefined) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v ?? 0));
@@ -28,6 +29,20 @@ export default function CommissionsPage() {
   const [modal, setModal] = useState<CommissionItem | null>(null);
   const [receivedValue, setReceivedValue] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('PIX');
+
+  const { data: splitData } = useSplitTransactions();
+  const confirmSplit = useConfirmSplitTransaction();
+  const splitTransactions = splitData?.items ?? [];
+
+  async function confirmRepasse(id: string) {
+    try {
+      await confirmSplit.mutateAsync(id);
+      toast.success('Repasse confirmado como pago.');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao confirmar repasse.';
+      toast.error(Array.isArray(msg) ? msg[0] : msg);
+    }
+  }
 
   const totals = useMemo(() => {
     let pending = 0;
@@ -154,6 +169,51 @@ export default function CommissionsPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Repasses aos corretores parceiros */}
+      {splitTransactions.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <h2 className="text-lg font-semibold">Repasses aos Corretores Parceiros</h2>
+          <p className="text-sm text-muted-foreground">
+            Gerados automaticamente quando a comissão é recebida. Confirme o pagamento de cada parceiro.
+          </p>
+          <div className="border rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Corretor Parceiro</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Valor do Repasse</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
+                  <th className="py-3 px-4" />
+                </tr>
+              </thead>
+              <tbody>
+                {splitTransactions.map((t) => {
+                  const done = t.status === 'COMPLETED';
+                  return (
+                    <tr key={t.id} className="border-b last:border-0 hover:bg-gray-50/50">
+                      <td className="py-3 px-4 text-sm font-medium">{t.recipient?.name ?? '—'}</td>
+                      <td className="py-3 px-4 text-sm font-semibold">{brl(Number(t.amount))}</td>
+                      <td className="py-3 px-4">
+                        <Badge variant={done ? 'default' : 'secondary'}>
+                          {done ? 'Pago' : 'Pendente'}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {!done && (
+                          <Button size="sm" variant="outline" disabled={confirmSplit.isPending} onClick={() => confirmRepasse(t.id)}>
+                            Confirmar pagamento
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

@@ -95,3 +95,36 @@ export function useSubmitKyc() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['split-recipients', workspaceId] }),
   });
 }
+
+export interface SplitTransaction {
+  id: string;
+  amount: number;
+  status: string; // PENDING, COMPLETED, FAILED
+  processedAt?: string | null;
+  createdAt: string;
+  recipient?: { id: string; name: string; document: string } | null;
+}
+
+export function useSplitTransactions(status?: string) {
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+  return useQuery({
+    queryKey: ['split-transactions', workspaceId, status],
+    queryFn: async () => {
+      const { data } = await api.get('/split/transactions', { params: { status, limit: 100 } });
+      return data.data as { items: SplitTransaction[]; meta: { total: number } };
+    },
+    enabled: !!workspaceId,
+  });
+}
+
+export function useConfirmSplitTransaction() {
+  const qc = useQueryClient();
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await api.post(`/split/transactions/${id}/confirm`, {});
+      return data.data as SplitTransaction;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['split-transactions', workspaceId] }),
+  });
+}
