@@ -4,13 +4,17 @@ import {
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../../hub/email/email.service';
 import {
   CreateEnvelopeDto, EnvelopeQueryDto, ValidateOtpDto, RejectSignatureDto,
 } from './esignature.dto';
 
 @Injectable()
 export class EsignatureService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   // ── ENVELOPES ─────────────────────────────────────────────
 
@@ -158,7 +162,10 @@ export class EsignatureService {
   }
 
   async requestOtp(token: string) {
-    const signatory = await this.prisma.signatureSignatory.findUnique({ where: { token } });
+    const signatory = await this.prisma.signatureSignatory.findUnique({
+      where: { token },
+      include: { envelope: { select: { workspaceId: true, title: true } } },
+    });
     if (!signatory) throw new NotFoundException('Link inválido');
     if (!['VIEWED', 'SENT', 'PENDING'].includes(signatory.status)) {
       throw new BadRequestException('Não é possível solicitar OTP neste estado');
@@ -175,9 +182,41 @@ export class EsignatureService {
       data: { signatoryId: signatory.id, event: 'OTP_REQUESTED' },
     });
 
-    // Em produção: enviar OTP por WhatsApp/e-mail
-    // Para homologação: retornar OTP no response (NÃO fazer em produção)
-    return { message: 'OTP enviado', otp_dev: otp };
+    // Envia o código por e-mail ao signatário
+    const otpEmail = `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;text-align:center">
+        <h2 style="color:#1d4ed8">Código de Assinatura</h2>
+        <p>Olá, <strong>${signatory.name}</strong>! Use o código abaixo para concluir a assinatura de:</p>
+        <p style="color:#374151"><strong>${signatory.envelope.title}</strong></p>
+        <div style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#111827;background:#f3f4f6;border-radius:8px;padding:16px;margin:16px 0">
+          ${otp}
+        </div>
+        <p style="color:#9ca3af;font-size:12px">Código válido por tempo limitado. Não compartilhe com ninguém.</p>
+      </div>
+    `;
+
+    let emailSent = false;
+    try {
+      await this.emailService.sendEmail(signatory.envelope.workspaceId, {
+        to: signatory.email,
+        subject: `Seu código de assinatura: ${otp}`,
+        body: otpEmail,
+      });
+      emailSent = true;
+    } catch (e) {
+      console.error(`[EsignatureService] Falha ao enviar OTP para ${signatory.email}:`, (e as Error).message);
+    }
+
+    // Em produção o código nunca é retornado na resposta — apenas por e-mail.
+    // Em dev/homologação retorna otp_dev para facilitar os testes.
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd && !emailSent) {
+      throw new BadRequestException('Não foi possível enviar o código por e-mail. Tente novamente mais tarde.');
+    }
+
+    return isProd
+      ? { message: 'Código enviado para o seu e-mail.' }
+      : { message: 'OTP enviado', otp_dev: otp };
   }
 
   async sign(
