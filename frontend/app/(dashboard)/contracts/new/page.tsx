@@ -54,6 +54,13 @@ export default function NewContractPage() {
     }
 
     try {
+      // Normaliza separador decimal (aceita vírgula ou ponto)
+      const parseBR = (v: string) => {
+        if (!v) return undefined;
+        const n = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+        return isNaN(n) ? undefined : n;
+      };
+
       const payload: Record<string, unknown> = {
         type: form.type,
         propertyId: form.propertyId,
@@ -61,10 +68,10 @@ export default function NewContractPage() {
         tenantId: form.tenantId || undefined,
         startDate: form.startDate || undefined,
         endDate: form.endDate || undefined,
-        rentalValue: form.rentalValue ? parseFloat(form.rentalValue) : undefined,
-        saleValue: form.saleValue ? parseFloat(form.saleValue) : undefined,
+        rentalValue: parseBR(form.rentalValue),
+        saleValue: parseBR(form.saleValue),
         dueDay: form.dueDay ? parseInt(form.dueDay) : undefined,
-        commissionRate: form.commissionRate ? parseFloat(form.commissionRate) : undefined,
+        commissionRate: parseBR(form.commissionRate),
         notes: form.notes || undefined,
       };
 
@@ -199,7 +206,7 @@ export default function NewContractPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Valor do Aluguel (R$)</Label>
-                <Input type="number" placeholder="0.00" value={form.rentalValue} onChange={(e) => setField('rentalValue', e.target.value)} />
+                <Input type="text" inputMode="decimal" placeholder="0,00" value={form.rentalValue} onChange={(e) => setField('rentalValue', e.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <Label>Dia do Vencimento</Label>
@@ -211,14 +218,14 @@ export default function NewContractPage() {
           {isSale && (
             <div className="space-y-1.5">
               <Label>Valor de Venda (R$)</Label>
-              <Input type="number" placeholder="0.00" value={form.saleValue} onChange={(e) => setField('saleValue', e.target.value)} />
+              <Input type="text" inputMode="decimal" placeholder="0,00" value={form.saleValue} onChange={(e) => setField('saleValue', e.target.value)} />
             </div>
           )}
 
           {/* Comissão */}
           <div className="space-y-1.5">
             <Label>Taxa de Comissão (%)</Label>
-            <Input type="number" min={0} max={100} step={0.1} placeholder="5.0" value={form.commissionRate} onChange={(e) => setField('commissionRate', e.target.value)} />
+            <Input type="text" inputMode="decimal" placeholder="5,0" value={form.commissionRate} onChange={(e) => setField('commissionRate', e.target.value)} />
           </div>
 
           {/* Gerar parcelas automáticas (só para locação) */}
