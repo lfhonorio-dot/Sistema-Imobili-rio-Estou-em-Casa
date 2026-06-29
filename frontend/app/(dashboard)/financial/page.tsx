@@ -2,13 +2,15 @@
 'use client';
 
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, AlertTriangle, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, DollarSign, Copy, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FinancialEntryRow } from '@/components/erp/financial-entry-row';
+import { useBilling } from '@/hooks/use-billing';
 import {
   useFinancialSummary,
   useFinancialEntries,
@@ -17,6 +19,14 @@ import {
   useCommissions,
   usePayEntry,
 } from '@/hooks/use-financial';
+
+interface BoletoResult {
+  linhaDigitavel: string;
+  codigoBarras: string;
+  pixCopiaECola?: string;
+  amount: number;
+  dueDate: string;
+}
 
 function formatCurrency(value: number | null | undefined) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value ?? 0));
@@ -42,6 +52,28 @@ export default function FinancialPage() {
   });
   const { data: commissionsData } = useCommissions({ status: commissionStatus === 'ALL' ? undefined : commissionStatus });
   const payEntry = usePayEntry();
+  const { generateBoleto } = useBilling();
+  const [boletoResult, setBoletoResult] = useState<BoletoResult | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+
+  async function handleGenerateBoleto(financialEntryId: string) {
+    setGeneratingId(financialEntryId);
+    try {
+      const boleto = await generateBoleto({ financialEntryId });
+      setBoletoResult(boleto);
+      toast.success('Boleto gerado com sucesso!');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao gerar boleto.';
+      toast.error(Array.isArray(msg) ? msg[0] : msg);
+    } finally {
+      setGeneratingId(null);
+    }
+  }
+
+  function copyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copiado!`);
+  }
 
   const kpis = [
     {
@@ -156,6 +188,8 @@ export default function FinancialPage() {
                         key={entry.id}
                         entry={entry}
                         onPay={(id) => payEntry.mutate({ id })}
+                        onGenerateBoleto={handleGenerateBoleto}
+                        generatingBoleto={generatingId === entry.id}
                       />
                     ))}
                   </tbody>
@@ -285,6 +319,53 @@ export default function FinancialPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Modal de resultado do boleto */}
+      {boletoResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setBoletoResult(null)}>
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Boleto Gerado</h3>
+              <button onClick={() => setBoletoResult(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex justify-between rounded-lg bg-gray-50 p-3 text-sm">
+                <span className="text-gray-500">Valor</span>
+                <span className="font-semibold">{formatCurrency(Number(boletoResult.amount))}</span>
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs font-medium text-gray-500">Linha Digitável</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 break-all rounded-lg bg-gray-100 p-2 text-xs">{boletoResult.linhaDigitavel}</code>
+                  <Button size="sm" variant="outline" onClick={() => copyToClipboard(boletoResult.linhaDigitavel, 'Linha digitável')}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {boletoResult.pixCopiaECola && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-gray-500">PIX Copia e Cola</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 break-all rounded-lg bg-gray-100 p-2 text-xs">{boletoResult.pixCopiaECola}</code>
+                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(boletoResult.pixCopiaECola!, 'PIX')}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-center text-xs text-gray-400">
+                Boleto em modo simulado. Configure um gateway (EFÍ/ASAAS) no Railway para emissão bancária real.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

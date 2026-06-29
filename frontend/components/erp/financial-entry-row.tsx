@@ -29,13 +29,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 interface FinancialEntryRowProps {
   entry: FinancialEntry;
   onPay?: (id: string) => void;
+  onGenerateBoleto?: (id: string) => void;
+  generatingBoleto?: boolean;
 }
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
-export function FinancialEntryRow({ entry, onPay }: FinancialEntryRowProps) {
+export function FinancialEntryRow({ entry, onPay, onGenerateBoleto, generatingBoleto }: FinancialEntryRowProps) {
   const statusConfig = STATUS_CONFIG[entry.status] ?? { label: entry.status, icon: null, variant: 'outline' as const };
   const isOverdue = entry.status === 'PENDING' && new Date(entry.dueDate) < new Date();
 
@@ -61,11 +63,23 @@ export function FinancialEntryRow({ entry, onPay }: FinancialEntryRowProps) {
         </Badge>
       </td>
       <td className="py-3 px-4 text-sm">
-        {entry.status === 'PENDING' && onPay && (
-          <Button size="sm" variant="outline" onClick={() => onPay(entry.id)}>
-            Receber
-          </Button>
-        )}
+        <div className="flex gap-2 justify-end">
+          {entry.status === 'PENDING' && entry.type === 'RECEIVABLE' && onGenerateBoleto && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={generatingBoleto}
+              onClick={() => onGenerateBoleto(entry.id)}
+            >
+              {generatingBoleto ? 'Gerando...' : 'Gerar Boleto'}
+            </Button>
+          )}
+          {entry.status === 'PENDING' && onPay && (
+            <Button size="sm" variant="outline" onClick={() => onPay(entry.id)}>
+              Receber
+            </Button>
+          )}
+        </div>
       </td>
     </tr>
   );

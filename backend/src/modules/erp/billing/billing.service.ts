@@ -96,22 +96,62 @@ export class BillingService {
           where: { workspaceId, isDefault: true, deletedAt: null },
         });
 
+    // Deriva amount/dueDate/contato do lançamento financeiro quando não informados
+    let amount = dto.amount;
+    let dueDate = dto.dueDate;
+    let contactId = dto.contactId;
+    let contractId = dto.contractId;
+    let description = dto.description;
+
+    if (dto.financialEntryId) {
+      const entry = await this.prisma.financialEntry.findFirst({
+        where: { id: dto.financialEntryId, workspaceId, deletedAt: null },
+      });
+      if (!entry) throw new BadRequestException('Lançamento financeiro não encontrado.');
+      amount = amount ?? Number(entry.amount);
+      dueDate = dueDate ?? entry.dueDate.toISOString();
+      contactId = contactId ?? entry.contactId ?? undefined;
+      contractId = contractId ?? entry.contractId ?? undefined;
+      description = description ?? entry.description ?? undefined;
+    }
+
+    if (!amount || amount <= 0) {
+      throw new BadRequestException('Valor do boleto é obrigatório (informe amount ou um lançamento financeiro válido).');
+    }
+    if (!dueDate) {
+      throw new BadRequestException('Data de vencimento é obrigatória (informe dueDate ou um lançamento financeiro válido).');
+    }
+
+    // Um lançamento só pode ter um boleto ativo
+    if (dto.financialEntryId) {
+      const existing = await this.prisma.boleto.findFirst({
+        where: { financialEntryId: dto.financialEntryId, deletedAt: null },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new BadRequestException('Este lançamento já possui um boleto. Cancele ou reemita o boleto existente.');
+      }
+    }
+
+    // Normaliza vencimento para YYYY-MM-DD (helpers esperam só a data, sem horário)
+    const dueDateOnly = dueDate.slice(0, 10);
+
     // Gerar dados simulados de boleto (em produção: chamar API do gateway)
     const nossoNumero = this.generateNossoNumero();
-    const linhaDigitavel = this.generateLinhaDigitavel(nossoNumero, dto.amount, dto.dueDate);
-    const codigoBarras = this.generateCodigoBarras(nossoNumero, dto.amount, dto.dueDate);
-    const pixQrCode = this.generatePixQrCode(nossoNumero, dto.amount);
+    const linhaDigitavel = this.generateLinhaDigitavel(nossoNumero, amount, dueDateOnly);
+    const codigoBarras = this.generateCodigoBarras(nossoNumero, amount, dueDateOnly);
+    const pixQrCode = this.generatePixQrCode(nossoNumero, amount);
 
     const boleto = await this.prisma.boleto.create({
       data: {
         workspaceId,
         gatewayId: gateway?.id,
         financialEntryId: dto.financialEntryId,
-        contractId: dto.contractId,
-        contactId: dto.contactId,
-        amount: dto.amount,
-        dueDate: new Date(dto.dueDate),
-        description: dto.description,
+        contractId,
+        contactId,
+        amount,
+        dueDate: new Date(dueDate),
+        description,
         nossoNumero,
         linhaDigitavel,
         codigoBarras,
@@ -133,7 +173,7 @@ export class BillingService {
       });
     }
 
-    this.logger.log(`Boleto gerado: ${boleto.id} venc=${dto.dueDate} R$${dto.amount}`);
+    this.logger.log(`Boleto gerado: ${boleto.id} venc=${dueDate} R$${amount}`);
     return boleto;
   }
 

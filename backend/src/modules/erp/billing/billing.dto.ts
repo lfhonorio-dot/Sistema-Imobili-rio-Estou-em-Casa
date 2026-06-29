@@ -24,8 +24,10 @@ export class GenerateBoletoDto {
   @IsOptional() @IsString() contractId?: string;
   @IsOptional() @IsString() contactId?: string;
   @IsOptional() @IsString() gatewayId?: string;
-  @IsNumber() @IsPositive() amount!: number;
-  @IsDateString() dueDate!: string;
+  // amount/dueDate são opcionais quando financialEntryId é informado:
+  // nesse caso são derivados do lançamento financeiro vinculado.
+  @IsOptional() @IsNumber() @IsPositive() amount?: number;
+  @IsOptional() @IsDateString() dueDate?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsNumber() fine?: number;
   @IsOptional() @IsNumber() interest?: number;
