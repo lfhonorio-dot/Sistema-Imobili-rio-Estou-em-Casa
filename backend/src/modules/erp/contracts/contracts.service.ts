@@ -416,7 +416,58 @@ export class ContractsService {
       after: { contractId: id, signatories: signatories.length },
     });
 
-    return envelope;
+    // Envia e-mail de assinatura para cada signatário
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    for (const sig of envelope.signatories) {
+      const signLink = `${appUrl}/sign/${sig.token}`;
+      const deadlineDate = envelope.deadline
+        ? new Date(envelope.deadline).toLocaleDateString('pt-BR')
+        : '30 dias';
+
+      const emailBody = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px">
+          <h2 style="color:#1d4ed8">Assinatura Eletrônica Solicitada</h2>
+          <p>Olá, <strong>${sig.name}</strong>!</p>
+          <p>Você foi solicitado(a) a assinar o seguinte documento:</p>
+          <div style="background:#f3f4f6;border-radius:8px;padding:16px;margin:16px 0">
+            <strong>${envelope.title}</strong><br/>
+            ${envelope.message ?? ''}
+          </div>
+          <p><strong>Prazo para assinatura:</strong> ${deadlineDate}</p>
+          <p style="margin:24px 0">
+            <a href="${signLink}"
+               style="background:#1d4ed8;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
+              Assinar Documento
+            </a>
+          </p>
+          <p style="color:#6b7280;font-size:13px">
+            Ou acesse pelo link: <a href="${signLink}">${signLink}</a>
+          </p>
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+          <p style="color:#9ca3af;font-size:12px">
+            Este é um email automático. Não responda a esta mensagem.
+          </p>
+        </div>
+      `;
+
+      try {
+        await this.emailService.sendEmail(workspaceId, {
+          to: sig.email,
+          subject: `[Assinatura Pendente] ${envelope.title}`,
+          body: emailBody,
+        });
+      } catch (e) {
+        console.error(`[ContractsService] Erro ao enviar e-mail de assinatura para ${sig.email}:`, e);
+      }
+    }
+
+    // Atualiza status do envelope para PENDING após envio dos e-mails
+    await this.prisma.signatureEnvelope.update({
+      where: { id: envelope.id },
+      data: { status: 'PENDING' },
+    });
+
+    return { ...envelope, status: 'PENDING' };
   }
 
   // Atualiza contrato
