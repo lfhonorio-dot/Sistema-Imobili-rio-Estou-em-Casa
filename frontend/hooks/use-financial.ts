@@ -139,6 +139,17 @@ export function usePayEntry() {
   });
 }
 
+export interface CommissionItem {
+  id: string;
+  rate: number;
+  amount: number;
+  status: string;
+  receivedValue?: number | null;
+  paymentMethod?: string | null;
+  paidAt?: string | null;
+  contract?: { type: string; property?: { code?: string; street?: string | null } } | null;
+}
+
 export function useCommissions(query: { userId?: string; status?: string } = {}) {
   const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
@@ -146,8 +157,25 @@ export function useCommissions(query: { userId?: string; status?: string } = {})
     queryKey: ['commissions', workspaceId, query],
     queryFn: async () => {
       const { data } = await api.get('/financial/commissions', { params: query });
-      return data.data as { items: Array<{ id: string; rate: number; amount: number; status: string; contract?: { type: string; property?: { street?: string | null } } | null }> };
+      return data.data as { items: CommissionItem[]; meta?: { total: number } };
     },
     enabled: !!workspaceId,
+  });
+}
+
+export function useReceiveCommission() {
+  const queryClient = useQueryClient();
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+
+  return useMutation({
+    mutationFn: async ({ id, ...dto }: { id: string; receivedValue?: number; paymentMethod?: string; receivedAt?: string; notes?: string }) => {
+      const { data } = await api.patch(`/financial/commissions/${id}/receive`, dto);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['commissions', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['financial-entries', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['financial-summary', workspaceId] });
+    },
   });
 }

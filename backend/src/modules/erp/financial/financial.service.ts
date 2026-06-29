@@ -3,6 +3,7 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -12,6 +13,7 @@ import {
   FinancialQueryDto,
   PayEntryDto,
   CommissionQueryDto,
+  ReceiveCommissionDto,
 } from './financial.dto';
 
 @Injectable()
@@ -304,16 +306,55 @@ export class FinancialService {
     };
   }
 
-  // Marca comissão como paga
-  async payCommission(workspaceId: string, id: string) {
+  // Marca comissão como recebida e gera lançamento financeiro PAID (atômico)
+  async receiveCommission(workspaceId: string, id: string, dto: ReceiveCommissionDto) {
     const commission = await this.prisma.commission.findFirst({
       where: { id, workspaceId },
+      include: { contract: { select: { id: true, property: { select: { code: true } } } } },
     });
     if (!commission) throw new NotFoundException('Comissão não encontrada');
+    if (commission.status === 'RECEIVED' || commission.status === 'PAID') {
+      throw new BadRequestException('Comissão já foi recebida.');
+    }
 
-    return this.prisma.commission.update({
-      where: { id },
-      data: { status: 'PAID', paidAt: new Date() },
+    const receivedValue = dto.receivedValue ?? Number(commission.amount);
+    const receivedAt = dto.receivedAt ? new Date(dto.receivedAt) : new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.commission.update({
+        where: { id },
+        data: {
+          status: 'RECEIVED',
+          paidAt: receivedAt,
+          receivedValue,
+          paymentMethod: dto.paymentMethod,
+          notes: dto.notes ?? commission.notes,
+        },
+      });
+
+      // Lançamento financeiro de comissão recebida
+      await tx.financialEntry.create({
+        data: {
+          workspaceId,
+          type: 'RECEIVABLE',
+          category: 'COMMISSION',
+          description: `Comissão recebida — ${(commission.contract?.property as any)?.code ?? commission.contractId}`,
+          amount: receivedValue,
+          dueDate: receivedAt,
+          status: 'PAID',
+          paidAt: receivedAt,
+          paidAmount: receivedValue,
+          paymentMethod: dto.paymentMethod,
+          contractId: commission.contractId,
+        },
+      });
+
+      return updated;
     });
+  }
+
+  // Compatibilidade: pagar = receber (mantém endpoint antigo funcionando)
+  async payCommission(workspaceId: string, id: string) {
+    return this.receiveCommission(workspaceId, id, {});
   }
 }

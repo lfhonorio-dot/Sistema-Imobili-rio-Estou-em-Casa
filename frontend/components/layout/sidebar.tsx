@@ -19,6 +19,7 @@ import {
   Home,
   FileText,
   DollarSign,
+  Percent,
   Wrench,
   MessageSquare,
   Mail,
@@ -81,6 +82,11 @@ const navItems = [
     label: 'Financeiro',
     href: '/financial',
     icon: DollarSign,
+  },
+  {
+    label: 'Comissões',
+    href: '/commissions',
+    icon: Percent,
   },
   {
     label: 'Boletos',

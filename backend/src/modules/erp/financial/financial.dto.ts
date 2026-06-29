@@ -69,6 +69,24 @@ export class PayEntryDto {
   paymentMethod?: string;
 }
 
+export class ReceiveCommissionDto {
+  @IsOptional()
+  @IsNumber()
+  receivedValue?: number;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string; // PIX, TED, DINHEIRO, CHEQUE
+
+  @IsOptional()
+  @IsDateString()
+  receivedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 export class FinancialQueryDto {
   @IsOptional()
   @Type(() => Number)

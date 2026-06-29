@@ -20,6 +20,7 @@ import {
   FinancialQueryDto,
   PayEntryDto,
   CommissionQueryDto,
+  ReceiveCommissionDto,
 } from './financial.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
@@ -77,13 +78,23 @@ export class FinancialController {
     return this.financialService.findAllCommissions(workspaceId, query);
   }
 
-  // PATCH /financial/commissions/:id/pay - paga comissão
+  // PATCH /financial/commissions/:id/pay - paga comissão (compatibilidade)
   @Patch('commissions/:id/pay')
   payCommission(
     @Headers('x-workspace-id') workspaceId: string,
     @Param('id') id: string,
   ) {
     return this.financialService.payCommission(workspaceId, id);
+  }
+
+  // PATCH /financial/commissions/:id/receive - registra recebimento da comissão
+  @Patch('commissions/:id/receive')
+  receiveCommission(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+    @Body() dto: ReceiveCommissionDto,
+  ) {
+    return this.financialService.receiveCommission(workspaceId, id, dto);
   }
 
   // GET /financial/entries/:id - detalhe

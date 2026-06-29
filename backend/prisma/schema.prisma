@@ -744,17 +744,19 @@ model FinancialEntry {
 }
 
 model Commission {
-  id          String    @id @default(uuid())
-  workspaceId String
-  contractId  String
-  userId      String    // WorkspaceUser id do corretor
-  amount      Decimal   @db.Decimal(15, 2)
-  rate        Decimal   @db.Decimal(5, 2)
-  status      String    @default("PENDING") // PENDING, PAID
-  paidAt      DateTime?
-  notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  workspaceId   String
+  contractId    String
+  userId        String    // WorkspaceUser id do corretor
+  amount        Decimal   @db.Decimal(15, 2)
+  rate          Decimal   @db.Decimal(5, 2)
+  status        String    @default("PENDING") // PENDING, RECEIVED
+  paidAt        DateTime?
+  receivedValue Decimal?  @db.Decimal(15, 2) // valor efetivamente recebido
+  paymentMethod String?   // PIX, TED, DINHEIRO, CHEQUE
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   contract    Contract  @relation(fields: [contractId], references: [id])
 
