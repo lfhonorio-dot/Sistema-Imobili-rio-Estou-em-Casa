@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { FiscalService } from './fiscal.service';
+import { DimobService } from './dimob.service';
 import {
   SaveTaxConfigDto, EmitNfseDto, GenerateDimobDto, GenerateCarneLeaoDto,
   DimobQueryDto, IrrfQueryDto, CarneLeaoQueryDto,
@@ -18,7 +19,29 @@ import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
 @Controller('fiscal')
 export class FiscalController {
-  constructor(private readonly service: FiscalService) {}
+  constructor(
+    private readonly service: FiscalService,
+    private readonly dimob: DimobService,
+  ) {}
+
+  // ── DIMOB por declarante (rateio PJ/PF) ───────────────────
+
+  @Post('dimob/contracts/:contractId/register')
+  registerDimobEvents(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('contractId') contractId: string,
+  ) {
+    return this.dimob.registerSaleEvents(workspaceId, contractId);
+  }
+
+  @Get('dimob/export')
+  exportDimob(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Query('year') year: string,
+    @Query('declarantDoc') declarantDoc?: string,
+  ) {
+    return this.dimob.exportDimob(workspaceId, Number(year), declarantDoc);
+  }
 
   // ── CONFIGURAÇÃO FISCAL ───────────────────────────────────
 

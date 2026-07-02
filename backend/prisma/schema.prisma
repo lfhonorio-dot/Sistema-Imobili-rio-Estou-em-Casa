@@ -1343,6 +1343,13 @@ model DimobRecord {
   monthlyValue Float?
   totalValue   Float?
   commissionAmount Float?
+  // Declarante do rateio (imobiliária ou corretor parceiro PJ)
+  declarantDoc     String?
+  declarantName    String?
+  declarantType    String?  // PJ, PF
+  participationPct Float?
+  eventDate        DateTime?
+  referenceMonth   Int?     // locação: mês de competência (1-12)
   exported     Boolean  @default(false)
   exportedAt   DateTime?
   exportHash   String?
@@ -1350,6 +1357,7 @@ model DimobRecord {
   updatedAt    DateTime @updatedAt
   workspace    Workspace @relation(fields: [workspaceId], references: [id])
 
+  @@index([workspaceId, declarantDoc, year])
   @@map("dimob_records")
 }
 

@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { EmailService } from '../../hub/email/email.service';
 import { ContractTemplateService } from './contract-template.service';
+import { DimobService } from '../fiscal/dimob.service';
 import {
   CreateContractDto,
   UpdateContractDto,
@@ -30,6 +31,7 @@ export class ContractsService {
     private auditService: AuditService,
     private emailService: EmailService,
     private contractTemplate: ContractTemplateService,
+    private dimobService: DimobService,
   ) {}
 
   // Lista contratos com filtros
@@ -355,6 +357,15 @@ export class ContractsService {
       await this.sendContractByEmail(workspaceId, contract);
     } catch (e) {
       console.error('[ContractsService] Erro ao enviar contrato por email:', e);
+    }
+
+    // Registra os eventos DIMOB (venda: na data de assinatura) — não bloqueia
+    if (contract.type === 'SALE') {
+      try {
+        await this.dimobService.registerSaleEvents(workspaceId, contract.id);
+      } catch (e) {
+        console.error('[ContractsService] Erro ao registrar eventos DIMOB:', e);
+      }
     }
 
     await this.auditService.log({
