@@ -371,7 +371,7 @@ export class ContractsService {
 
   // Gera o HTML do contrato e retorna para visualização/download
   async getContractDocument(workspaceId: string, id: string): Promise<string> {
-    return this.contractTemplate.generateSaleContract(workspaceId, id);
+    return this.contractTemplate.generate(workspaceId, id);
   }
 
   private async sendContractByEmail(workspaceId: string, contract: any) {
@@ -396,7 +396,7 @@ export class ContractsService {
     // Gera o contrato completo no formato do modelo oficial
     let contractHtml: string;
     try {
-      contractHtml = await this.contractTemplate.generateSaleContract(workspaceId, contract.id);
+      contractHtml = await this.contractTemplate.generate(workspaceId, contract.id);
     } catch {
       contractHtml = `<p>Não foi possível gerar o contrato automaticamente. Por favor, acesse o sistema para visualizá-lo.</p>`;
     }
