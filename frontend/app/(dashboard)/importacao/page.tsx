@@ -100,7 +100,7 @@ export default function ImportacaoPage() {
       <div className="page-header">
         <div>
           <h1>Importação de Extratos</h1>
-          <p style={{ color: 'var(--muted)', margin: 0 }}>OFX, CSV e PDF de bancos e corretoras</p>
+          <p style={{ color: 'var(--muted)', margin: 0 }}>OFX, CSV e Excel (todas as abas) de bancos e corretoras</p>
         </div>
       </div>
 
@@ -133,8 +133,8 @@ export default function ImportacaoPage() {
             <div style={{ fontWeight: 600, marginBottom: 4 }}>
               {file ? file.name : 'Arraste o arquivo aqui ou clique para selecionar'}
             </div>
-            <div style={{ color: 'var(--muted)', fontSize: 13 }}>Formatos suportados: OFX, CSV, PDF</div>
-            <input ref={fileRef} type="file" accept=".ofx,.csv,.pdf" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} style={{ display: 'none' }} />
+            <div style={{ color: 'var(--muted)', fontSize: 13 }}>Formatos suportados: OFX, CSV, Excel (.xlsx/.xls)</div>
+            <input ref={fileRef} type="file" accept=".ofx,.csv,.xlsx,.xls" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} style={{ display: 'none' }} />
           </div>
 
           {file && (

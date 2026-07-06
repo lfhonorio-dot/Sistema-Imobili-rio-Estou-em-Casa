@@ -17,6 +17,11 @@ export class PropertiesController {
     return this.service.getSummary();
   }
 
+  @Get(':id/valuations')
+  valuations(@Param('id') id: string) {
+    return this.service.getValuationHistory(id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);

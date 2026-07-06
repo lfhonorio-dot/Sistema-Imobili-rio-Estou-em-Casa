@@ -60,6 +60,7 @@ export const api = {
     create: (data: any) => fetchAPI('/properties', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => fetchAPI(`/properties/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI(`/properties/${id}`, { method: 'DELETE' }),
+    valuations: (id: string) => fetchAPI(`/properties/${id}/valuations`),
   },
   cashFlow: {
     list: (year?: number, month?: number) =>

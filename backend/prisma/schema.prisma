@@ -164,8 +164,22 @@ model Property {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  valuationHistory PropertyValuationHistory[]
+
   @@index([classification])
   @@index([deletedAt])
+}
+
+model PropertyValuationHistory {
+  id            String   @id @default(cuid())
+  property      Property @relation(fields: [propertyId], references: [id])
+  propertyId    String
+  value         Decimal  @db.Decimal(18, 2)
+  valuationDate DateTime @default(now())
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([propertyId, valuationDate])
 }
 
 model ReceivablePortfolio {
@@ -254,6 +268,7 @@ model RetirementPlan {
   expectedIpca             Decimal @db.Decimal(10, 4) @default(4.5)
   expectedCdi              Decimal @db.Decimal(10, 4) @default(10.5)
   safeWithdrawalRate       Decimal @db.Decimal(10, 4) @default(4.0)
+  monthlyContribution      Decimal @db.Decimal(18, 2) @default(0)
   lifeExpectancy           Int     @default(85)
 
   targetFixedIncome Decimal @db.Decimal(10, 2) @default(50)

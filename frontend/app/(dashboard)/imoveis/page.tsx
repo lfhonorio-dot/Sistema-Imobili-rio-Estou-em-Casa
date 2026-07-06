@@ -119,7 +119,12 @@ export default function ImoveisPage() {
 function PropModal({ p, onClose, onSave }: any) {
   const [form, setForm] = useState<any>(p ? { ...p, lastValuationDate: p.lastValuationDate?.slice(0,10), contractEndDate: p.contractEndDate?.slice(0,10) } : { classification: 'PARA_RENDA', propertyType: 'APARTAMENTO', currentValuation: '', name: '', rentStatus: 'ALUGADO' });
   const [saving, setSaving] = useState(false);
+  const [valuations, setValuations] = useState<any[]>([]);
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (p?.id) api.properties.valuations(p.id).then(setValuations).catch(() => {});
+  }, [p?.id]);
 
   const save = async () => {
     setSaving(true);
@@ -161,6 +166,31 @@ function PropModal({ p, onClose, onSave }: any) {
           </div>
           <div><label>Avaliação (R$)</label><input type="number" value={form.currentValuation || ''} onChange={e => set('currentValuation', e.target.value)} /></div>
           <div><label>Data da Avaliação</label><input type="date" value={form.lastValuationDate || ''} onChange={e => set('lastValuationDate', e.target.value)} /></div>
+          {valuations.length > 1 && (
+            <div className="span-2" style={{ background: 'rgba(201,162,39,0.06)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 8, padding: '10px 14px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#C9A227', marginBottom: 6 }}>📈 Histórico de Avaliações</div>
+              {valuations.map((v: any, i: number) => {
+                const prev = i > 0 ? Number(valuations[i - 1].value) : null;
+                const variation = prev ? ((Number(v.value) - prev) / prev) * 100 : null;
+                return (
+                  <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0', borderTop: i > 0 ? '1px solid rgba(201,162,39,0.12)' : 'none' }}>
+                    <span style={{ color: '#94A3B8' }}>{new Date(v.valuationDate).toLocaleDateString('pt-BR')}</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {formatBRL(v.value)}
+                      {variation !== null && (
+                        <span style={{ color: variation >= 0 ? '#22C55E' : '#EF4444', marginLeft: 8 }}>
+                          {variation >= 0 ? '+' : ''}{variation.toFixed(1)}%
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>
+                Ao salvar com um valor diferente, uma nova entrada é registrada automaticamente — o histórico nunca é sobrescrito.
+              </div>
+            </div>
+          )}
           {form.classification === 'PARA_RENDA' && (
             <>
               <div><label>Aluguel Mensal (R$)</label><input type="number" value={form.rentAmount || ''} onChange={e => set('rentAmount', e.target.value)} /></div>

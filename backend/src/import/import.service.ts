@@ -1,5 +1,34 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import * as XLSX from 'xlsx';
+
+// Normaliza datas BR (dd/mm/aaaa), ISO (aaaa-mm-dd) e serial do Excel para aaaa-mm-dd
+function normalizeDate(raw: any): string {
+  if (raw === null || raw === undefined || raw === '') return '';
+  if (raw instanceof Date && !isNaN(raw.getTime())) return raw.toISOString().slice(0, 10);
+  if (typeof raw === 'number') {
+    // Serial de data do Excel (dias desde 30/12/1899)
+    const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+    return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+  }
+  const s = String(raw).trim();
+  const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (br) {
+    const year = br[3].length === 2 ? `20${br[3]}` : br[3];
+    return `${year}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
+  }
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return '';
+}
+
+// Converte valores BR ("1.234,56") e internacionais ("1234.56") para número
+function parseAmount(raw: any): number {
+  if (typeof raw === 'number') return raw;
+  const s = String(raw || '0').replace(/[R$\s]/g, '');
+  if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+  return parseFloat(s) || 0;
+}
 
 @Injectable()
 export class ImportService {
@@ -28,19 +57,25 @@ export class ImportService {
   async processUpload(userId: string, file: Express.Multer.File, source?: string) {
     if (!file) return { error: 'Arquivo não enviado' };
 
-    const content = file.buffer.toString('utf-8');
     let entries: any[] = [];
-    let format: 'OFX' | 'CSV' | 'JSON' = 'CSV';
+    let format: 'OFX' | 'CSV' | 'JSON' | 'XLS' = 'CSV';
+    const lowerName = file.originalname.toLowerCase();
 
-    if (content.includes('<OFX>') || content.includes('<ofx>') || content.includes('OFXHEADER')) {
-      format = 'OFX';
-      entries = this.parseOFX(content);
-    } else if (file.originalname.endsWith('.json')) {
-      format = 'JSON';
-      try { entries = JSON.parse(content); } catch { entries = []; }
+    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+      format = 'XLS';
+      entries = this.parseExcel(file.buffer);
     } else {
-      format = 'CSV';
-      entries = this.parseCSV(content);
+      const content = file.buffer.toString('utf-8');
+      if (content.includes('<OFX>') || content.includes('<ofx>') || content.includes('OFXHEADER')) {
+        format = 'OFX';
+        entries = this.parseOFX(content);
+      } else if (lowerName.endsWith('.json')) {
+        format = 'JSON';
+        try { entries = JSON.parse(content); } catch { entries = []; }
+      } else {
+        format = 'CSV';
+        entries = this.parseCSV(content);
+      }
     }
 
     const rules = await this.prisma.importRule.findMany({ where: { userId, isActive: true } });
@@ -85,9 +120,42 @@ export class ImportService {
       const cols = line.split(sep).map(c => c.trim().replace(/"/g, ''));
       const obj: any = {};
       headers.forEach((h, i) => { obj[h] = cols[i] || ''; });
-      const val = parseFloat((obj.valor || obj.value || obj.amount || '0').replace(',', '.'));
-      return { date: obj.data || obj.date || '', description: obj.descricao || obj.description || obj.historico || obj.memo || '', amount: Math.abs(val), entryType: val >= 0 ? 'CREDITO' : 'DEBITO', category: null };
+      return this.rowToEntry(obj);
     }).filter(e => e.description);
+  }
+
+  // Lê TODAS as abas da planilha — cada aba pode ser um extrato diferente
+  private parseExcel(buffer: Buffer) {
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+    const entries: any[] = [];
+    for (const sheetName of workbook.SheetNames) {
+      const rows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+      for (const rawRow of rows) {
+        const obj: any = {};
+        for (const [k, v] of Object.entries(rawRow)) obj[k.trim().toLowerCase()] = v;
+        const entry = this.rowToEntry(obj);
+        if (entry.description && entry.date) entries.push(entry);
+      }
+    }
+    return entries;
+  }
+
+  // Mapeia uma linha (CSV ou Excel) para lançamento, aceitando cabeçalhos comuns
+  // de bancos brasileiros: data, descricao/histórico/lançamento, valor
+  private rowToEntry(obj: any) {
+    const rawDate = obj.data || obj.date || obj['data mov.'] || obj['data lançamento'] || obj['data lancamento'] || '';
+    const description = String(
+      obj.descricao || obj['descrição'] || obj.description || obj.historico ||
+      obj['histórico'] || obj.memo || obj['lançamento'] || obj.lancamento || ''
+    ).trim();
+    const val = parseAmount(obj.valor || obj.value || obj.amount || obj['valor (r$)'] || 0);
+    return {
+      date: normalizeDate(rawDate),
+      description,
+      amount: Math.abs(val),
+      entryType: val >= 0 ? 'CREDITO' : 'DEBITO',
+      category: null,
+    };
   }
 
   private autoClassify(description: string, rules: any[]) {
