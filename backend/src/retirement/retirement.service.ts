@@ -117,4 +117,56 @@ export class RetirementService {
       monthlyRealReturn,
     };
   }
+
+  // Alocação alvo vs. real sobre o patrimônio investível (financeiro + VP de recebíveis).
+  // Imóveis ficam fora: rebalancear imóvel não é decisão de tela, é decisão de anos.
+  async rebalance(userId: string) {
+    const plan = await this.prisma.retirementPlan.findUnique({ where: { userId } });
+    if (!plan) return null;
+
+    const [assets, receivables] = await Promise.all([
+      this.prisma.investmentAsset.findMany({ where: { deletedAt: null } }),
+      this.prisma.receivablePortfolio.findMany({ where: { deletedAt: null } }),
+    ]);
+
+    const byType: Record<string, number> = {};
+    for (const a of assets) {
+      byType[a.type] = (byType[a.type] || 0) + Number(a.currentValue);
+    }
+    const receivablesPV = receivables.reduce((s, r) => s + Number(r.presentValue), 0);
+
+    const classes = [
+      { key: 'RENDA_FIXA', label: 'Renda Fixa', actual: byType['RENDA_FIXA'] || 0, target: Number(plan.targetFixedIncome) },
+      { key: 'FII', label: 'FIIs', actual: byType['FII'] || 0, target: Number(plan.targetFii) },
+      { key: 'ACAO', label: 'Ações', actual: byType['ACAO'] || 0, target: Number(plan.targetStocks) },
+      { key: 'RECEBIVEIS', label: 'Recebíveis', actual: receivablesPV + (byType['RECEBIVEIS'] || 0), target: Number(plan.targetReceivables) },
+      { key: 'CAIXA', label: 'Liquidez / Caixa', actual: byType['CAIXA'] || 0, target: Number(plan.targetLiquidity) },
+      { key: 'OUTROS', label: 'Outros (Previdência, COE)', actual: (byType['PREVIDENCIA'] || 0) + (byType['COE'] || 0), target: 0 },
+    ];
+
+    const total = classes.reduce((s, c) => s + c.actual, 0);
+    const targetSum = classes.reduce((s, c) => s + c.target, 0);
+
+    const rows = classes.map(c => {
+      const actualPct = total > 0 ? (c.actual / total) * 100 : 0;
+      const deviation = actualPct - c.target;
+      // Valor a mover para atingir a meta (positivo = comprar, negativo = vender)
+      const amountToMove = total > 0 ? ((c.target - actualPct) / 100) * total : 0;
+      return {
+        ...c,
+        actualPct: Number(actualPct.toFixed(1)),
+        deviation: Number(deviation.toFixed(1)),
+        amountToMove: Math.round(amountToMove),
+      };
+    });
+
+    return {
+      total,
+      targetSum: Number(targetSum.toFixed(1)),
+      targetSumOk: Math.abs(targetSum - 100) < 0.01,
+      rows,
+      // banda de tolerância usual em family offices: só age quando desvio > 5 p.p.
+      rebalanceBand: 5,
+    };
+  }
 }

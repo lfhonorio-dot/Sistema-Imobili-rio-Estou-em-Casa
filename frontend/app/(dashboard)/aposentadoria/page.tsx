@@ -36,6 +36,7 @@ interface RetirementData {
 
 export default function AposentadoriaPage() {
   const [data, setData] = useState<RetirementData>({ plan: null, simulation: null });
+  const [rebalance, setRebalance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -43,12 +44,14 @@ export default function AposentadoriaPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [plan, simulation] = await Promise.all([
+      const [plan, simulation, reb] = await Promise.all([
         api.retirement.get().catch(() => null),
         api.retirement.simulation().catch(() => null),
+        api.retirement.rebalance().catch(() => null),
       ]);
       const result = { plan, simulation };
       setData(result);
+      setRebalance(reb);
       if (plan) setForm({ ...plan });
     } catch {}
     setLoading(false);
@@ -65,6 +68,11 @@ export default function AposentadoriaPage() {
         expectedCdi: parseFloat(form.expectedCdi || '10.5'),
         safeWithdrawalRate: parseFloat(form.safeWithdrawalRate || '4.0'),
         lifeExpectancy: parseInt(form.lifeExpectancy || '85'),
+        targetFixedIncome: parseFloat(form.targetFixedIncome || '50'),
+        targetFii: parseFloat(form.targetFii || '22.5'),
+        targetStocks: parseFloat(form.targetStocks || '12.5'),
+        targetReceivables: parseFloat(form.targetReceivables || '12.5'),
+        targetLiquidity: parseFloat(form.targetLiquidity || '7.5'),
       };
       await api.retirement.save(body);
       setEditing(false);
@@ -159,6 +167,60 @@ export default function AposentadoriaPage() {
             </div>
           </div>
 
+          {rebalance?.rows && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+                <h3 style={{ marginTop: 0, fontSize: 15 }}>⚖️ Rebalanceamento — Alvo vs. Real</h3>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  Base: {formatBRL(rebalance.total)} (financeiro + recebíveis)
+                </span>
+              </div>
+              {!rebalance.targetSumOk && (
+                <div style={{ fontSize: 12, color: '#F59E0B', marginBottom: 10 }}>
+                  ⚠️ Suas metas somam {rebalance.targetSum}% — ajuste no plano para totalizar 100%.
+                </div>
+              )}
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['Classe', 'Meta', 'Atual', 'Desvio', 'Ação sugerida'].map(h => (
+                      <th key={h} style={{ textAlign: h === 'Classe' ? 'left' : 'right', padding: '6px 10px', fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rebalance.rows.map((r: any) => {
+                    const outOfBand = Math.abs(r.deviation) > rebalance.rebalanceBand && r.target > 0;
+                    const devColor = outOfBand ? (r.deviation > 0 ? '#F59E0B' : '#EF4444') : 'var(--muted)';
+                    return (
+                      <tr key={r.key} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 600 }}>{r.label}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 13, textAlign: 'right', color: 'var(--muted)' }}>{r.target > 0 ? `${r.target}%` : '—'}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 13, textAlign: 'right', fontWeight: 600 }}>{r.actualPct}%</td>
+                        <td style={{ padding: '8px 10px', fontSize: 13, textAlign: 'right', fontWeight: 700, color: devColor }}>
+                          {r.target > 0 ? `${r.deviation > 0 ? '+' : ''}${r.deviation} p.p.` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px', fontSize: 13, textAlign: 'right' }}>
+                          {r.target > 0 && outOfBand ? (
+                            <span style={{ color: r.amountToMove > 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
+                              {r.amountToMove > 0 ? 'Aportar ' : 'Reduzir '}{formatBRL(Math.abs(r.amountToMove))}
+                            </span>
+                          ) : r.target > 0 ? (
+                            <span style={{ color: 'var(--muted)' }}>Dentro da banda</span>
+                          ) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10 }}>
+                Banda de tolerância: ±{rebalance.rebalanceBand} p.p. — desvios menores não justificam movimentação (custos e impostos superam o ganho).
+                Dica: rebalanceie preferencialmente com aportes novos, evitando vender e realizar IR.
+              </div>
+            </div>
+          )}
+
           {sim?.scenarios && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
             {sim.scenarios.map((s: any, i: number) => (
@@ -213,6 +275,11 @@ export default function AposentadoriaPage() {
                 { key: 'expectedCdi', label: 'CDI Esperado (% a.a.)', type: 'number' },
                 { key: 'safeWithdrawalRate', label: 'Taxa Segura de Retirada (% a.a.)', type: 'number' },
                 { key: 'lifeExpectancy', label: 'Expectativa de Vida (anos)', type: 'number' },
+                { key: 'targetFixedIncome', label: 'Meta Renda Fixa (%)', type: 'number' },
+                { key: 'targetFii', label: 'Meta FIIs (%)', type: 'number' },
+                { key: 'targetStocks', label: 'Meta Ações (%)', type: 'number' },
+                { key: 'targetReceivables', label: 'Meta Recebíveis (%)', type: 'number' },
+                { key: 'targetLiquidity', label: 'Meta Liquidez/Caixa (%)', type: 'number' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>{f.label}</label>

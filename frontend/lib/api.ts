@@ -86,6 +86,7 @@ export const api = {
     update: (id: string, data: any) => fetchAPI(`/retirement/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     save: (data: any) => fetchAPI('/retirement', { method: 'POST', body: JSON.stringify(data) }),
     simulation: () => fetchAPI('/retirement/simulation'),
+    rebalance: () => fetchAPI('/retirement/rebalance'),
   },
   snapshots: {
     list: () => fetchAPI('/snapshots'),

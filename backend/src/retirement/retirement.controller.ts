@@ -15,4 +15,7 @@ export class RetirementController {
 
   @Get('simulation')
   simulate(@Request() req: any) { return this.service.simulate(req.user.id); }
+
+  @Get('rebalance')
+  rebalance(@Request() req: any) { return this.service.rebalance(req.user.id); }
 }
