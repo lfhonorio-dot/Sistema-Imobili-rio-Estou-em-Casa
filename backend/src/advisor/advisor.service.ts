@@ -70,6 +70,17 @@ export class AdvisorService {
       financialByType: Object.entries(byType).map(([type, value]) => ({
         type, value, pct: totalPatrimony > 0 ? (Number(value) / totalPatrimony * 100).toFixed(1) : 0,
       })),
+      // Concentração de renda fixa por emissor (cobertura FGC: R$ 250 mil por instituição)
+      issuerConcentration: (() => {
+        const byIssuer: Record<string, number> = {};
+        for (const a of assets.filter(x => x.type === 'RENDA_FIXA')) {
+          const issuer = (a.issuer || 'Emissor não informado').trim();
+          byIssuer[issuer] = (byIssuer[issuer] || 0) + Number(a.currentValue);
+        }
+        return Object.entries(byIssuer).map(([issuer, total]) => ({
+          issuer, total, aboveFgcLimit: total > 250000, excessOverFgc: Math.max(0, total - 250000),
+        }));
+      })(),
       assets: assets.map(a => ({
         type: a.type, name: a.name, ticker: a.ticker, issuer: a.issuer,
         investedAmount: Number(a.investedAmount), currentValue: Number(a.currentValue),

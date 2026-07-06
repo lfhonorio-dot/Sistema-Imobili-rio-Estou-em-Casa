@@ -75,8 +75,12 @@ export default function DashboardPage() {
         <div style={{ marginBottom: '1.5rem' }}>
           <div className="section-title">⚠️ Alertas</div>
           {alerts.map((a: any, i: number) => (
-            <div key={i} className={`alert-box ${a.severity === 'warning' ? 'alert-warning' : 'alert-info'}`}>
-              {a.message}
+            <div
+              key={i}
+              className={`alert-box ${a.severity === 'warning' ? 'alert-warning' : 'alert-info'}`}
+              style={a.severity === 'danger' ? { borderColor: '#EF4444', background: 'rgba(239,68,68,0.08)', color: '#FCA5A5' } : undefined}
+            >
+              {a.severity === 'danger' ? '🚨 ' : ''}{a.message}
             </div>
           ))}
         </div>

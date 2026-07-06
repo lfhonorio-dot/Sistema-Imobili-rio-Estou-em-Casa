@@ -80,13 +80,14 @@ export class DashboardService {
     const now = new Date();
     const in60Days = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
 
-    const [vacantProps, maturingAssets, portfolios] = await Promise.all([
+    const [vacantProps, maturingAssets, portfolios, fixedIncomeAssets] = await Promise.all([
       this.prisma.property.findMany({ where: { deletedAt: null, classification: 'PARA_RENDA', rentStatus: 'VAGO' } }),
       this.prisma.investmentAsset.findMany({ where: { deletedAt: null, maturityDate: { gte: now, lte: in60Days } } }),
       this.prisma.receivablePortfolio.findMany({
         where: { deletedAt: null },
         include: { monthlyHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 4 } },
       }),
+      this.prisma.investmentAsset.findMany({ where: { deletedAt: null, type: 'RENDA_FIXA' } }),
     ]);
 
     for (const p of vacantProps) {
@@ -104,6 +105,36 @@ export class DashboardService {
           alerts.push({ type: 'RECEBIVEIS', severity: 'warning', message: `Carteira "${p.name}": queda >10% no recebimento` });
         }
       }
+    }
+
+    // FGC: cobertura de R$ 250 mil por CPF por instituição (CDB/LCI/LCA).
+    // CRI, CRA, debêntures e Tesouro Direto NÃO têm cobertura FGC — a checagem
+    // por emissor vale como alerta de concentração em qualquer caso.
+    const FGC_LIMIT = 250_000;
+    const FGC_GLOBAL_CAP = 1_000_000; // teto global por CPF a cada 4 anos
+    const byIssuer: Record<string, number> = {};
+    for (const a of fixedIncomeAssets) {
+      const issuer = (a.issuer || 'Emissor não informado').trim();
+      byIssuer[issuer] = (byIssuer[issuer] || 0) + Number(a.currentValue);
+    }
+    let totalFixedIncome = 0;
+    for (const [issuer, total] of Object.entries(byIssuer)) {
+      totalFixedIncome += total;
+      if (total > FGC_LIMIT) {
+        const excess = total - FGC_LIMIT;
+        alerts.push({
+          type: 'FGC',
+          severity: 'danger',
+          message: `Exposição de ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} ao emissor "${issuer}" — ${excess.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} acima da cobertura do FGC (R$ 250 mil por instituição)`,
+        });
+      }
+    }
+    if (totalFixedIncome > FGC_GLOBAL_CAP) {
+      alerts.push({
+        type: 'FGC',
+        severity: 'warning',
+        message: `Renda fixa total de ${totalFixedIncome.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} — o FGC cobre no máximo R$ 1 milhão por CPF a cada 4 anos, somando todas as instituições`,
+      });
     }
 
     return alerts;
