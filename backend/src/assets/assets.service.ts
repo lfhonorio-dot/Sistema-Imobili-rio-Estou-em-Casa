@@ -1,28 +1,99 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+// Tabela regressiva de IR para renda fixa (prazo total da aplicação)
+function irRateByDays(days: number): number {
+  if (days <= 180) return 0.225;
+  if (days <= 360) return 0.20;
+  if (days <= 720) return 0.175;
+  return 0.15;
+}
+
 @Injectable()
 export class AssetsService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(query: { type?: string; broker?: string; search?: string }) {
-    return this.prisma.investmentAsset.findMany({
-      where: {
-        deletedAt: null,
-        ...(query.type && { type: query.type as any }),
-        ...(query.broker && { broker: query.broker }),
-        ...(query.search && {
-          OR: [
-            { name: { contains: query.search, mode: 'insensitive' } },
-            { ticker: { contains: query.search, mode: 'insensitive' } },
-            { issuer: { contains: query.search, mode: 'insensitive' } },
-          ],
-        }),
-      },
-      include: {
-        dividendHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 12 },
-      },
-      orderBy: { currentValue: 'desc' },
+    const [assets, dividendSums, plan] = await Promise.all([
+      this.prisma.investmentAsset.findMany({
+        where: {
+          deletedAt: null,
+          ...(query.type && { type: query.type as any }),
+          ...(query.broker && { broker: query.broker }),
+          ...(query.search && {
+            OR: [
+              { name: { contains: query.search, mode: 'insensitive' } },
+              { ticker: { contains: query.search, mode: 'insensitive' } },
+              { issuer: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }),
+        },
+        include: {
+          dividendHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 12 },
+        },
+        orderBy: { currentValue: 'desc' },
+      }),
+      // Soma de TODOS os proventos por ativo (o include acima traz só os últimos 12)
+      this.prisma.dividendHistory.groupBy({ by: ['assetId'], _sum: { totalAmount: true } }),
+      this.prisma.retirementPlan.findFirst(),
+    ]);
+
+    const dividendsByAsset: Record<string, number> = {};
+    for (const d of dividendSums) dividendsByAsset[d.assetId] = Number(d._sum.totalAmount || 0);
+
+    const expectedIpca = Number(plan?.expectedIpca ?? 4.5);
+    const expectedCdi = Number(plan?.expectedCdi ?? 10.5);
+    const now = Date.now();
+
+    return assets.map(a => {
+      const invested = Number(a.investedAmount);
+      const current = Number(a.currentValue);
+      const totalDividends = dividendsByAsset[a.id] || 0;
+
+      // Retorno TOTAL: valorização + proventos recebidos
+      const totalReturnPct = invested > 0 ? ((current + totalDividends - invested) / invested) * 100 : null;
+
+      // Anualização pelo tempo de carteira (só a partir de 6 meses, para não distorcer)
+      const startDate = a.applicationDate || a.createdAt;
+      const years = (now - new Date(startDate).getTime()) / (365.25 * 86400000);
+      const annualizedReturnPct = totalReturnPct !== null && years >= 0.5
+        ? (Math.pow((current + totalDividends) / invested, 1 / years) - 1) * 100
+        : null;
+
+      // Taxa líquida equivalente (renda fixa): rendimento nominal esperado após IR,
+      // permitindo comparar isentos (LCA/LCI) com tributados (CDB) na mesma régua
+      let grossAnnualRate: number | null = null;
+      let netAnnualRate: number | null = null;
+      if (a.type === 'RENDA_FIXA' && a.rate !== null) {
+        const rate = Number(a.rate);
+        switch (a.indexer) {
+          case 'PREFIXADO': grossAnnualRate = rate; break;
+          case 'IPCA': case 'IGPM': grossAnnualRate = expectedIpca + rate; break;
+          // CDI/SELIC: taxa > 20 é lida como "% do CDI" (ex.: 110); senão, "CDI + x%"
+          case 'CDI': case 'SELIC':
+            grossAnnualRate = rate > 20 ? (expectedCdi * rate) / 100 : expectedCdi + rate;
+            break;
+          default: grossAnnualRate = rate;
+        }
+        if (a.isIRExempt) {
+          netAnnualRate = grossAnnualRate;
+        } else {
+          const termDays = a.applicationDate && a.maturityDate
+            ? (new Date(a.maturityDate).getTime() - new Date(a.applicationDate).getTime()) / 86400000
+            : 721; // sem datas, assume alíquota mínima de 15%
+          netAnnualRate = grossAnnualRate * (1 - irRateByDays(termDays));
+        }
+      }
+
+      return {
+        ...a,
+        totalDividends,
+        totalReturnPct: totalReturnPct !== null ? Number(totalReturnPct.toFixed(2)) : null,
+        annualizedReturnPct: annualizedReturnPct !== null ? Number(annualizedReturnPct.toFixed(2)) : null,
+        holdingYears: Number(years.toFixed(2)),
+        grossAnnualRate: grossAnnualRate !== null ? Number(grossAnnualRate.toFixed(2)) : null,
+        netAnnualRate: netAnnualRate !== null ? Number(netAnnualRate.toFixed(2)) : null,
+      };
     });
   }
 

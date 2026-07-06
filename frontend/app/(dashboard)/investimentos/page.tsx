@@ -83,15 +83,16 @@ export default function InvestimentosPage() {
                 <th>Emissor / Broker</th>
                 <th style={{ textAlign: 'right' }}>Aplicado</th>
                 <th style={{ textAlign: 'right' }}>Atual</th>
-                <th style={{ textAlign: 'right' }}>Rentab.</th>
-                <th>Indexador / DY</th>
+                <th style={{ textAlign: 'right' }}>Rentab. Total</th>
+                <th>Indexador / Taxa Líq.</th>
                 <th>Vencimento</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {assets.map((a: any) => {
-                const ret = getReturn(a);
+                // Retorno total (valorização + proventos) calculado no backend; fallback local
+                const ret = a.totalReturnPct ?? getReturn(a);
                 return (
                   <tr key={a.id}>
                     <td>
@@ -106,11 +107,24 @@ export default function InvestimentosPage() {
                     <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{a.issuer || a.broker || '-'}</td>
                     <td style={{ textAlign: 'right', color: '#94A3B8' }}>{formatBRL(a.investedAmount)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBRL(a.currentValue)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: ret >= 0 ? '#22C55E' : '#EF4444' }}>
-                      {ret >= 0 ? '+' : ''}{ret.toFixed(2)}%
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700, color: ret >= 0 ? '#22C55E' : '#EF4444' }}>
+                        {ret >= 0 ? '+' : ''}{Number(ret).toFixed(2)}%
+                      </div>
+                      {a.annualizedReturnPct != null && (
+                        <div style={{ color: '#94A3B8', fontSize: '0.7rem' }}>{Number(a.annualizedReturnPct).toFixed(2)}% a.a.</div>
+                      )}
+                      {a.totalDividends > 0 && (
+                        <div style={{ color: '#8B5CF6', fontSize: '0.7rem' }}>+{formatBRL(a.totalDividends)} prov.</div>
+                      )}
                     </td>
                     <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>
-                      {a.indexer ? `${a.indexer}${a.rate ? `+${Number(a.rate).toFixed(2)}%` : ''}` : a.monthlyDY ? `DY ${Number(a.monthlyDY).toFixed(2)}%` : '-'}
+                      <div>{a.indexer ? `${a.indexer}${a.rate ? `+${Number(a.rate).toFixed(2)}%` : ''}` : a.monthlyDY ? `DY ${Number(a.monthlyDY).toFixed(2)}%` : '-'}</div>
+                      {a.netAnnualRate != null && (
+                        <div style={{ color: a.isIRExempt ? '#22C55E' : '#C9A227', fontSize: '0.7rem' }}>
+                          líq. {Number(a.netAnnualRate).toFixed(2)}% a.a.{a.isIRExempt ? ' (isento)' : ''}
+                        </div>
+                      )}
                     </td>
                     <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{formatDate(a.maturityDate)}</td>
                     <td>
