@@ -1,0 +1,1 @@
+ALTER TABLE "RetirementPlan" ADD COLUMN "safeWithdrawalRate" DECIMAL(10,4) NOT NULL DEFAULT 4.0;

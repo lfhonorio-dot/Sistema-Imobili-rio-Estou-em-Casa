@@ -63,6 +63,7 @@ export default function AposentadoriaPage() {
         estimatedMonthlyExpenses: parseFloat(form.estimatedMonthlyExpenses),
         expectedIpca: parseFloat(form.expectedIpca || '4.5'),
         expectedCdi: parseFloat(form.expectedCdi || '10.5'),
+        safeWithdrawalRate: parseFloat(form.safeWithdrawalRate || '4.0'),
         lifeExpectancy: parseInt(form.lifeExpectancy || '85'),
       };
       await api.retirement.save(body);
@@ -81,7 +82,9 @@ export default function AposentadoriaPage() {
 
   const projectionData = sim ? (() => {
     const points = [];
-    const monthly = 0.006;
+    // Retorno real mensal vindo do backend (CDI líquido deflacionado pelo IPCA);
+    // a projeção fica em valores de hoje, coerente com o Número FI.
+    const monthly = sim?.monthlyRealReturn ?? 0.002;
     let patrimony = currentPatrimony;
     const contribution = plan?.monthlyContribution || 0;
     for (let m = 0; m <= 120; m += 6) {
@@ -117,10 +120,10 @@ export default function AposentadoriaPage() {
         <>
           <div className="kpi-grid" style={{ marginBottom: 24 }}>
             {[
-              { label: 'Patrimônio Atual', value: formatBRL(currentPatrimony) },
-              { label: 'Número FI', value: formatBRL(fiNumber), sub: `${formatPercent(fiProgress)} atingido` },
-              { label: 'Renda Passiva Atual', value: formatBRL(passiveIncome) + '/mês' },
-              { label: 'Taxa de Cobertura', value: formatPercent(sim?.coverageRate || 0) },
+              { label: 'Patrimônio p/ Retirada', value: formatBRL(currentPatrimony), sub: 'Financeiro + VP recebíveis' },
+              { label: 'Número FI', value: formatBRL(fiNumber), sub: `${formatPercent(fiProgress)} atingido · TSR ${sim?.safeWithdrawalRate ?? 4}% a.a.` },
+              { label: 'Renda Passiva Atual', value: formatBRL(passiveIncome) + '/mês', sub: sim?.monthlyRent ? `Aluguéis: ${formatBRL(sim.monthlyRent)}/mês` : undefined },
+              { label: 'Taxa de Cobertura', value: formatPercent(sim?.coverageRate || 0), sub: 'Renda passiva / despesas' },
             ].map(k => (
               <div key={k.label} className="kpi-card">
                 <div style={{ color: 'var(--muted)', fontSize: 13 }}>{k.label}</div>
@@ -161,10 +164,14 @@ export default function AposentadoriaPage() {
             {sim.scenarios.map((s: any, i: number) => (
               <div key={s.name || i} className="card">
                 <div style={{ fontSize: 12, color: scenarioColors[i], fontWeight: 600, marginBottom: 4 }}>{(s.name || s.label || '').toUpperCase()}</div>
-                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>IPCA {s.ipcaScenario || formatPercent((s.inflationRate || 0) * 100)}% a.a.</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
+                  IPCA {s.ipcaScenario}% a.a.{s.realReturn != null ? ` · retorno real ${s.realReturn}% a.a.` : ''}
+                </div>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>Sustentabilidade</div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{s.sustainabilityYears || '50'}+ anos</div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>
+                    {s.perpetual ? 'Perpétua (50+ anos)' : `${s.sustainabilityYears} anos`}
+                  </div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>Renda Suportada</div>
@@ -204,6 +211,7 @@ export default function AposentadoriaPage() {
                 { key: 'estimatedMonthlyExpenses', label: 'Despesas Mensais Estimadas (R$)', type: 'number' },
                 { key: 'expectedIpca', label: 'IPCA Esperado (% a.a.)', type: 'number' },
                 { key: 'expectedCdi', label: 'CDI Esperado (% a.a.)', type: 'number' },
+                { key: 'safeWithdrawalRate', label: 'Taxa Segura de Retirada (% a.a.)', type: 'number' },
                 { key: 'lifeExpectancy', label: 'Expectativa de Vida (anos)', type: 'number' },
               ].map(f => (
                 <div key={f.key}>
@@ -214,7 +222,7 @@ export default function AposentadoriaPage() {
               ))}
             </div>
             <div style={{ background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 6, padding: 12, marginTop: 12, fontSize: 12, color: 'var(--muted)' }}>
-              💡 O Número FI é calculado com base no seu patrimônio atual vs. o necessário para gerar sua renda desejada com segurança.
+              💡 O Número FI usa a Taxa Segura de Retirada sobre a <strong>lacuna de renda</strong> (renda desejada menos aluguéis, que são corrigidos por IGPM/IPCA). Recebíveis entram como patrimônio pelo valor presente — corrigidos pelo IPCA, mantêm valor real. Padrão de mercado: 3,5–4% a.a. para aposentadorias longas.
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
               <button className="btn-outline" onClick={() => setEditing(false)}>Cancelar</button>

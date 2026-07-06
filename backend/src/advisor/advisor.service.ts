@@ -93,12 +93,24 @@ export class AdvisorService {
         recentHistory: r.monthlyHistory.map(h => ({ year: h.year, month: h.month, expected: Number(h.expectedAmount), received: Number(h.receivedAmount) })),
       })),
       cashFlow: { totalReceitas12m: totalReceitas, totalDespesas12m: totalDespesas, saldo12m: totalReceitas - totalDespesas, monthlyRent },
-      retirement: retirement ? {
-        desiredMonthlyIncome: Number(retirement.desiredMonthlyIncome),
-        estimatedMonthlyExpenses: Number(retirement.estimatedMonthlyExpenses),
-        fiNumber: Number(retirement.desiredMonthlyIncome) * 200,
-        coverage: totalPatrimony / (Number(retirement.desiredMonthlyIncome) * 200) * 100,
-      } : null,
+      retirement: retirement ? (() => {
+        // Mesma premissa da tela de Aposentadoria: Número FI = lacuna de renda anual
+        // (renda desejada - aluguéis, corrigidos por IPCA/IGPM) / taxa segura de retirada.
+        // Recebíveis entram como patrimônio (VP), não como renda perpétua.
+        const swr = Number((retirement as any).safeWithdrawalRate ?? 4.0);
+        const desired = Number(retirement.desiredMonthlyIncome);
+        const incomeGap = Math.max(0, desired - monthlyRent);
+        const fiNumber = swr > 0 ? (incomeGap * 12) / (swr / 100) : 0;
+        const withdrawalPatrimony = totalFinancial + totalReceivables;
+        return {
+          desiredMonthlyIncome: desired,
+          estimatedMonthlyExpenses: Number(retirement.estimatedMonthlyExpenses),
+          safeWithdrawalRate: swr,
+          incomeGapAfterRent: incomeGap,
+          fiNumber,
+          fiProgress: fiNumber > 0 ? (withdrawalPatrimony / fiNumber) * 100 : 100,
+        };
+      })() : null,
       snapshots: snapshots.slice(0, 12).map(s => ({
         year: s.year, month: s.month, totalPatrimony: Number(s.totalPatrimony),
       })),
