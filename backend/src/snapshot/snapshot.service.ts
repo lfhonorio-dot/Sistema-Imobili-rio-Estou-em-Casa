@@ -1,9 +1,27 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SnapshotService {
+  private readonly logger = new Logger(SnapshotService.name);
+
   constructor(private prisma: PrismaService) {}
+
+  // Snapshot automático no dia 1º de cada mês às 03h (e reforço no dia 15,
+  // caso o computador estivesse desligado no dia 1º — o upsert evita duplicatas)
+  @Cron('0 3 1,15 * *')
+  async autoSnapshot() {
+    const users = await this.prisma.user.findMany({ select: { id: true } });
+    for (const u of users) {
+      try {
+        await this.createSnapshot(u.id);
+        this.logger.log(`Snapshot mensal criado para usuário ${u.id}`);
+      } catch (e: any) {
+        this.logger.error(`Falha no snapshot do usuário ${u.id}: ${e.message}`);
+      }
+    }
+  }
 
   async getAll(userId: string) {
     return this.prisma.monthlySnapshot.findMany({
@@ -49,10 +67,11 @@ export class SnapshotService {
       monthlyPassiveIncome, monthlyExpenses,
     };
 
+    const { userId: _u, month: _m, year: _y, ...updateData } = data;
     return this.prisma.monthlySnapshot.upsert({
       where: { userId_year_month: { userId, year, month } },
       create: data,
-      update: { totalPatrimony, monthlyPassiveIncome, monthlyExpenses },
+      update: updateData,
     });
   }
 }

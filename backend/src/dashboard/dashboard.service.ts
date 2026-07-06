@@ -68,10 +68,38 @@ export class DashboardService {
 
     const evolution = [...snapshots].reverse();
 
+    // Reserva de emergência: liquidez imediata (CAIXA + renda fixa D0/D1)
+    // vs. despesa mensal média dos últimos 3 meses fechados
+    const liquidAssets = assets
+      .filter(a => a.type === 'CAIXA' || (a.type === 'RENDA_FIXA' && (a.liquidity === 'D0' || a.liquidity === 'D1')))
+      .reduce((s, a) => s + Number(a.currentValue), 0);
+
+    const threeMonthsAgo = new Date(currentYear, currentMonth - 4, 1);
+    const recentExpenses = await this.prisma.cashFlowEntry.findMany({
+      where: {
+        userId,
+        type: 'DESPESA',
+        OR: [
+          { year: threeMonthsAgo.getFullYear(), month: { gte: threeMonthsAgo.getMonth() + 1 } },
+          { year: { gt: threeMonthsAgo.getFullYear() } },
+        ],
+        NOT: { year: currentYear, month: currentMonth }, // exclui mês corrente (incompleto)
+      },
+    });
+    const monthsWithData = new Set(recentExpenses.map(e => `${e.year}-${e.month}`)).size;
+    const avgMonthlyExpenses = monthsWithData > 0
+      ? recentExpenses.reduce((s, e) => s + Number(e.amount), 0) / monthsWithData
+      : 0;
+    const emergencyReserve = {
+      liquidAssets,
+      avgMonthlyExpenses,
+      monthsCovered: avgMonthlyExpenses > 0 ? liquidAssets / avgMonthlyExpenses : null,
+    };
+
     return {
       totalPatrimony, financialTotal, propertiesRent, propertiesOwn, propertiesSale, receivablesTotal,
       monthlyPassiveIncome: totalMonthlyPassiveIncome, monthlyRent, monthlyReceivables, monthlyFIIIncome, monthlyFixedIncome,
-      byType, allocationActual, evolution, currentMonth, currentYear,
+      byType, allocationActual, evolution, currentMonth, currentYear, emergencyReserve,
     };
   }
 

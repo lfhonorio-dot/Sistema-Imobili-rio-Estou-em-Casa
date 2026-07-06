@@ -64,10 +64,17 @@ export default function DashboardPage() {
       <div className="kpi-grid">
         <KPICard title="Patrimônio Total" value={formatBRL(data.totalPatrimony)} color="#C9A227" />
         <KPICard title="Renda Passiva Mensal" value={formatBRL(data.monthlyPassiveIncome)} color="#22C55E"
-          sub={`Cobertura: ${data.monthlyPassiveIncome && data.totalPatrimony ? ((data.monthlyPassiveIncome / (data.totalPatrimony * 0.006)) * 100).toFixed(0) + '%' : '-'}`} />
+          sub="Aluguéis + recebíveis + rendimentos" />
         <KPICard title="Aluguéis Mensais" value={formatBRL(data.monthlyRent)} sub="Renda de imóveis" />
         <KPICard title="Recebíveis Mensais" value={formatBRL(data.monthlyReceivables)} sub="Carteiras de loteamento" />
-        <KPICard title="Rendimentos FIIs" value={formatBRL(data.monthlyFIIIncome)} sub="Distribuições mensais" />
+        <KPICard
+          title="Reserva de Emergência"
+          value={data.emergencyReserve?.monthsCovered != null ? `${data.emergencyReserve.monthsCovered.toFixed(1)} meses` : '—'}
+          color={data.emergencyReserve?.monthsCovered == null ? undefined : data.emergencyReserve.monthsCovered < 6 ? '#EF4444' : data.emergencyReserve.monthsCovered <= 12 ? '#22C55E' : '#C9A227'}
+          sub={data.emergencyReserve?.monthsCovered != null
+            ? `${formatBRL(data.emergencyReserve.liquidAssets)} em D0/D1 · ideal: 6–12 meses`
+            : 'Lance despesas no Fluxo de Caixa para calcular'}
+        />
       </div>
 
       {/* Alerts */}
