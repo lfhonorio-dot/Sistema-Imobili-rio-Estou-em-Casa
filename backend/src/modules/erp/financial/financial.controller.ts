@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { FinancialService } from './financial.service';
+import { DunningService } from './dunning.service';
 import {
   CreateFinancialEntryDto,
   UpdateFinancialEntryDto,
@@ -31,7 +32,16 @@ import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
 @Controller('financial')
 export class FinancialController {
-  constructor(private readonly financialService: FinancialService) {}
+  constructor(
+    private readonly financialService: FinancialService,
+    private readonly dunning: DunningService,
+  ) {}
+
+  // Dispara manualmente a régua de cobrança (o cron roda diariamente às 08h)
+  @Post('dunning/run')
+  runDunning() {
+    return this.dunning.run();
+  }
 
   // GET /financial/entries - lista lançamentos
   @Get('entries')
