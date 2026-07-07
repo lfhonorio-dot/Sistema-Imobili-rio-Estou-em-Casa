@@ -46,11 +46,24 @@ export class FiscalService {
     return { items, meta: { page: p, limit: l, total, pages: Math.ceil(total / l) } };
   }
 
+  // Base da API Focus NFe (env-gated): FOCUS_NFE_TOKEN + FOCUS_NFE_ENV
+  private focusBase(): string | null {
+    if (!process.env.FOCUS_NFE_TOKEN) return null;
+    return process.env.FOCUS_NFE_ENV === 'production'
+      ? 'https://api.focusnfe.com.br'
+      : 'https://homologacao.focusnfe.com.br';
+  }
+
+  private focusAuth(): string {
+    return 'Basic ' + Buffer.from(`${process.env.FOCUS_NFE_TOKEN}:`).toString('base64');
+  }
+
   async emitNfse(workspaceId: string, dto: EmitNfseDto) {
     const config = await this.getTaxConfig(workspaceId);
     const issRate = dto.issRate ?? config?.aliquotaISS ?? 5.0;
     const issAmount = (dto.amount * issRate) / 100;
     const netAmount = dto.issRetained ? dto.amount - issAmount : dto.amount;
+    const focus = this.focusBase();
 
     const nfse = await this.prisma.nfseRecord.create({
       data: {
@@ -65,15 +78,93 @@ export class FiscalService {
         issRate,
         issAmount,
         issRetained: dto.issRetained ?? false,
-        status: 'ISSUED',
-        issuedAt: new Date(),
+        // Com Focus: emissão assíncrona na prefeitura (PENDING até autorizar).
+        // Sem Focus: registro interno (comportamento anterior).
+        status: focus ? 'PENDING' : 'ISSUED',
+        issuedAt: focus ? null : new Date(),
         serie: config?.inscricaoMunicipal ? 'A' : null,
         gatewayResponse: {},
       },
     });
 
-    this.logger.log(`NFS-e emitida: ${nfse.id} R$${dto.amount}`);
+    if (focus) {
+      const takerDoc = dto.takerDocument.replace(/\D/g, '');
+      const body = {
+        data_emissao: new Date().toISOString(),
+        prestador: {
+          cnpj: dto.issuerCnpj.replace(/\D/g, ''),
+          inscricao_municipal: config?.inscricaoMunicipal ?? undefined,
+        },
+        tomador: {
+          ...(takerDoc.length > 11 ? { cnpj: takerDoc } : { cpf: takerDoc }),
+          razao_social: dto.takerName,
+        },
+        servico: {
+          aliquota: issRate,
+          discriminacao: dto.description,
+          iss_retido: dto.issRetained ?? false,
+          item_lista_servico: dto.serviceCode,
+          valor_servicos: dto.amount,
+        },
+      };
+      try {
+        const res = await fetch(`${focus}/v2/nfse?ref=${nfse.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: this.focusAuth() },
+          body: JSON.stringify(body),
+        });
+        const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!res.ok && res.status !== 202) {
+          throw new Error((json as any)?.mensagem ?? `Focus NFe HTTP ${res.status}`);
+        }
+        await this.prisma.nfseRecord.update({
+          where: { id: nfse.id },
+          data: { gatewayResponse: json as any },
+        });
+        this.logger.log(`NFS-e enviada à prefeitura (Focus): ${nfse.id}`);
+      } catch (err) {
+        await this.prisma.nfseRecord.update({
+          where: { id: nfse.id },
+          data: { status: 'ERROR', gatewayResponse: { error: (err as Error).message } as any },
+        });
+        throw new BadRequestException(`Emissão NFS-e falhou: ${(err as Error).message}`);
+      }
+    } else {
+      this.logger.log(`NFS-e registrada internamente: ${nfse.id} R$${dto.amount}`);
+    }
+
     return { ...nfse, netAmount };
+  }
+
+  // Consulta o status da NFS-e no Focus e atualiza o registro
+  async checkNfseStatus(workspaceId: string, id: string) {
+    const nfse = await this.prisma.nfseRecord.findFirst({ where: { id, workspaceId } });
+    if (!nfse) throw new NotFoundException('NFS-e não encontrada');
+    const focus = this.focusBase();
+    if (!focus) return nfse;
+
+    const res = await fetch(`${focus}/v2/nfse/${id}`, {
+      headers: { Authorization: this.focusAuth() },
+    });
+    const json = (await res.json().catch(() => ({}))) as any;
+    const statusMap: Record<string, string> = {
+      autorizado: 'ISSUED',
+      processando_autorizacao: 'PENDING',
+      erro_autorizacao: 'ERROR',
+      cancelado: 'CANCELLED',
+    };
+    return this.prisma.nfseRecord.update({
+      where: { id },
+      data: {
+        status: statusMap[json?.status] ?? nfse.status,
+        number: json?.numero ?? nfse.number,
+        verificationCode: json?.codigo_verificacao ?? nfse.verificationCode,
+        xmlUrl: json?.caminho_xml_nota_fiscal ? `${focus}${json.caminho_xml_nota_fiscal}` : nfse.xmlUrl,
+        pdfUrl: json?.url ?? nfse.pdfUrl,
+        issuedAt: json?.status === 'autorizado' ? new Date() : nfse.issuedAt,
+        gatewayResponse: json,
+      },
+    });
   }
 
   async cancelNfse(workspaceId: string, id: string) {

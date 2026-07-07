@@ -88,6 +88,15 @@ export class FiscalController {
     return this.service.emitNfse(workspaceId, dto);
   }
 
+  // Consulta/atualiza status da NFS-e na prefeitura (Focus NFe)
+  @Get('nfse/:id/status')
+  checkNfseStatus(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.service.checkNfseStatus(workspaceId, id);
+  }
+
   @Delete('nfse/:id')
   cancelNfse(
     @Headers('x-workspace-id') workspaceId: string,
