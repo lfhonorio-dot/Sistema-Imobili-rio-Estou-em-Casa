@@ -677,6 +677,7 @@ model Contract {
   // Locação
   rentalValue      Decimal?  @db.Decimal(15, 2)
   adjustmentIndex  String?   // IGPM, IPCA, IPC
+  lastAdjustedAt   DateTime? // último reajuste automático aplicado
   adjustmentMonth  Int?      // mês de reajuste
   dueDay           Int?      // dia de vencimento (1-31)
   lateFee          Decimal?  @db.Decimal(5, 2) // % multa atraso

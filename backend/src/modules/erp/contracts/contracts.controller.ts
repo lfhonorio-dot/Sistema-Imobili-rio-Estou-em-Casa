@@ -16,6 +16,7 @@ import {
 import { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { ContractsService } from './contracts.service';
+import { AdjustmentService } from './adjustment.service';
 import {
   CreateContractDto,
   UpdateContractDto,
@@ -35,7 +36,22 @@ import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
 @Controller('contracts')
 export class ContractsController {
-  constructor(private readonly contractsService: ContractsService) {}
+  constructor(
+    private readonly contractsService: ContractsService,
+    private readonly adjustment: AdjustmentService,
+  ) {}
+
+  // Reajuste de aluguel por índice — prévia dos elegíveis no mês
+  @Get('adjustments/preview')
+  previewAdjustments() {
+    return this.adjustment.preview();
+  }
+
+  // Dispara o reajuste manualmente (rate opcional em fração, ex.: 0.045)
+  @Post('adjustments/run')
+  runAdjustments(@Body() body: { rate?: number }) {
+    return this.adjustment.run(body?.rate);
+  }
 
   @Get()
   findAll(
