@@ -25,6 +25,7 @@ import {
   RequestSignatureDto,
 } from './contracts.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { Public } from '../../../common/decorators/public.decorator';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
 
@@ -56,6 +57,22 @@ export class ContractsController {
   @Get('expiring')
   findExpiring(@Headers('x-workspace-id') workspaceId: string) {
     return this.contractsService.findExpiring(workspaceId);
+  }
+
+  // Portal do Proprietário — extrato público por token (sem autenticação)
+  @Public()
+  @Get('owner-portal/:token')
+  getOwnerPortal(@Param('token') token: string) {
+    return this.contractsService.getOwnerPortalData(token);
+  }
+
+  // URL do portal do proprietário para compartilhar
+  @Get(':id/owner-portal-url')
+  getOwnerPortalUrl(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.contractsService.getOwnerPortalUrl(workspaceId, id);
   }
 
   @Get(':id')

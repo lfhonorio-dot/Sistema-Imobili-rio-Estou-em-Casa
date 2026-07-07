@@ -797,6 +797,54 @@ export class ContractsService {
     return { created: entries.length };
   }
 
+  // ── Portal do Proprietário (acesso público por token) ──────
+  // Token stateless: "<contractId>.<hmac>" — sem estado extra no banco.
+  private ownerPortalSignature(contractId: string): string {
+    const secret = process.env.HMAC_SECRET || 'homolog-hmac-secret';
+    return crypto.createHmac('sha256', secret).update(`owner-portal:${contractId}`).digest('hex').slice(0, 32);
+  }
+
+  async getOwnerPortalUrl(workspaceId: string, id: string) {
+    const contract = await this.prisma.contract.findFirst({
+      where: { id, workspaceId, deletedAt: null }, select: { id: true },
+    });
+    if (!contract) throw new NotFoundException('Contrato não encontrado');
+    const base = process.env.APP_URL || '';
+    const token = `${id}.${this.ownerPortalSignature(id)}`;
+    return { token, url: `${base}/owner-portal/${token}` };
+  }
+
+  async getOwnerPortalData(token: string) {
+    const [contractId, sig] = token.split('.');
+    if (!contractId || !sig) throw new NotFoundException('Link inválido');
+    const expected = this.ownerPortalSignature(contractId);
+    const a = Buffer.from(sig.padEnd(32, '0').slice(0, 32));
+    const b = Buffer.from(expected);
+    if (!crypto.timingSafeEqual(a, b)) throw new NotFoundException('Link inválido');
+
+    const contract = await this.prisma.contract.findFirst({
+      where: { id: contractId, deletedAt: null },
+      select: { workspaceId: true },
+    });
+    if (!contract) throw new NotFoundException('Contrato não encontrado');
+
+    const st = await this.getStatement(contract.workspaceId, contractId);
+    // Sanitiza para exposição pública: sem IDs internos além do essencial
+    return {
+      contract: st.contract,
+      property: st.property,
+      owner: { name: (st.owner as any)?.name },
+      summary: st.summary,
+      entries: (st.entries as any[]).map((e) => ({
+        description: e.description, category: e.category, type: e.type,
+        amount: e.amount, dueDate: e.dueDate, status: e.status, paidAt: e.paidAt,
+      })),
+      commissions: (st.commissions as any[]).map((c) => ({
+        rate: c.rate, amount: c.amount, status: c.status,
+      })),
+    };
+  }
+
   // Extrato de repasse do proprietário
   async getStatement(workspaceId: string, id: string) {
     const contract = await this.prisma.contract.findFirst({
