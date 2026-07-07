@@ -3,6 +3,7 @@ import {
   Injectable, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AsaasClient } from '../billing/asaas.client';
 import {
   CreateRecipientDto, CreateSplitRuleDto, ProcessSplitDto, SplitQueryDto,
 } from './split.dto';
@@ -11,7 +12,10 @@ import {
 export class SplitService {
   private readonly logger = new Logger(SplitService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private asaas: AsaasClient,
+  ) {}
 
   // ── RECEBEDORES ───────────────────────────────────────────
 
@@ -199,8 +203,53 @@ export class SplitService {
   async confirmSplitTransaction(workspaceId: string, id: string) {
     const tx = await this.prisma.splitTransaction.findFirst({
       where: { id, workspaceId },
+      include: { recipient: { select: { name: true, pixKey: true, pixKeyType: true, kycStatus: true } } },
     });
     if (!tx) throw new NotFoundException('Transação não encontrada');
+    if (tx.status === 'COMPLETED') return tx;
+
+    // Repasse REAL via PIX quando há gateway Asaas ativo e o recebedor tem
+    // chave PIX habilitada (KYC). Sem gateway: confirmação manual (controle).
+    const gateway = await this.prisma.paymentGatewayConfig.findFirst({
+      where: { workspaceId, provider: 'ASAAS', isActive: true, deletedAt: null },
+    });
+
+    if (gateway && tx.recipient?.pixKey) {
+      if (tx.recipient.kycStatus !== 'APPROVED') {
+        throw new BadRequestException(
+          `Recebedor ${tx.recipient.name} não está habilitado (KYC) para receber repasses.`,
+        );
+      }
+      try {
+        const creds = {
+          apiKey: this.asaas.decryptApiKey(gateway.apiKey),
+          environment: gateway.environment,
+        };
+        const transfer = await this.asaas.transferPix(creds, {
+          value: Number(tx.amount),
+          pixKey: tx.recipient.pixKey,
+          pixKeyType: tx.recipient.pixKeyType ?? 'RANDOM',
+          description: `Repasse de comissão — ${tx.recipient.name}`,
+          externalReference: `split-${tx.id}`, // idempotência por transação
+        });
+        return await this.prisma.splitTransaction.update({
+          where: { id },
+          data: {
+            status: 'COMPLETED',
+            processedAt: new Date(),
+            gatewayTransactionId: transfer.transferId,
+          },
+        });
+      } catch (err) {
+        await this.prisma.splitTransaction.update({
+          where: { id },
+          data: { status: 'FAILED', failReason: (err as Error).message?.slice(0, 500) },
+        });
+        throw err;
+      }
+    }
+
+    // Confirmação manual (sem gateway): registro de controle
     return this.prisma.splitTransaction.update({
       where: { id },
       data: { status: 'COMPLETED', processedAt: new Date() },

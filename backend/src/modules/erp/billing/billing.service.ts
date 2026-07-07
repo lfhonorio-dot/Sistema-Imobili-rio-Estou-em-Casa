@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AsaasClient } from './asaas.client';
 import {
   CreateGatewayConfigDto, GenerateBoletoDto, BoletoQueryDto,
   UploadCnabDto, GenerateCnabRemessaDto,
@@ -13,7 +14,10 @@ import {
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private asaas: AsaasClient,
+  ) {}
 
   // ── CONFIGURAÇÃO DE GATEWAY ──────────────────────────────
 
@@ -135,6 +139,87 @@ export class BillingService {
 
     // Normaliza vencimento para YYYY-MM-DD (helpers esperam só a data, sem horário)
     const dueDateOnly = dueDate.slice(0, 10);
+
+    // ── Emissão REAL via Asaas (env-gated: exige gateway ASAAS ativo) ──
+    if (gateway && gateway.provider === 'ASAAS' && gateway.isActive) {
+      if (!contactId) {
+        throw new BadRequestException('Informe o pagador (contato) para emitir o boleto no gateway.');
+      }
+      const contact = await this.prisma.contact.findFirst({
+        where: { id: contactId, workspaceId, deletedAt: null },
+        select: { name: true, cpf: true, cnpj: true, email: true },
+      });
+      if (!contact || !(contact.cpf || contact.cnpj)) {
+        throw new BadRequestException('O pagador precisa ter CPF/CNPJ cadastrado para emissão bancária.');
+      }
+
+      const creds = {
+        apiKey: this.asaas.decryptApiKey(gateway.apiKey),
+        environment: gateway.environment,
+      };
+      const customerId = await this.asaas.ensureCustomer(creds, {
+        name: contact.name,
+        cpfCnpj: (contact.cpf ?? contact.cnpj) as string,
+        email: contact.email,
+      });
+
+      // Split bancário na cobrança: recebedores com walletId Asaas cadastrado
+      let split: { walletId: string; percentualValue: number }[] | undefined;
+      if (contractId) {
+        const rules = await this.prisma.splitRule.findMany({
+          where: { workspaceId, contractId, isActive: true },
+          include: { recipient: { select: { gatewayRecipientId: true } } },
+        });
+        const withWallet = rules.filter((r) => r.recipient?.gatewayRecipientId);
+        if (withWallet.length) {
+          split = withWallet.map((r) => ({
+            walletId: r.recipient!.gatewayRecipientId as string,
+            percentualValue: Number(r.value),
+          }));
+        }
+      }
+
+      const idem = dto.financialEntryId ?? crypto.randomUUID();
+      const issued = await this.asaas.createBoletoPayment(creds, {
+        customerId,
+        value: amount,
+        dueDate: dueDateOnly,
+        description,
+        externalReference: `boleto-${idem}`,
+        fine: dto.fine ?? 2.0,
+        interest: dto.interest ?? 1.0,
+        split,
+      });
+
+      const boleto = await this.prisma.boleto.create({
+        data: {
+          workspaceId,
+          gatewayId: gateway.id,
+          gatewayBoletoId: issued.paymentId,
+          financialEntryId: dto.financialEntryId,
+          contractId,
+          contactId,
+          amount,
+          dueDate: new Date(dueDateOnly),
+          description,
+          nossoNumero: issued.nossoNumero,
+          linhaDigitavel: issued.linhaDigitavel ?? '',
+          codigoBarras: issued.codigoBarras ?? '',
+          pixQrCode: issued.pixQrCode ?? '',
+          pixCopiaECola: issued.pixCopiaECola ?? '',
+          bankSlipUrl: issued.bankSlipUrl,
+          fine: dto.fine ?? 2.0,
+          interest: dto.interest ?? 1.0,
+          discount: dto.discount ?? 0.0,
+          instructions: dto.instructions,
+          status: 'REGISTERED',
+          registeredAt: new Date(),
+        },
+      });
+
+      this.logger.log(`Boleto Asaas emitido: ${boleto.id} gw=${issued.paymentId} R$${amount}`);
+      return boleto;
+    }
 
     // Gerar dados simulados de boleto (em produção: chamar API do gateway)
     const nossoNumero = this.generateNossoNumero();
@@ -305,17 +390,29 @@ export class BillingService {
   // ── WEBHOOK (Gateway) ─────────────────────────────────────
 
   async processWebhook(workspaceId: string, payload: Record<string, unknown>) {
-    // Processar webhook de confirmação de pagamento do gateway
+    // Confirmação de pagamento do gateway.
+    // Formato Asaas: { event: 'PAYMENT_RECEIVED', payment: { id, value, ... } }
+    // Formato genérico: { event, nossoNumero|id, value }
     const event = payload.event as string;
-    const boletoId = payload.nossoNumero as string || payload.id as string;
+    const asaasPayment = payload.payment as { id?: string; value?: number } | undefined;
+    const gatewayBoletoId = asaasPayment?.id;
+    const nossoNumero = (payload.nossoNumero as string) || (payload.id as string);
+    const paidValue = asaasPayment?.value ?? (payload.value as number);
 
-    if (event === 'PAYMENT_RECEIVED' && boletoId) {
+    if ((event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') && (gatewayBoletoId || nossoNumero)) {
       const boleto = await this.prisma.boleto.findFirst({
-        where: { workspaceId, nossoNumero: boletoId, deletedAt: null },
+        where: {
+          workspaceId,
+          deletedAt: null,
+          OR: [
+            ...(gatewayBoletoId ? [{ gatewayBoletoId }] : []),
+            ...(nossoNumero ? [{ nossoNumero }] : []),
+          ],
+        },
       });
-      if (boleto) {
-        await this.confirmPayment(workspaceId, boleto.id, payload.value as number);
-        this.logger.log(`Webhook: pagamento confirmado boleto ${boleto.id}`);
+      if (boleto && boleto.status !== 'PAID') {
+        await this.confirmPayment(workspaceId, boleto.id, paidValue);
+        this.logger.log(`Webhook: pagamento confirmado boleto ${boleto.id} (${event})`);
       }
     }
     return { received: true };

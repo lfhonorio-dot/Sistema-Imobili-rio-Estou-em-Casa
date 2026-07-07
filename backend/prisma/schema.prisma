@@ -1035,6 +1035,7 @@ model Boleto {
   contractId       String?
   contactId        String?
   gatewayBoletoId  String?  // ID no gateway externo
+  bankSlipUrl      String?  // URL do PDF do boleto no gateway
   nossoNumero      String?
   linhaDigitavel   String?
   codigoBarras     String?
