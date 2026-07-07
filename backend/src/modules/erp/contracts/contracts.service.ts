@@ -379,6 +379,18 @@ export class ContractsService {
         if (field.includes('tenant')) throw new BadRequestException('Inquilino/Comprador inválido ou não encontrado.');
         throw new BadRequestException('Referência inválida: verifique os dados do contrato.');
       }
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        // Violação de unicidade (ex.: corrida no código sequencial C-ANO-NNNN)
+        const target = String(((err.meta as any)?.target ?? []).toString());
+        if (target.includes('code')) {
+          throw new ConflictException('Conflito ao gerar o código do contrato. Tente novamente.');
+        }
+        throw new ConflictException('Registro duplicado ao criar o contrato. Tente novamente.');
+      }
+      // Log com contexto para diagnóstico em produção (sem dados sensíveis)
+      console.error('[ContractsService] Falha ao criar contrato:', {
+        type: dto.type, hasSplits: !!partnerSplits?.length, message: (err as Error).message,
+      });
       throw err;
     }
 
