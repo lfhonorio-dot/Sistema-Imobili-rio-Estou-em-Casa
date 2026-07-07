@@ -55,6 +55,15 @@ export class PropertiesController {
   }
 
   // GET /properties/:id - detalhe completo
+  // Sugestão de preço por comparáveis (mediana do preço/m²)
+  @Get(':id/price-suggestion')
+  priceSuggestion(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+  ) {
+    return this.propertiesService.priceSuggestion(workspaceId, id);
+  }
+
   @Get(':id')
   findOne(
     @Headers('x-workspace-id') workspaceId: string,

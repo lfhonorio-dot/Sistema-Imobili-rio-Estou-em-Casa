@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useFiscal } from '@/hooks/use-fiscal';
+import api from '@/lib/api';
 
 type NfseRecord = {
   id: string;
@@ -26,6 +27,9 @@ export default function FiscalPage() {
   const [tab, setTab] = useState<Tab>('nfse');
   const [nfseList, setNfseList] = useState<NfseRecord[]>([]);
   const [dimobList, setDimobList] = useState<Array<Record<string, unknown>>>([]);
+  const [exportYear, setExportYear] = useState(String(new Date().getFullYear()));
+  const [declarants, setDeclarants] = useState<Array<Record<string, unknown>>>([]);
+  const [exportCsv, setExportCsv] = useState('');
   const [carneLeaoList, setCarneLeaoList] = useState<Array<Record<string, unknown>>>([]);
 
   useEffect(() => {
@@ -43,6 +47,36 @@ export default function FiscalPage() {
       findDimob().then(d => d && setDimobList(d));
     }
   };
+
+  async function loadDeclarants() {
+    try {
+      const res = await api.get('/fiscal/dimob/export', { params: { year: exportYear } });
+      const data = res.data.data;
+      setDeclarants(data?.declarantes ?? []);
+      setExportCsv(data?.csv ?? '');
+    } catch {
+      alert('Erro ao carregar exportação DIMOB.');
+    }
+  }
+
+  function downloadBlob(content: string, filename: string) {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadPgd(declarantDoc: string) {
+    try {
+      const res = await api.get('/fiscal/dimob/pgd', { params: { year: exportYear, declarantDoc } });
+      const d = res.data.data;
+      downloadBlob(d.content, d.filename);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao gerar arquivo PGD.';
+      alert(Array.isArray(msg) ? msg[0] : msg);
+    }
+  }
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -138,6 +172,56 @@ export default function FiscalPage() {
               ))}
             </div>
           )}
+
+          {/* Exportação por declarante (rateio PJ/PF) + arquivo PGD */}
+          <div className="mt-8 bg-white border rounded-lg p-4">
+            <h3 className="font-semibold mb-2">Exportação por declarante (split PJ/PF)</h3>
+            <p className="text-sm text-gray-500 mb-3">
+              Agrega os eventos DIMOB por CNPJ declarante (imobiliária e corretores parceiros PJ) e
+              gera o CSV de conferência e o arquivo TXT de importação do PGD DIMOB.
+            </p>
+            <div className="flex items-center gap-2 mb-4">
+              <input
+                value={exportYear}
+                onChange={(e) => setExportYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                className="border rounded px-3 py-2 w-28 text-sm"
+                placeholder="Ano"
+              />
+              <button onClick={loadDeclarants} className="bg-blue-600 text-white text-sm px-4 py-2 rounded hover:bg-blue-700">
+                Carregar declarantes
+              </button>
+              {exportCsv && (
+                <button
+                  onClick={() => downloadBlob(exportCsv, `DIMOB_${exportYear}.csv`)}
+                  className="border text-sm px-4 py-2 rounded hover:bg-gray-50"
+                >
+                  Baixar CSV completo
+                </button>
+              )}
+            </div>
+            {declarants.length > 0 && (
+              <div className="space-y-2">
+                {declarants.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between border rounded p-3">
+                    <div>
+                      <p className="font-medium">{String(d.declarantName ?? '(sem nome)')}</p>
+                      <p className="text-xs text-gray-500">
+                        Doc: {String(d.declarantDoc || '—')} · {String(d.totalOperacoes)} operação(ões) ·
+                        Comissão total: {Number(d.totalComissao ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => downloadPgd(String(d.declarantDoc ?? ''))}
+                      disabled={!d.declarantDoc}
+                      className="bg-gray-900 text-white text-xs px-3 py-2 rounded disabled:opacity-40"
+                    >
+                      Arquivo PGD (TXT)
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -111,6 +111,79 @@ export class PropertiesService {
   }
 
   // Busca imóvel por ID com detalhes completos
+  // Precificação assistida: mediana do preço/m² de imóveis comparáveis do
+  // próprio workspace (mesma cidade + tipo, área ±35%), para venda e locação.
+  async priceSuggestion(workspaceId: string, id: string) {
+    const target = await this.prisma.property.findFirst({
+      where: { id, workspaceId, deletedAt: null },
+      select: { id: true, city: true, type: true, totalArea: true, salePrice: true, rentalPrice: true },
+    });
+    if (!target) throw new NotFoundException('Imóvel não encontrado');
+    if (!target.totalArea || Number(target.totalArea) <= 0) {
+      return { available: false, reason: 'Informe a área total do imóvel para calcular a sugestão.' };
+    }
+
+    const area = Number(target.totalArea);
+    const comparables = await this.prisma.property.findMany({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        id: { not: id },
+        type: target.type,
+        ...(target.city ? { city: { equals: target.city, mode: 'insensitive' } } : {}),
+        totalArea: { gte: area * 0.65, lte: area * 1.35 },
+      },
+      select: { code: true, totalArea: true, salePrice: true, rentalPrice: true, status: true, neighborhood: true },
+      take: 50,
+    });
+
+    const median = (xs: number[]) => {
+      if (!xs.length) return null;
+      const s = [...xs].sort((a, b) => a - b);
+      const m = Math.floor(s.length / 2);
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    };
+
+    const salePerSqm = comparables
+      .filter((c) => c.salePrice && c.totalArea && Number(c.totalArea) > 0)
+      .map((c) => Number(c.salePrice) / Number(c.totalArea));
+    const rentPerSqm = comparables
+      .filter((c) => c.rentalPrice && c.totalArea && Number(c.totalArea) > 0)
+      .map((c) => Number(c.rentalPrice) / Number(c.totalArea));
+
+    const saleMedian = median(salePerSqm);
+    const rentMedian = median(rentPerSqm);
+
+    return {
+      available: salePerSqm.length > 0 || rentPerSqm.length > 0,
+      area,
+      sale: saleMedian
+        ? {
+            samples: salePerSqm.length,
+            medianPerSqm: Math.round(saleMedian),
+            suggested: Math.round(saleMedian * area),
+            current: target.salePrice ? Number(target.salePrice) : null,
+          }
+        : null,
+      rental: rentMedian
+        ? {
+            samples: rentPerSqm.length,
+            medianPerSqm: Math.round(rentMedian * 100) / 100,
+            suggested: Math.round(rentMedian * area),
+            current: target.rentalPrice ? Number(target.rentalPrice) : null,
+          }
+        : null,
+      comparables: comparables.slice(0, 10).map((c) => ({
+        code: c.code,
+        neighborhood: c.neighborhood,
+        area: Number(c.totalArea),
+        salePrice: c.salePrice ? Number(c.salePrice) : null,
+        rentalPrice: c.rentalPrice ? Number(c.rentalPrice) : null,
+        status: c.status,
+      })),
+    };
+  }
+
   async findOne(workspaceId: string, id: string) {
     const property = await this.prisma.property.findFirst({
       where: { id, workspaceId, deletedAt: null },

@@ -1,7 +1,7 @@
 // Página de detalhe do imóvel com tabs, fotos, status e QR code
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, MapPin, Bed, Bath, Car, Maximize, QrCode, Copy, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,14 @@ export default function PropertyDetailPage() {
   const [showStatusDialog, setShowStatusDialog] = useState(false);
 
   const { data: property, isLoading } = useProperty(id);
+  const [priceSug, setPriceSug] = useState<any>(null);
+  useEffect(() => {
+    if (!id) return;
+    api.get(`/properties/${id}/price-suggestion`)
+      .then((r) => setPriceSug(r.data.data))
+      .catch(() => setPriceSug(null));
+  }, [id]);
+  const brlFmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
   const changeStatus = useChangePropertyStatus();
   const deleteProperty = useDeleteProperty();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -267,6 +275,28 @@ export default function PropertyDetailPage() {
               </CardContent>
             </Card>
           </div>
+          {priceSug?.available && (
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Precificação assistida (comparáveis)</CardTitle></CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                {priceSug.sale && (
+                  <p>
+                    Venda sugerida: <span className="font-semibold">{brlFmt(priceSug.sale.suggested)}</span>
+                    {' '}<span className="text-muted-foreground">(mediana {brlFmt(priceSug.sale.medianPerSqm)}/m² · {priceSug.sale.samples} comparáveis{priceSug.sale.current ? ` · atual ${brlFmt(priceSug.sale.current)}` : ''})</span>
+                  </p>
+                )}
+                {priceSug.rental && (
+                  <p>
+                    Aluguel sugerido: <span className="font-semibold">{brlFmt(priceSug.rental.suggested)}</span>
+                    {' '}<span className="text-muted-foreground">(mediana {brlFmt(priceSug.rental.medianPerSqm)}/m² · {priceSug.rental.samples} comparáveis)</span>
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Base: imóveis do mesmo tipo e cidade com área ±35%. Estimativa informativa — não substitui avaliação profissional.
+                </p>
+              </CardContent>
+            </Card>
+          )}
           {property.description && (
             <Card>
               <CardHeader><CardTitle className="text-sm">Descrição</CardTitle></CardHeader>
