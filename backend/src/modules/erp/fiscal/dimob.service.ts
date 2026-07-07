@@ -39,10 +39,14 @@ export class DimobService {
     return { contract, workspace, partners };
   }
 
-  // Registra os eventos DIMOB de um contrato de VENDA (data = assinatura/início).
+  // Registra os eventos DIMOB de um contrato de VENDA ou INTERMEDIAÇÃO
+  // (data do evento = contratação/assinatura, não o recebimento).
   async registerSaleEvents(workspaceId: string, contractId: string) {
     const { contract, workspace, partners } = await this.loadContext(workspaceId, contractId);
-    if (contract.type !== 'SALE') return { created: 0, reason: 'not a sale contract' };
+    if (contract.type !== 'SALE' && contract.type !== 'BROKERAGE') {
+      return { created: 0, reason: 'not a sale/brokerage contract' };
+    }
+    const dimobType = contract.type === 'BROKERAGE' ? 'INTERMEDIACAO' : 'VENDA';
 
     const saleValue = Number(contract.saleValue ?? 0);
     const commissionTotal = contract.commissionRate
@@ -72,7 +76,7 @@ export class DimobService {
           workspaceId,
           year,
           contractId,
-          type: 'VENDA',
+          type: dimobType,
           declarantDoc: d.declarantDoc,
           declarantName: d.declarantName,
           declarantType: d.declarantType,

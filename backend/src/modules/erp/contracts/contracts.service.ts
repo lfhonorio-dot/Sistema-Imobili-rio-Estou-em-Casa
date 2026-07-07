@@ -135,6 +135,16 @@ export class ContractsService {
       }
     }
 
+    if (dto.type === 'BROKERAGE') {
+      // Intermediação: saleValue guarda o valor da negociação (base da comissão)
+      if (!dto.saleValue || dto.saleValue <= 0) {
+        errors.push('Valor da negociação é obrigatório para contratos de intermediação.');
+      }
+      if (!dto.commissionRate || dto.commissionRate <= 0) {
+        errors.push('Taxa de comissão é obrigatória para contratos de intermediação.');
+      }
+    }
+
     if (dto.type === 'RENTAL_RESIDENTIAL' || dto.type === 'RENTAL_COMMERCIAL') {
       if (!dto.rentalValue || dto.rentalValue <= 0) {
         errors.push('Valor do aluguel é obrigatório para contratos de locação.');
@@ -273,6 +283,26 @@ export class ContractsService {
           });
         }
 
+        // Intermediação: contas a receber da COMISSÃO TOTAL (o valor da
+        // negociação não transita pela imobiliária, apenas a comissão)
+        if (created.type === 'BROKERAGE' && created.saleValue && created.commissionRate) {
+          const brokerageCommission =
+            (Number(created.saleValue) * Number(created.commissionRate)) / 100;
+          await tx.financialEntry.create({
+            data: {
+              workspaceId,
+              type: 'RECEIVABLE',
+              category: 'COMMISSION',
+              description: `Comissão de intermediação — ${(created.property as any)?.code ?? created.propertyId}`,
+              amount: brokerageCommission,
+              dueDate: created.startDate ?? new Date(),
+              status: 'PENDING',
+              contractId: created.id,
+              contactId: created.ownerId ?? undefined,
+            },
+          });
+        }
+
         // Comissão se taxa definida (atômico)
         if (created.commissionRate) {
           const baseValue = created.saleValue ?? created.rentalValue;
@@ -359,8 +389,8 @@ export class ContractsService {
       console.error('[ContractsService] Erro ao enviar contrato por email:', e);
     }
 
-    // Registra os eventos DIMOB (venda: na data de assinatura) — não bloqueia
-    if (contract.type === 'SALE') {
+    // Registra os eventos DIMOB (venda/intermediação: na data de assinatura) — não bloqueia
+    if (contract.type === 'SALE' || contract.type === 'BROKERAGE') {
       try {
         await this.dimobService.registerSaleEvents(workspaceId, contract.id);
       } catch (e) {

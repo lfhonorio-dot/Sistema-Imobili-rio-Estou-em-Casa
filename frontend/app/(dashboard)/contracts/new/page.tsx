@@ -70,6 +70,7 @@ export default function NewContractPage() {
 
   const isRental = form.type === 'RENTAL_RESIDENTIAL' || form.type === 'RENTAL_COMMERCIAL';
   const isSale = form.type === 'SALE';
+  const isBrokerage = form.type === 'BROKERAGE';
 
   async function handleSubmit() {
     if (!form.type || !form.propertyId) {
@@ -211,7 +212,7 @@ export default function NewContractPage() {
           </div>
 
           {/* Locatário / Comprador */}
-          {(isRental || isSale) && (
+          {(isRental || isSale || isBrokerage) && (
             <div className="space-y-1.5">
               <Label>{isRental ? 'Locatário' : 'Comprador'}</Label>
               <Select value={form.tenantId || 'NONE'} onValueChange={(v) => setField('tenantId', v === 'NONE' ? '' : v)}>
@@ -252,10 +253,16 @@ export default function NewContractPage() {
             </div>
           )}
 
-          {isSale && (
+          {(isSale || isBrokerage) && (
             <div className="space-y-1.5">
-              <Label>Valor de Venda (R$)</Label>
+              <Label>{isSale ? 'Valor de Venda (R$)' : 'Valor da Negociação (R$) *'}</Label>
               <Input type="text" inputMode="decimal" placeholder="0,00" value={form.saleValue} onChange={(e) => setField('saleValue', e.target.value)} />
+              {isBrokerage && (
+                <p className="text-xs text-muted-foreground">
+                  Base de cálculo da comissão de intermediação. O contas a receber será gerado pelo
+                  valor da comissão, não pelo valor da negociação.
+                </p>
+              )}
             </div>
           )}
 
