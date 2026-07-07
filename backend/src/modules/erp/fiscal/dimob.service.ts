@@ -1,7 +1,8 @@
 // Serviço de registro de eventos DIMOB por declarante (rateio PJ/PF) e exportação.
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { computeDimobDeclarants, PartnerShareInput } from './dimob.calc';
+import { buildPgdFile, PgdRentalYear, PgdSaleEvent } from './dimob.pgd';
 
 @Injectable()
 export class DimobService {
@@ -191,6 +192,67 @@ export class DimobService {
     const declarantes = Object.values(byDeclarant);
     const csv = this.toCsv(declarantes as any[]);
     return { year, declarantes, csv };
+  }
+
+  // Gera o arquivo TXT de importação do PGD DIMOB para um declarante/ano.
+  async generatePgdFile(workspaceId: string, year: number, declarantDoc: string) {
+    const records = await this.prisma.dimobRecord.findMany({
+      where: { workspaceId, year, declarantDoc },
+      orderBy: [{ contractId: 'asc' }, { referenceMonth: 'asc' }],
+    });
+    if (records.length === 0) {
+      throw new BadRequestException(
+        'Nenhum evento DIMOB encontrado para este declarante/ano. Registre os eventos dos contratos primeiro.',
+      );
+    }
+
+    const declarant = {
+      cnpj: declarantDoc,
+      name: records[0].declarantName ?? '',
+      year,
+    };
+
+    // Vendas/intermediações: uma linha R02 por evento
+    const sales: PgdSaleEvent[] = records
+      .filter((r) => r.type === 'VENDA' || r.type === 'INTERMEDIACAO')
+      .map((r) => ({
+        sellerDoc: r.locadorDoc,
+        sellerName: r.locadorName,
+        buyerDoc: r.locatarioDoc,
+        buyerName: r.locatarioName,
+        saleValue: Number(r.totalValue ?? 0),
+        commissionValue: Number(r.commissionAmount ?? 0),
+        contractDate: r.eventDate ?? r.createdAt,
+        propertyAddress: r.propertyAddress,
+      }));
+
+    // Locações: agrupa por contrato em uma linha R03 com 12 meses
+    const rentalMap = new Map<string, PgdRentalYear>();
+    for (const r of records.filter((x) => x.type === 'LOCACAO')) {
+      const key = r.contractId ?? `${r.locadorDoc}-${r.locatarioDoc}`;
+      if (!rentalMap.has(key)) {
+        rentalMap.set(key, {
+          landlordDoc: r.locadorDoc,
+          landlordName: r.locadorName,
+          tenantDoc: r.locatarioDoc,
+          tenantName: r.locatarioName,
+          propertyAddress: r.propertyAddress,
+          monthlyGross: Array(12).fill(0),
+          monthlyCommission: Array(12).fill(0),
+          monthlyTax: Array(12).fill(0),
+        });
+      }
+      const g = rentalMap.get(key)!;
+      const idx = (r.referenceMonth ?? 1) - 1;
+      if (idx >= 0 && idx < 12) {
+        g.monthlyGross[idx] += Number(r.monthlyValue ?? r.totalValue ?? 0);
+        g.monthlyCommission[idx] += Number(r.commissionAmount ?? 0);
+      }
+    }
+
+    const content = buildPgdFile(declarant, sales, [...rentalMap.values()]);
+    const filename = `DIMOB_${declarantDoc.replace(/\D/g, '')}_${year}.txt`;
+    return { filename, content, sales: sales.length, rentals: rentalMap.size };
   }
 
   private toCsv(declarantes: any[]): string {

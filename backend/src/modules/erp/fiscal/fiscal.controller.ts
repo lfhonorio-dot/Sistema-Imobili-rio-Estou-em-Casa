@@ -43,6 +43,16 @@ export class FiscalController {
     return this.dimob.exportDimob(workspaceId, Number(year), declarantDoc);
   }
 
+  // Arquivo TXT de importação do PGD DIMOB (por declarante/ano)
+  @Get('dimob/pgd')
+  generatePgdFile(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Query('year') year: string,
+    @Query('declarantDoc') declarantDoc: string,
+  ) {
+    return this.dimob.generatePgdFile(workspaceId, Number(year), declarantDoc);
+  }
+
   // ── CONFIGURAÇÃO FISCAL ───────────────────────────────────
 
   @Get('config')
