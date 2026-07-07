@@ -1,5 +1,5 @@
 // Serviço de WhatsApp — configuração e envio via Cloud API
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SaveWhatsAppConfigDto, SendWhatsAppMessageDto } from './whatsapp.dto';
 
@@ -28,6 +28,8 @@ export class WhatsAppService {
 
     const payload = this.buildPayload(dto, config.phoneNumberId);
 
+    // Falha na Meta é propagada — não reportar sucesso sem entrega real.
+    let wamid: string | undefined;
     try {
       const res = await fetch(
         `https://graph.facebook.com/v19.0/${config.phoneNumberId}/messages`,
@@ -40,13 +42,15 @@ export class WhatsAppService {
           body: JSON.stringify(payload),
         },
       );
-
+      const json = (await res.json().catch(() => ({}))) as any;
       if (!res.ok) {
-        const err = await res.text();
-        console.error('Erro WhatsApp API:', err);
+        const msg = json?.error?.message ?? `WhatsApp API HTTP ${res.status}`;
+        throw new Error(msg);
       }
+      wamid = json?.messages?.[0]?.id;
     } catch (err) {
-      console.error('Falha ao enviar mensagem WhatsApp:', err);
+      console.error('Falha ao enviar mensagem WhatsApp:', (err as Error).message);
+      throw new BadRequestException(`Envio WhatsApp falhou: ${(err as Error).message}`);
     }
 
     // Registrar na conversa se fornecida
@@ -69,7 +73,7 @@ export class WhatsAppService {
       });
     }
 
-    return { message: 'Mensagem enviada', to: dto.to };
+    return { message: 'Mensagem enviada', to: dto.to, wamid };
   }
 
   async handleWebhook(workspaceId: string, body: any) {
