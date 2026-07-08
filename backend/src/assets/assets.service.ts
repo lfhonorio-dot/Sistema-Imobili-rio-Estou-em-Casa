@@ -125,7 +125,14 @@ export class AssetsService {
 
   async update(id: string, data: any) {
     await this.findOne(id);
-    const { dividendHistory, id: _id, createdAt, updatedAt, deletedAt, ...rest } = data;
+    // Remove campos calculados (retorno total, taxa líquida etc.) que o findAll()
+    // anexa a cada ativo mas não existem na tabela — nunca devem ser persistidos.
+    const {
+      dividendHistory, id: _id, createdAt, updatedAt, deletedAt,
+      totalDividends, totalReturnPct, annualizedReturnPct, holdingYears,
+      grossAnnualRate, netAnnualRate,
+      ...rest
+    } = data;
     return this.prisma.investmentAsset.update({ where: { id }, data: rest });
   }
 
