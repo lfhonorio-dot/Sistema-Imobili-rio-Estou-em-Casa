@@ -46,4 +46,9 @@ export class AssetsController {
   getDividends(@Param('id') id: string) {
     return this.service.getDividends(id);
   }
+
+  @Get(':id/value-history')
+  getValueHistory(@Param('id') id: string) {
+    return this.service.getValueHistory(id);
+  }
 }

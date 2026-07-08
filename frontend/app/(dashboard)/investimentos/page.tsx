@@ -150,11 +150,17 @@ export default function InvestimentosPage() {
 }
 
 function AssetModal({ asset, onClose, onSave }: { asset: any; onClose: () => void; onSave: () => void }) {
+  const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState<any>(asset
-    ? { ...asset, applicationDate: asset.applicationDate?.slice(0, 10), maturityDate: asset.maturityDate?.slice(0, 10) }
-    : { type: 'RENDA_FIXA', name: '', investedAmount: '', currentValue: '', isIRExempt: false, capitalProtected: false });
+    ? { ...asset, applicationDate: asset.applicationDate?.slice(0, 10), maturityDate: asset.maturityDate?.slice(0, 10), valueReferenceDate: today }
+    : { type: 'RENDA_FIXA', name: '', investedAmount: '', currentValue: '', isIRExempt: false, capitalProtected: false, valueReferenceDate: today });
   const [saving, setSaving] = useState(false);
+  const [valueHistory, setValueHistory] = useState<any[]>([]);
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (asset?.id) api.assets.valueHistory(asset.id).then(setValueHistory).catch(() => {});
+  }, [asset?.id]);
 
   const save = async () => {
     setSaving(true);
@@ -171,6 +177,7 @@ function AssetModal({ asset, onClose, onSave }: { asset: any; onClose: () => voi
         applicationDate: toISO(form.applicationDate),
         maturityDate: toISO(form.maturityDate),
         exDividendDate: toISO(form.exDividendDate),
+        valueReferenceDate: toISO(form.valueReferenceDate),
         indexer: form.indexer || undefined,
         liquidity: form.liquidity || undefined,
       };
@@ -221,6 +228,35 @@ function AssetModal({ asset, onClose, onSave }: { asset: any; onClose: () => voi
             <label>Valor Atual (R$)</label>
             <input type="number" step="0.01" value={form.currentValue || ''} onChange={e => set('currentValue', e.target.value)} />
           </div>
+          <div className="span-2">
+            <label>Referente a (mês/data dos valores acima)</label>
+            <input type="date" value={form.valueReferenceDate || ''} onChange={e => set('valueReferenceDate', e.target.value)} />
+          </div>
+          {valueHistory.length > 1 && (
+            <div className="span-2" style={{ background: 'rgba(201,162,39,0.06)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 8, padding: '10px 14px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#C9A227', marginBottom: 6 }}>📈 Histórico de Valores</div>
+              {valueHistory.map((v: any, i: number) => {
+                const prev = i > 0 ? Number(valueHistory[i - 1].currentValue) : null;
+                const variation = prev ? ((Number(v.currentValue) - prev) / prev) * 100 : null;
+                return (
+                  <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0', borderTop: i > 0 ? '1px solid rgba(201,162,39,0.12)' : 'none' }}>
+                    <span style={{ color: '#94A3B8' }}>{new Date(v.referenceDate).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {formatBRL(v.currentValue)}
+                      {variation !== null && (
+                        <span style={{ color: variation >= 0 ? '#22C55E' : '#EF4444', marginLeft: 8 }}>
+                          {variation >= 0 ? '+' : ''}{variation.toFixed(2)}%
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>
+                Ao salvar com um valor diferente, uma nova entrada é registrada — o histórico nunca é sobrescrito.
+              </div>
+            </div>
+          )}
           {(form.type === 'FII' || form.type === 'ACAO') && (
             <>
               <div>

@@ -101,10 +101,22 @@ model InvestmentAsset {
   updatedAt DateTime  @updatedAt
 
   dividendHistory DividendHistory[]
+  valueHistory    AssetValueHistory[]
 
   @@index([type])
   @@index([maturityDate])
   @@index([deletedAt])
+}
+
+model AssetValueHistory {
+  id            String          @id @default(cuid())
+  asset         InvestmentAsset @relation(fields: [assetId], references: [id])
+  assetId       String
+  currentValue  Decimal         @db.Decimal(18, 2)
+  referenceDate DateTime        @default(now())
+  createdAt     DateTime        @default(now())
+
+  @@index([assetId, referenceDate])
 }
 
 model DividendHistory {

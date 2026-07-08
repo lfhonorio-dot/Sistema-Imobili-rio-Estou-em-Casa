@@ -51,6 +51,7 @@ export const api = {
     dividends: (id: string) => fetchAPI(`/assets/${id}/dividends`),
     addDividend: (id: string, data: any) =>
       fetchAPI(`/assets/${id}/dividends`, { method: 'POST', body: JSON.stringify(data) }),
+    valueHistory: (id: string) => fetchAPI(`/assets/${id}/value-history`),
   },
   properties: {
     list: (params?: Record<string, string>) =>

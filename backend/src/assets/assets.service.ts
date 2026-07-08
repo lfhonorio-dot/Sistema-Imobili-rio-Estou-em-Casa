@@ -119,21 +119,49 @@ export class AssetsService {
   }
 
   async create(data: any) {
-    const { dividendHistory, ...rest } = data;
-    return this.prisma.investmentAsset.create({ data: rest });
+    const { dividendHistory, valueReferenceDate, ...rest } = data;
+    const asset = await this.prisma.investmentAsset.create({ data: rest });
+    await this.prisma.assetValueHistory.create({
+      data: {
+        assetId: asset.id,
+        currentValue: asset.currentValue,
+        referenceDate: valueReferenceDate ? new Date(valueReferenceDate) : new Date(),
+      },
+    });
+    return asset;
   }
 
   async update(id: string, data: any) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
     // Remove campos calculados (retorno total, taxa líquida etc.) que o findAll()
     // anexa a cada ativo mas não existem na tabela — nunca devem ser persistidos.
     const {
       dividendHistory, id: _id, createdAt, updatedAt, deletedAt,
       totalDividends, totalReturnPct, annualizedReturnPct, holdingYears,
-      grossAnnualRate, netAnnualRate,
+      grossAnnualRate, netAnnualRate, valueReferenceDate,
       ...rest
     } = data;
-    return this.prisma.investmentAsset.update({ where: { id }, data: rest });
+    const updated = await this.prisma.investmentAsset.update({ where: { id }, data: rest });
+    // Valor mudou => registra no histórico com a data de referência informada
+    // (mês/ano dos dados sendo atualizados). O valor anterior fica preservado.
+    if (rest.currentValue !== undefined && Number(rest.currentValue) !== Number(existing.currentValue)) {
+      await this.prisma.assetValueHistory.create({
+        data: {
+          assetId: id,
+          currentValue: rest.currentValue,
+          referenceDate: valueReferenceDate ? new Date(valueReferenceDate) : new Date(),
+        },
+      });
+    }
+    return updated;
+  }
+
+  async getValueHistory(id: string) {
+    await this.findOne(id);
+    return this.prisma.assetValueHistory.findMany({
+      where: { assetId: id },
+      orderBy: { referenceDate: 'asc' },
+    });
   }
 
   async remove(id: string) {
