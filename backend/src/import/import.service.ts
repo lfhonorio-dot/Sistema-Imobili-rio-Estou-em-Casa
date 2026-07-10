@@ -117,16 +117,33 @@ export class ImportService {
   }
 
   private parseCSV(content: string) {
-    const lines = content.split('\n').filter(l => l.trim());
+    const lines = content.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
-    const sep = lines[0].includes(';') ? ';' : ',';
-    const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().replace(/"/g, ''));
-    return lines.slice(1).map(line => {
-      const cols = line.split(sep).map(c => c.trim().replace(/"/g, ''));
+    // Separador mais provável (bancos BR usam ; com frequência)
+    const sepCount = (s: string, c: string) => (s.match(new RegExp('\\' + c, 'g')) || []).length;
+    const sample = lines.slice(0, 10).join('\n');
+    const sep = sepCount(sample, ';') >= sepCount(sample, ',') ? ';' : (sepCount(sample, '\t') > 0 ? '\t' : ',');
+
+    const split = (line: string) => line.split(sep).map(c => c.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+
+    // Procura a linha de cabeçalho (tem Data + Valor/Histórico), ignorando
+    // linhas de título no topo comuns em extratos (banco, conta, período)
+    let headerIdx = -1;
+    for (let i = 0; i < Math.min(lines.length, 40); i++) {
+      const cells = split(lines[i]).map(c => c.toLowerCase());
+      const hasDate = cells.some(c => c === 'data' || c.startsWith('data') || c === 'dt');
+      const hasValueOrDesc = cells.some(c => /valor|hist|lan[çc]|descr|cr[eé]dito|d[eé]bito|value|amount|documento/.test(c));
+      if (hasDate && hasValueOrDesc) { headerIdx = i; break; }
+    }
+    if (headerIdx === -1) headerIdx = 0; // sem título: assume 1ª linha
+    const headers = split(lines[headerIdx]).map(h => h.toLowerCase());
+
+    return lines.slice(headerIdx + 1).map(line => {
+      const cols = split(line);
       const obj: any = {};
-      headers.forEach((h, i) => { obj[h] = cols[i] || ''; });
+      headers.forEach((h, i) => { if (h) obj[h] = cols[i] || ''; });
       return this.rowToEntry(obj);
-    }).filter(e => e.description);
+    }).filter(e => e.description && e.date);
   }
 
   // Lê TODAS as abas da planilha — cada aba pode ser um extrato diferente.
