@@ -83,12 +83,17 @@ export class ImportService {
       entry.category = this.autoClassify(entry.description, rules);
     }
 
+    // O banco/origem é só um rótulo — se vier um valor fora do enum, não pode
+    // travar a importação. Cai para OUTRO quando não reconhecido.
+    const validSources = ['EQI', 'BRADESCO', 'ITAU', 'SANTANDER', 'BB', 'CAIXA', 'XP', 'BTG', 'RICO', 'NUINVEST', 'B3', 'OUTRO'];
+    const safeSource = source && validSources.includes(source) ? source : (source ? 'OUTRO' : undefined);
+
     const log = await this.prisma.importLog.create({
       data: {
         userId,
         fileName: file.originalname,
         format,
-        source: source as any,
+        source: safeSource as any,
         recordsTotal: entries.length,
       },
     });

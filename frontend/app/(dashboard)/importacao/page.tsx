@@ -3,12 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import { api, formatBRL, CATEGORY_LABELS } from '@/lib/api';
 
 const SOURCES = [
-  { value: 'BANCO_BRADESCO', label: 'Bradesco' },
-  { value: 'BANCO_ITAU', label: 'Itaú' },
-  { value: 'BANCO_NUBANK', label: 'Nubank' },
-  { value: 'BANCO_INTER', label: 'Inter' },
-  { value: 'BANCO_XP', label: 'XP Investimentos' },
-  { value: 'OUTRO', label: 'Outro' },
+  { value: 'BRADESCO', label: 'Bradesco' },
+  { value: 'ITAU', label: 'Itaú' },
+  { value: 'SANTANDER', label: 'Santander' },
+  { value: 'BB', label: 'Banco do Brasil' },
+  { value: 'CAIXA', label: 'Caixa' },
+  { value: 'XP', label: 'XP Investimentos' },
+  { value: 'BTG', label: 'BTG' },
+  { value: 'OUTRO', label: 'Outro / Outro banco' },
 ];
 
 interface ParsedEntry {
@@ -69,8 +71,18 @@ export default function ImportacaoPage() {
     setUploading(true);
     try {
       const result = await api.import.upload(file, source);
+      if (result.error) { alert('Erro: ' + result.error); setUploading(false); return; }
       setLogId(result.logId);
-      setEntries(result.entries.map((e: any) => ({ ...e, selected: true })));
+      const parsed = (result.entries || []).map((e: any) => {
+        // Backend devolve entryType (CREDITO/DEBITO); a tela usa type (RECEITA/DESPESA)
+        const type = e.type || (e.entryType === 'CREDITO' ? 'RECEITA' : 'DESPESA');
+        const category = e.category || (type === 'RECEITA' ? 'OUTRAS_RECEITAS' : 'OUTRAS_DESPESAS');
+        return { ...e, type, category, selected: true };
+      });
+      setEntries(parsed);
+      if (parsed.length === 0) {
+        alert('Nenhuma transação foi reconhecida no arquivo. Verifique se a planilha tem colunas de Data, Descrição e Valor.');
+      }
       setStep('preview');
     } catch (e: any) { alert('Erro ao processar arquivo: ' + e.message); }
     setUploading(false);
@@ -92,8 +104,8 @@ export default function ImportacaoPage() {
   const toggleOne = (i: number) => setEntries(entries.map((e, idx) => idx === i ? { ...e, selected: !e.selected } : e));
   const setCategory = (i: number, cat: string) => setEntries(entries.map((e, idx) => idx === i ? { ...e, category: cat } : e));
 
-  const CATEGORIES_RECEITA = ['SALARIO', 'ALUGUEL', 'DIVIDENDO', 'RENDIMENTO_RF', 'RECEITA_RECEBIVEIS', 'OUTRAS_RECEITAS'];
-  const CATEGORIES_DESPESA = ['MORADIA', 'ALIMENTACAO', 'SAUDE', 'EDUCACAO', 'TRANSPORTE', 'LAZER', 'INVESTIMENTO', 'IMPOSTOS', 'OUTRAS_DESPESAS'];
+  const CATEGORIES_RECEITA = ['SALARIO', 'ALUGUEL', 'DIVIDENDO', 'RENDIMENTO_FII', 'RENDIMENTO_RENDA_FIXA', 'RECEBIVEIS_LOTEAMENTO', 'APOSENTADORIA', 'OUTRAS_RECEITAS'];
+  const CATEGORIES_DESPESA = ['IPTU', 'CONDOMINIO', 'SEGURO', 'MANUTENCAO_IMOVEL', 'IMPOSTOS_ESCRITORIO', 'IR_DARF', 'CUSTO_VIDA', 'PLANO_SAUDE', 'OUTRAS_DESPESAS'];
 
   return (
     <div>
