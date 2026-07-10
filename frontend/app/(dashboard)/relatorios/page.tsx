@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { api, formatBRL, formatPercent } from '@/lib/api';
+import { api, formatBRL, formatPercent, ASSET_TYPE_LABELS, CATEGORY_LABELS, MONTH_NAMES } from '@/lib/api';
 
 interface ReportSection {
   title: string;
@@ -111,12 +111,15 @@ export default function RelatoriosPage() {
           </div>
           <div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Alocação por tipo</div>
-            {(data.byType || []).map((t: any) => (
-              <div key={t.type} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
-                <span>{t.type}</span>
-                <span style={{ color: 'var(--gold)' }}>{formatBRL(t.total)} ({formatPercent(t.pct)})</span>
-              </div>
-            ))}
+            {Object.entries(data.byType || {}).map(([type, total]: any) => {
+              const pct = data.totalPatrimony ? (Number(total) / Number(data.totalPatrimony)) * 100 : 0;
+              return (
+                <div key={type} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                  <span>{ASSET_TYPE_LABELS[type] || type}</span>
+                  <span style={{ color: 'var(--gold)' }}>{formatBRL(total)} ({formatPercent(pct)})</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       );
@@ -173,7 +176,7 @@ export default function RelatoriosPage() {
             <tbody>
               {data.map((row: any) => (
                 <tr key={`${row.year}-${row.month}`} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '8px 12px' }}>{row.month}/{row.year}</td>
+                  <td style={{ padding: '8px 12px' }}>{MONTH_NAMES[(row.month || 1) - 1]}/{row.year}</td>
                   <td style={{ padding: '8px 12px', color: 'var(--positive)' }}>{formatBRL(row.totalReceitas)}</td>
                   <td style={{ padding: '8px 12px', color: 'var(--negative)' }}>{formatBRL(row.totalDespesas)}</td>
                   <td style={{ padding: '8px 12px', fontWeight: 600, color: row.saldo >= 0 ? 'var(--positive)' : 'var(--negative)' }}>{formatBRL(row.saldo)}</td>
@@ -206,15 +209,82 @@ export default function RelatoriosPage() {
           </div>
           {sim?.scenarios && (
             <div>
-              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Cenários</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Cenários de sustentabilidade</div>
               {sim.scenarios.map((s: any) => (
-                <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
-                  <span>{s.label}</span>
-                  <span>FI: {formatBRL(s.fiNumber)} | {formatPercent(s.fiProgress)} | {s.monthsToFI <= 0 ? '✅ Atingido' : s.projectedDate}</span>
+                <div key={s.name || s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                  <span style={{ textTransform: 'capitalize' }}>{s.name || s.label} (IPCA {s.ipcaScenario}%)</span>
+                  <span>{s.perpetual ? '✅ Perpétua (50+ anos)' : `${s.sustainabilityYears} anos`}{s.realReturn != null ? ` · retorno real ${s.realReturn}% a.a.` : ''}</span>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      );
+    }
+
+    if (key === 'properties') {
+      const props = data.props || [];
+      return (
+        <div>
+          <h3>Relatório de Imóveis</h3>
+          <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--muted)' }}>
+            Total: <strong style={{ color: 'var(--gold)' }}>{formatBRL(data.summary?.total || 0)}</strong> — {props.length} imóveis · Aluguéis: {formatBRL(data.summary?.monthlyRent || 0)}/mês
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Nome', 'Classificação', 'Avaliação', 'Aluguel', 'Yield'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--muted)', fontWeight: 500 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {props.map((p: any) => {
+                const yld = p.rentAmount && p.currentValuation ? (Number(p.rentAmount) / Number(p.currentValuation) * 100) : 0;
+                return (
+                  <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '6px 8px' }}>{p.name}</td>
+                    <td style={{ padding: '6px 8px', color: 'var(--muted)' }}>{p.classification}</td>
+                    <td style={{ padding: '6px 8px', color: 'var(--gold)' }}>{formatBRL(p.currentValuation)}</td>
+                    <td style={{ padding: '6px 8px' }}>{p.rentAmount ? formatBRL(p.rentAmount) : '-'}</td>
+                    <td style={{ padding: '6px 8px' }}>{yld ? formatPercent(yld) + '/mês' : '-'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    if (key === 'receivables') {
+      const portfolios = Array.isArray(data) ? data : [];
+      return (
+        <div>
+          <h3>Recebíveis Detalhado</h3>
+          <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--muted)' }}>
+            {portfolios.length} carteiras · Valor presente total: <strong style={{ color: 'var(--gold)' }}>{formatBRL(portfolios.reduce((s: number, p: any) => s + Number(p.presentValue || 0), 0))}</strong>
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Carteira', 'Valor Presente', 'A Receber Futuro', 'Recebido/mês', 'Prazo (meses)'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--muted)', fontWeight: 500 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {portfolios.map((p: any) => (
+                <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '6px 8px' }}>{p.name}</td>
+                  <td style={{ padding: '6px 8px', color: 'var(--gold)' }}>{formatBRL(p.presentValue)}</td>
+                  <td style={{ padding: '6px 8px' }}>{formatBRL(p.futureTotalReceivable)}</td>
+                  <td style={{ padding: '6px 8px' }}>{formatBRL(p.monthlyReceivedAmount)}</td>
+                  <td style={{ padding: '6px 8px', color: 'var(--muted)' }}>{p.averageRemainingTerm || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       );
     }
