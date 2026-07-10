@@ -37,7 +37,8 @@ export const api = {
     me: () => fetchAPI('/auth/me'),
   },
   dashboard: {
-    get: () => fetchAPI('/dashboard'),
+    get: (year?: number, month?: number) =>
+      fetchAPI('/dashboard' + (year && month ? `?year=${year}&month=${month}` : '')),
     alerts: () => fetchAPI('/dashboard/alerts'),
   },
   assets: {

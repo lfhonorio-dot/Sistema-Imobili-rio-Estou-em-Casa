@@ -5,23 +5,32 @@ import { PrismaService } from '../prisma/prisma.service';
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
-  async getDashboard(userId: string) {
+  async getDashboard(userId: string, year?: number, month?: number) {
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    const [assets, properties, receivables, cashFlow, snapshots] = await Promise.all([
+    // Mês de competência selecionado (padrão: mês atual)
+    const selMonth = month && month >= 1 && month <= 12 ? Number(month) : currentMonth;
+    const selYear = year && year > 2000 ? Number(year) : currentYear;
+    const isCurrentMonth = selMonth === currentMonth && selYear === currentYear;
+
+    const [assets, properties, receivables, cashFlow, snapshots, selectedSnapshot] = await Promise.all([
       this.prisma.investmentAsset.findMany({ where: { deletedAt: null } }),
       this.prisma.property.findMany({ where: { deletedAt: null } }),
       this.prisma.receivablePortfolio.findMany({
         where: { deletedAt: null },
         include: { monthlyHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }] } },
       }),
-      this.prisma.cashFlowEntry.findMany({ where: { userId, month: currentMonth, year: currentYear } }),
+      this.prisma.cashFlowEntry.findMany({ where: { userId, month: selMonth, year: selYear } }),
       this.prisma.monthlySnapshot.findMany({
         where: { userId },
         orderBy: [{ year: 'desc' }, { month: 'desc' }],
         take: 12,
+      }),
+      // Foto do patrimônio daquele mês (se já houver snapshot salvo)
+      this.prisma.monthlySnapshot.findUnique({
+        where: { userId_year_month: { userId, year: selYear, month: selMonth } },
       }),
     ]);
 
@@ -46,15 +55,40 @@ export class DashboardService {
     let receivablesTotal = 0, monthlyReceivables = 0;
     for (const r of receivables) {
       receivablesTotal += Number(r.presentValue);
-      // Usa o recebido do mês mais recente que efetivamente teve recebimento
-      // (> 0), ignorando lançamentos vazios/futuros. Sem histórico útil,
-      // cai para o valor gravado direto na carteira.
       const hist = (r as any).monthlyHistory || [];
-      const lastReceived = hist.find((h: any) => Number(h.receivedAmount) > 0);
-      monthlyReceivables += lastReceived ? Number(lastReceived.receivedAmount) : Number(r.monthlyReceivedAmount);
+      // Por competência: recebido EXATAMENTE no mês selecionado.
+      const monthEntry = hist.find((h: any) => h.year === selYear && h.month === selMonth);
+      if (monthEntry) {
+        monthlyReceivables += Number(monthEntry.receivedAmount);
+      } else if (isCurrentMonth) {
+        // No mês corrente, se ainda não lançou, mostra o último recebimento real
+        const lastReceived = hist.find((h: any) => Number(h.receivedAmount) > 0);
+        monthlyReceivables += lastReceived ? Number(lastReceived.receivedAmount) : Number(r.monthlyReceivedAmount);
+      }
     }
 
-    const totalPatrimony = financialTotal + propertiesRent + propertiesOwn + propertiesSale + receivablesTotal;
+    let totalPatrimony = financialTotal + propertiesRent + propertiesOwn + propertiesSale + receivablesTotal;
+
+    // Se um mês passado foi selecionado e existe snapshot dele, usa a foto do
+    // patrimônio daquele mês (estoque real da época). O mês atual sempre usa
+    // os valores ao vivo, mais atualizados que qualquer snapshot do início do mês.
+    let patrimonySource: 'live' | 'snapshot' = 'live';
+    if (!isCurrentMonth && selectedSnapshot) {
+      patrimonySource = 'snapshot';
+      const s = selectedSnapshot;
+      financialTotal = Number(s.fixedIncomeTotal) + Number(s.fiiTotal) + Number(s.stocksTotal) + Number(s.pensionTotal) + Number(s.coeTotal) + Number(s.cashTotal);
+      propertiesRent = Number(s.propertiesRentTotal);
+      propertiesOwn = Number(s.propertiesOwnTotal);
+      propertiesSale = Number(s.propertiesSaleTotal);
+      receivablesTotal = Number(s.receivablesTotal);
+      totalPatrimony = Number(s.totalPatrimony);
+      byType['RENDA_FIXA'] = Number(s.fixedIncomeTotal);
+      byType['FII'] = Number(s.fiiTotal);
+      byType['ACAO'] = Number(s.stocksTotal);
+      byType['PREVIDENCIA'] = Number(s.pensionTotal);
+      byType['COE'] = Number(s.coeTotal);
+      byType['CAIXA'] = Number(s.cashTotal);
+    }
 
     let monthlyFIIIncome = 0, monthlyFixedIncome = 0;
     for (const e of cashFlow) {
@@ -108,6 +142,7 @@ export class DashboardService {
       totalPatrimony, financialTotal, propertiesRent, propertiesOwn, propertiesSale, receivablesTotal,
       monthlyPassiveIncome: totalMonthlyPassiveIncome, monthlyRent, monthlyReceivables, monthlyFIIIncome, monthlyFixedIncome,
       byType, allocationActual, evolution, currentMonth, currentYear, emergencyReserve,
+      selectedMonth: selMonth, selectedYear: selYear, isCurrentMonth, patrimonySource,
     };
   }
 

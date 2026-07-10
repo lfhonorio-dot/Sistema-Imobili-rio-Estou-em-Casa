@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -8,8 +8,8 @@ export class DashboardController {
   constructor(private service: DashboardService) {}
 
   @Get()
-  getDashboard(@Request() req: any) {
-    return this.service.getDashboard(req.user.id);
+  getDashboard(@Request() req: any, @Query('year') year?: string, @Query('month') month?: string) {
+    return this.service.getDashboard(req.user.id, year ? Number(year) : undefined, month ? Number(month) : undefined);
   }
 
   @Get('alerts')

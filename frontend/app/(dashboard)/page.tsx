@@ -16,16 +16,20 @@ function KPICard({ title, value, sub, color = '#F1F5F9' }: { title: string; valu
 const CT = { background: '#112236', border: '1px solid #1E3A5F', borderRadius: 8, color: '#F1F5F9', fontSize: '0.8rem' };
 
 export default function DashboardPage() {
+  const today = new Date();
   const [data, setData] = useState<any>(null);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [month, setMonth] = useState(today.getMonth() + 1);
+  const [year, setYear] = useState(today.getFullYear());
 
   useEffect(() => {
-    Promise.all([api.dashboard.get(), api.dashboard.alerts()])
+    setLoading(true);
+    Promise.all([api.dashboard.get(year, month), api.dashboard.alerts()])
       .then(([d, a]) => { setData(d); setAlerts(a); })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [year, month]);
 
   if (loading) return <div style={{ textAlign: 'center', padding: '5rem', color: '#94A3B8', fontSize: '0.875rem' }}>Carregando dashboard...</div>;
   if (!data) return <div style={{ textAlign: 'center', padding: '5rem', color: '#EF4444' }}>Erro ao carregar dados. Verifique se o backend está rodando.</div>;
@@ -51,13 +55,24 @@ export default function DashboardPage() {
         <div>
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">
-            Visão consolidada do patrimônio —{' '}
-            {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            Visão consolidada do patrimônio (por competência)
+            {data.patrimonySource === 'snapshot' && ' — patrimônio pela foto salva do mês'}
+            {data.patrimonySource === 'live' && !data.isCurrentMonth && ' — patrimônio em valores atuais (sem snapshot do mês)'}
           </p>
         </div>
-        <button className="btn-outline" onClick={() => api.snapshots.create().catch(console.error)}>
-          📸 Salvar Snapshot
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select value={month} onChange={e => setMonth(Number(e.target.value))}
+            style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', color: 'var(--text)' }}>
+            {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <select value={year} onChange={e => setYear(Number(e.target.value))}
+            style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', color: 'var(--text)' }}>
+            {[2023, 2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <button className="btn-outline" onClick={() => api.snapshots.create().then(() => { setMonth(today.getMonth() + 1); setYear(today.getFullYear()); }).catch(console.error)}>
+            📸 Salvar Snapshot
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
