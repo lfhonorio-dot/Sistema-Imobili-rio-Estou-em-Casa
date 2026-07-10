@@ -129,15 +129,29 @@ export class ImportService {
     }).filter(e => e.description);
   }
 
-  // Lê TODAS as abas da planilha — cada aba pode ser um extrato diferente
+  // Lê TODAS as abas da planilha — cada aba pode ser um extrato diferente.
+  // Extratos de banco costumam ter linhas de título antes da tabela, então
+  // procuramos a linha de cabeçalho real (que tem Data + Valor/Histórico).
   private parseExcel(buffer: Buffer) {
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const entries: any[] = [];
+    const isHeaderCell = (c: string) =>
+      /^data|data$|hist|lan[çc]|descr|valor|cr[eé]dito|d[eé]bito|value|amount/.test(c);
     for (const sheetName of workbook.SheetNames) {
-      const rows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
-      for (const rawRow of rows) {
+      const grid: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false });
+      // localiza a linha de cabeçalho: tem uma coluna de "data" E uma de valor/histórico
+      let headerIdx = -1;
+      for (let i = 0; i < Math.min(grid.length, 40); i++) {
+        const cells = grid[i].map((c: any) => String(c).trim().toLowerCase());
+        const hasDate = cells.some(c => c === 'data' || c.startsWith('data') || c === 'dt');
+        const hasValueOrDesc = cells.some(c => /valor|hist|lan[çc]|descr|cr[eé]dito|d[eé]bito|value|amount/.test(c));
+        if (hasDate && hasValueOrDesc) { headerIdx = i; break; }
+      }
+      if (headerIdx === -1) continue;
+      const headers = grid[headerIdx].map((c: any) => String(c).trim().toLowerCase());
+      for (let i = headerIdx + 1; i < grid.length; i++) {
         const obj: any = {};
-        for (const [k, v] of Object.entries(rawRow)) obj[k.trim().toLowerCase()] = v;
+        headers.forEach((h: string, idx: number) => { if (h) obj[h] = grid[i][idx] ?? ''; });
         const entry = this.rowToEntry(obj);
         if (entry.description && entry.date) entries.push(entry);
       }
@@ -148,12 +162,29 @@ export class ImportService {
   // Mapeia uma linha (CSV ou Excel) para lançamento, aceitando cabeçalhos comuns
   // de bancos brasileiros: data, descricao/histórico/lançamento, valor
   private rowToEntry(obj: any) {
-    const rawDate = obj.data || obj.date || obj['data mov.'] || obj['data lançamento'] || obj['data lancamento'] || '';
+    // Procura a primeira chave cujo nome contenha um dos termos (tolerante a
+    // variações de cabeçalho entre bancos)
+    const pick = (terms: string[]) => {
+      for (const [k, v] of Object.entries(obj)) {
+        const key = k.toLowerCase();
+        if (terms.some(t => key.includes(t)) && v !== '' && v != null) return v;
+      }
+      return '';
+    };
+
+    const rawDate = pick(['data', 'date', 'dt']);
     const description = String(
-      obj.descricao || obj['descrição'] || obj.description || obj.historico ||
-      obj['histórico'] || obj.memo || obj['lançamento'] || obj.lancamento || ''
+      pick(['descr', 'hist', 'lan', 'memo', 'lançamento', 'name']) || ''
     ).trim();
-    const val = parseAmount(obj.valor || obj.value || obj.amount || obj['valor (r$)'] || 0);
+
+    // Valor único, ou colunas separadas de crédito/débito
+    let val = parseAmount(pick(['valor', 'value', 'amount', 'montante']) || 0);
+    if (!val) {
+      const credito = parseAmount(pick(['crédito', 'credito', 'entrada']) || 0);
+      const debito = parseAmount(pick(['débito', 'debito', 'saída', 'saida']) || 0);
+      if (credito || debito) val = credito - Math.abs(debito);
+    }
+
     return {
       date: normalizeDate(rawDate),
       description,
