@@ -85,10 +85,10 @@ export default function ReceiveisPage() {
 
   const chartData = (p: Portfolio) => {
     const hist = [...(p.monthlyHistory || [])].sort((a, b) => a.year * 100 + a.month - (b.year * 100 + b.month)).slice(-6);
-    return hist.map(h => ({
+    return hist.map((h: any) => ({
       name: `${MONTH_NAMES[h.month - 1].slice(0, 3)}/${h.year}`,
-      Previsto: Number(h.expected),
-      Realizado: Number(h.received),
+      Previsto: Number(h.expectedAmount ?? h.expected ?? 0),
+      Realizado: Number(h.receivedAmount ?? h.received ?? 0),
     }));
   };
 

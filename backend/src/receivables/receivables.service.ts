@@ -42,10 +42,27 @@ export class ReceivablesService {
     // {expectedAmount, receivedAmount} (nomes internos), evitando gravar vazio.
     const expectedAmount = Number(data.expectedAmount ?? data.expected ?? 0);
     const receivedAmount = Number(data.receivedAmount ?? data.received ?? 0);
-    return this.prisma.receivableMonthlyHistory.upsert({
-      where: { portfolioId_year_month: { portfolioId, year: Number(data.year), month: Number(data.month) } },
-      create: { portfolioId, month: Number(data.month), year: Number(data.year), expectedAmount, receivedAmount },
+    const year = Number(data.year);
+    const month = Number(data.month);
+    const record = await this.prisma.receivableMonthlyHistory.upsert({
+      where: { portfolioId_year_month: { portfolioId, year, month } },
+      create: { portfolioId, month, year, expectedAmount, receivedAmount },
       update: { expectedAmount, receivedAmount },
     });
+
+    // Se este é o mês mais recente do histórico, sincroniza o "Recebido/mês"
+    // e o "Previsto/mês" da carteira para os cards refletirem o lançamento.
+    const latest = await this.prisma.receivableMonthlyHistory.findFirst({
+      where: { portfolioId },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+    if (latest && latest.year === year && latest.month === month) {
+      await this.prisma.receivablePortfolio.update({
+        where: { id: portfolioId },
+        data: { monthlyReceivedAmount: receivedAmount, expectedMonthlyAmount: expectedAmount },
+      });
+    }
+
+    return record;
   }
 }
