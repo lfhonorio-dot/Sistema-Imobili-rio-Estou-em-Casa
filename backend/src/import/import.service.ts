@@ -205,6 +205,21 @@ export class ImportService {
       { keyword: 'IPTU', category: 'IPTU' }, { keyword: 'CONDOMINIO', category: 'CONDOMINIO' },
       { keyword: 'DARF', category: 'IR_DARF' }, { keyword: ' IR ', category: 'IR_DARF' },
       { keyword: 'SALARIO', category: 'SALARIO' }, { keyword: 'SALÁRIO', category: 'SALARIO' },
+      { keyword: 'PRO LABORE', category: 'PRO_LABORE' }, { keyword: 'PRO-LABORE', category: 'PRO_LABORE' },
+      { keyword: 'DIVIDENDOS', category: 'DIVIDENDO' },
+      { keyword: 'CEMIG', category: 'ENERGIA' }, { keyword: 'ENERGIA', category: 'ENERGIA' }, { keyword: 'ELETRIC', category: 'ENERGIA' },
+      { keyword: 'SANEAMENTO', category: 'AGUA' }, { keyword: 'SABESP', category: 'AGUA' }, { keyword: 'COPASA', category: 'AGUA' },
+      { keyword: 'VIVO', category: 'TELEFONE_INTERNET' }, { keyword: 'CLARO', category: 'TELEFONE_INTERNET' }, { keyword: 'TIM', category: 'TELEFONE_INTERNET' }, { keyword: 'OI ', category: 'TELEFONE_INTERNET' }, { keyword: 'INTERNET', category: 'TELEFONE_INTERNET' },
+      { keyword: 'POSTO', category: 'COMBUSTIVEL' }, { keyword: 'COMBUSTIVEL', category: 'COMBUSTIVEL' }, { keyword: 'IPIRANGA', category: 'COMBUSTIVEL' }, { keyword: 'SHELL', category: 'COMBUSTIVEL' },
+      { keyword: 'UBER', category: 'TRANSPORTE' }, { keyword: '99 ', category: 'TRANSPORTE' }, { keyword: 'ESTACIONAMENTO', category: 'TRANSPORTE' },
+      { keyword: 'SUPERMERCADO', category: 'ALIMENTACAO' }, { keyword: 'MERCADO', category: 'ALIMENTACAO' }, { keyword: 'PADARIA', category: 'ALIMENTACAO' }, { keyword: 'IFOOD', category: 'ALIMENTACAO' }, { keyword: 'RESTAURANTE', category: 'ALIMENTACAO' },
+      { keyword: 'DROGARIA', category: 'FARMACIA' }, { keyword: 'FARMACIA', category: 'FARMACIA' }, { keyword: 'DROGA', category: 'FARMACIA' },
+      { keyword: 'ESCOLA', category: 'EDUCACAO' }, { keyword: 'FACULDADE', category: 'EDUCACAO' }, { keyword: 'CURSO', category: 'EDUCACAO' }, { keyword: 'MENSALIDADE', category: 'EDUCACAO' },
+      { keyword: 'NETFLIX', category: 'ASSINATURAS' }, { keyword: 'SPOTIFY', category: 'ASSINATURAS' }, { keyword: 'AMAZON PRIME', category: 'ASSINATURAS' },
+      { keyword: 'TARIFA', category: 'TARIFAS_BANCARIAS' }, { keyword: 'PACOTE DE SERVICOS', category: 'TARIFAS_BANCARIAS' }, { keyword: 'ANUIDADE', category: 'TARIFAS_BANCARIAS' },
+      { keyword: 'APLICACAO', category: 'APORTE_INVESTIMENTO' }, { keyword: 'INVESTIMENTO', category: 'APORTE_INVESTIMENTO' }, { keyword: 'CDB', category: 'APORTE_INVESTIMENTO' }, { keyword: 'TESOURO', category: 'APORTE_INVESTIMENTO' },
+      { keyword: 'SEGURO', category: 'SEGURO' },
+      { keyword: 'PLANO DE SAUDE', category: 'PLANO_SAUDE' }, { keyword: 'UNIMED', category: 'PLANO_SAUDE' }, { keyword: 'AMIL', category: 'PLANO_SAUDE' },
     ];
     const all = [...rules.map((r: any) => ({ keyword: r.keyword, category: r.targetCategory })), ...defaults];
     for (const r of all) {
@@ -215,7 +230,7 @@ export class ImportService {
 
   async confirmImport(userId: string, logId: string, entries: any[]) {
     let cashFlowCount = 0;
-    const receitas = ['ALUGUEL','RECEBIVEIS_LOTEAMENTO','APOSENTADORIA','RENDIMENTO_FII','RENDIMENTO_RENDA_FIXA','DIVIDENDO','SALARIO','OUTRAS_RECEITAS'];
+    const receitas = ['ALUGUEL','RECEBIVEIS_LOTEAMENTO','APOSENTADORIA','RENDIMENTO_FII','RENDIMENTO_RENDA_FIXA','DIVIDENDO','SALARIO','PRO_LABORE','VENDA_IMOVEL','JUROS_RECEBIDOS','RESTITUICAO_IMPOSTO','OUTRAS_RECEITAS'];
     for (const entry of entries) {
       if (!entry.category || !entry.date) continue;
       try {

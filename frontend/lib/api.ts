@@ -167,6 +167,7 @@ export const ASSET_TYPE_COLORS: Record<string, string> = {
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {
+  // Receitas
   ALUGUEL: 'Aluguel',
   RECEBIVEIS_LOTEAMENTO: 'Recebíveis / Loteamento',
   APOSENTADORIA: 'Aposentadoria / INSS',
@@ -174,7 +175,12 @@ export const CATEGORY_LABELS: Record<string, string> = {
   RENDIMENTO_RENDA_FIXA: 'Rendimento Renda Fixa',
   DIVIDENDO: 'Dividendos',
   SALARIO: 'Salário',
+  PRO_LABORE: 'Pró-labore',
+  VENDA_IMOVEL: 'Venda de Imóvel',
+  JUROS_RECEBIDOS: 'Juros Recebidos',
+  RESTITUICAO_IMPOSTO: 'Restituição de Imposto',
   OUTRAS_RECEITAS: 'Outras Receitas',
+  // Despesas
   IPTU: 'IPTU',
   CONDOMINIO: 'Condomínio',
   SEGURO: 'Seguro',
@@ -183,6 +189,23 @@ export const CATEGORY_LABELS: Record<string, string> = {
   IR_DARF: 'IR / DARF',
   CUSTO_VIDA: 'Custo de Vida',
   PLANO_SAUDE: 'Plano de Saúde',
+  ALIMENTACAO: 'Alimentação / Supermercado',
+  TRANSPORTE: 'Transporte',
+  COMBUSTIVEL: 'Combustível',
+  ENERGIA: 'Energia / Luz',
+  AGUA: 'Água',
+  TELEFONE_INTERNET: 'Telefone / Internet',
+  EDUCACAO: 'Educação',
+  LAZER: 'Lazer',
+  VIAGENS: 'Viagens',
+  VESTUARIO: 'Vestuário',
+  SAUDE: 'Saúde',
+  FARMACIA: 'Farmácia',
+  TARIFAS_BANCARIAS: 'Tarifas Bancárias',
+  APORTE_INVESTIMENTO: 'Aporte / Investimento',
+  FUNCIONARIOS: 'Funcionários',
+  ASSINATURAS: 'Assinaturas',
+  DOACOES: 'Doações',
   OUTRAS_DESPESAS: 'Outras Despesas',
 };
 
