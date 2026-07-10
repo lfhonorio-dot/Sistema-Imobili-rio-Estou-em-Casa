@@ -15,7 +15,7 @@ export class DashboardService {
       this.prisma.property.findMany({ where: { deletedAt: null } }),
       this.prisma.receivablePortfolio.findMany({
         where: { deletedAt: null },
-        include: { monthlyHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 1 } },
+        include: { monthlyHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }] } },
       }),
       this.prisma.cashFlowEntry.findMany({ where: { userId, month: currentMonth, year: currentYear } }),
       this.prisma.monthlySnapshot.findMany({
@@ -46,10 +46,12 @@ export class DashboardService {
     let receivablesTotal = 0, monthlyReceivables = 0;
     for (const r of receivables) {
       receivablesTotal += Number(r.presentValue);
-      // Prefere o recebido do último mês lançado no histórico; se não houver
-      // histórico, usa o valor gravado direto na carteira.
-      const latest = (r as any).monthlyHistory?.[0];
-      monthlyReceivables += latest ? Number(latest.receivedAmount) : Number(r.monthlyReceivedAmount);
+      // Usa o recebido do mês mais recente que efetivamente teve recebimento
+      // (> 0), ignorando lançamentos vazios/futuros. Sem histórico útil,
+      // cai para o valor gravado direto na carteira.
+      const hist = (r as any).monthlyHistory || [];
+      const lastReceived = hist.find((h: any) => Number(h.receivedAmount) > 0);
+      monthlyReceivables += lastReceived ? Number(lastReceived.receivedAmount) : Number(r.monthlyReceivedAmount);
     }
 
     const totalPatrimony = financialTotal + propertiesRent + propertiesOwn + propertiesSale + receivablesTotal;
@@ -119,7 +121,7 @@ export class DashboardService {
       this.prisma.investmentAsset.findMany({ where: { deletedAt: null, maturityDate: { gte: now, lte: in60Days } } }),
       this.prisma.receivablePortfolio.findMany({
         where: { deletedAt: null },
-        include: { monthlyHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 4 } },
+        include: { monthlyHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }] } },
       }),
       this.prisma.investmentAsset.findMany({ where: { deletedAt: null, type: 'RENDA_FIXA' } }),
     ]);
@@ -132,9 +134,12 @@ export class DashboardService {
       alerts.push({ type: 'VENCIMENTO', severity: 'info', message: `"${a.name}" vence em ${days} dias`, assetId: a.id });
     }
     for (const p of portfolios) {
-      if (p.monthlyHistory.length >= 3) {
-        const avg = p.monthlyHistory.slice(1, 4).reduce((s: number, h: any) => s + Number(h.receivedAmount), 0) / 3;
-        const current = Number(p.monthlyHistory[0]?.receivedAmount || 0);
+      // Considera só meses com recebimento efetivo (> 0), ignorando lançamentos
+      // vazios/futuros que gerariam falso alerta de queda.
+      const received = p.monthlyHistory.filter((h: any) => Number(h.receivedAmount) > 0);
+      if (received.length >= 4) {
+        const avg = received.slice(1, 4).reduce((s: number, h: any) => s + Number(h.receivedAmount), 0) / 3;
+        const current = Number(received[0].receivedAmount);
         if (avg > 0 && current < avg * 0.9) {
           alerts.push({ type: 'RECEBIVEIS', severity: 'warning', message: `Carteira "${p.name}": queda >10% no recebimento` });
         }

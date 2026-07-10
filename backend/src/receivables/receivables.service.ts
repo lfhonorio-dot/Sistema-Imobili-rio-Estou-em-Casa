@@ -65,4 +65,23 @@ export class ReceivablesService {
 
     return record;
   }
+
+  async deleteHistory(portfolioId: string, year: number, month: number) {
+    await this.prisma.receivableMonthlyHistory.deleteMany({
+      where: { portfolioId, year: Number(year), month: Number(month) },
+    });
+    // Ressincroniza o "recebido/mês" da carteira com o último mês que sobrou
+    const latest = await this.prisma.receivableMonthlyHistory.findFirst({
+      where: { portfolioId },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+    await this.prisma.receivablePortfolio.update({
+      where: { id: portfolioId },
+      data: {
+        monthlyReceivedAmount: latest ? latest.receivedAmount : 0,
+        expectedMonthlyAmount: latest ? latest.expectedAmount : undefined,
+      },
+    });
+    return { deleted: true };
+  }
 }

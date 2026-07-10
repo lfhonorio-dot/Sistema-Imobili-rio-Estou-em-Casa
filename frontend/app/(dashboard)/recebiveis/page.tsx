@@ -83,6 +83,18 @@ export default function ReceiveisPage() {
     } catch (e: any) { alert(e.message); }
   };
 
+  const delHistory = async (year: number, month: number) => {
+    if (!histModal) return;
+    if (!confirm(`Excluir o lançamento de ${MONTH_NAMES[month - 1]}/${year}?`)) return;
+    try {
+      await api.receivables.deleteHistory(histModal.id, year, month);
+      const data = await api.receivables.list();
+      setPortfolios(data);
+      // mantém o modal aberto, apontando para a carteira atualizada
+      setHistModal(data.find((p: Portfolio) => p.id === histModal.id) || null);
+    } catch (e: any) { alert(e.message); }
+  };
+
   const chartData = (p: Portfolio) => {
     const hist = [...(p.monthlyHistory || [])].sort((a, b) => a.year * 100 + a.month - (b.year * 100 + b.month)).slice(-6);
     return hist.map((h: any) => ({
@@ -232,6 +244,24 @@ export default function ReceiveisPage() {
               <button className="btn-outline" onClick={() => setHistModal(null)}>Cancelar</button>
               <button className="btn-gold" onClick={addHistory}>Salvar</button>
             </div>
+
+            {histModal.monthlyHistory && histModal.monthlyHistory.length > 0 && (
+              <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Lançamentos existentes</div>
+                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                  {[...histModal.monthlyHistory]
+                    .sort((a, b) => b.year * 100 + b.month - (a.year * 100 + a.month))
+                    .map((h: any) => (
+                      <div key={`${h.year}-${h.month}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
+                        <span>{MONTH_NAMES[h.month - 1]}/{h.year}</span>
+                        <span style={{ color: 'var(--muted)' }}>{formatBRL(h.receivedAmount ?? h.received ?? 0)}</span>
+                        <button onClick={() => delHistory(h.year, h.month)} title="Excluir"
+                          style={{ background: 'transparent', border: 'none', color: 'var(--negative)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>🗑️</button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

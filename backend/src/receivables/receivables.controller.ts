@@ -24,4 +24,9 @@ export class ReceivablesController {
 
   @Post(':id/history')
   addHistory(@Param('id') id: string, @Body() body: any) { return this.service.addHistory(id, body); }
+
+  @Delete(':id/history/:year/:month')
+  deleteHistory(@Param('id') id: string, @Param('year') year: string, @Param('month') month: string) {
+    return this.service.deleteHistory(id, Number(year), Number(month));
+  }
 }

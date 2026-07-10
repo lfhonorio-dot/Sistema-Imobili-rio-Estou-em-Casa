@@ -81,6 +81,8 @@ export const api = {
     delete: (id: string) => fetchAPI(`/receivables/${id}`, { method: 'DELETE' }),
     addHistory: (id: string, data: any) =>
       fetchAPI(`/receivables/${id}/history`, { method: 'POST', body: JSON.stringify(data) }),
+    deleteHistory: (id: string, year: number, month: number) =>
+      fetchAPI(`/receivables/${id}/history/${year}/${month}`, { method: 'DELETE' }),
   },
   retirement: {
     get: () => fetchAPI('/retirement'),
