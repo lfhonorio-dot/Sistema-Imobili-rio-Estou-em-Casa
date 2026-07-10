@@ -13,7 +13,10 @@ export class DashboardService {
     const [assets, properties, receivables, cashFlow, snapshots] = await Promise.all([
       this.prisma.investmentAsset.findMany({ where: { deletedAt: null } }),
       this.prisma.property.findMany({ where: { deletedAt: null } }),
-      this.prisma.receivablePortfolio.findMany({ where: { deletedAt: null } }),
+      this.prisma.receivablePortfolio.findMany({
+        where: { deletedAt: null },
+        include: { monthlyHistory: { orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 1 } },
+      }),
       this.prisma.cashFlowEntry.findMany({ where: { userId, month: currentMonth, year: currentYear } }),
       this.prisma.monthlySnapshot.findMany({
         where: { userId },
@@ -43,7 +46,10 @@ export class DashboardService {
     let receivablesTotal = 0, monthlyReceivables = 0;
     for (const r of receivables) {
       receivablesTotal += Number(r.presentValue);
-      monthlyReceivables += Number(r.monthlyReceivedAmount);
+      // Prefere o recebido do último mês lançado no histórico; se não houver
+      // histórico, usa o valor gravado direto na carteira.
+      const latest = (r as any).monthlyHistory?.[0];
+      monthlyReceivables += latest ? Number(latest.receivedAmount) : Number(r.monthlyReceivedAmount);
     }
 
     const totalPatrimony = financialTotal + propertiesRent + propertiesOwn + propertiesSale + receivablesTotal;
