@@ -37,11 +37,15 @@ export class ReceivablesService {
     return this.prisma.receivablePortfolio.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
-  async addHistory(portfolioId: string, data: { month: number; year: number; expectedAmount: number; receivedAmount: number }) {
+  async addHistory(portfolioId: string, data: any) {
+    // Aceita tanto {expected, received} (nomes do frontend) quanto
+    // {expectedAmount, receivedAmount} (nomes internos), evitando gravar vazio.
+    const expectedAmount = Number(data.expectedAmount ?? data.expected ?? 0);
+    const receivedAmount = Number(data.receivedAmount ?? data.received ?? 0);
     return this.prisma.receivableMonthlyHistory.upsert({
       where: { portfolioId_year_month: { portfolioId, year: Number(data.year), month: Number(data.month) } },
-      create: { portfolioId, month: Number(data.month), year: Number(data.year), expectedAmount: data.expectedAmount, receivedAmount: data.receivedAmount },
-      update: { receivedAmount: data.receivedAmount, expectedAmount: data.expectedAmount },
+      create: { portfolioId, month: Number(data.month), year: Number(data.year), expectedAmount, receivedAmount },
+      update: { expectedAmount, receivedAmount },
     });
   }
 }
