@@ -116,61 +116,59 @@ export class ImportService {
     return entries;
   }
 
+  // Acha a linha de cabeçalho num conjunto de linhas (cada linha = array de células).
+  // Prefere a tabela que tem Data + Descrição + Valor (a de movimentações), evitando
+  // mini-tabelas de "Posição/Saldo" no topo que só têm Data + Valor.
+  private findHeaderRow(rows: string[][]): number {
+    const isDate = (c: string) => c === 'data' || c === 'dt' || /^data\b|^data /.test(c) || c.startsWith('data');
+    const isDesc = (c: string) => /descr|hist|lan[çc]|memo|movimenta[çc]/.test(c);
+    const isValue = (c: string) => /valor|movimenta[çc]|value|amount|montante|cr[eé]dito|d[eé]bito/.test(c);
+    let fallback = -1;
+    for (let i = 0; i < Math.min(rows.length, 50); i++) {
+      const cells = rows[i].map(c => String(c).trim().toLowerCase());
+      const d = cells.some(isDate);
+      const de = cells.some(isDesc);
+      const v = cells.some(isValue);
+      if (d && de && v) return i;                 // ideal: data + descrição + valor
+      if (d && v && fallback === -1) fallback = i; // reserva: data + valor
+    }
+    return fallback;
+  }
+
   private parseCSV(content: string) {
     const lines = content.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
-    // Separador mais provável (bancos BR usam ; com frequência)
     const sepCount = (s: string, c: string) => (s.match(new RegExp('\\' + c, 'g')) || []).length;
-    const sample = lines.slice(0, 10).join('\n');
+    const sample = lines.slice(0, 15).join('\n');
     const sep = sepCount(sample, ';') >= sepCount(sample, ',') ? ';' : (sepCount(sample, '\t') > 0 ? '\t' : ',');
-
     const split = (line: string) => line.split(sep).map(c => c.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
 
-    // Procura a linha de cabeçalho (tem Data + Valor/Histórico), ignorando
-    // linhas de título no topo comuns em extratos (banco, conta, período)
-    let headerIdx = -1;
-    for (let i = 0; i < Math.min(lines.length, 40); i++) {
-      const cells = split(lines[i]).map(c => c.toLowerCase());
-      const hasDate = cells.some(c => c === 'data' || c.startsWith('data') || c === 'dt');
-      const hasValueOrDesc = cells.some(c => /valor|hist|lan[çc]|descr|cr[eé]dito|d[eé]bito|value|amount|documento/.test(c));
-      if (hasDate && hasValueOrDesc) { headerIdx = i; break; }
-    }
-    if (headerIdx === -1) headerIdx = 0; // sem título: assume 1ª linha
-    const headers = split(lines[headerIdx]).map(h => h.toLowerCase());
+    const grid = lines.map(split);
+    let headerIdx = this.findHeaderRow(grid);
+    if (headerIdx === -1) headerIdx = 0;
+    const headers = grid[headerIdx].map(h => h.toLowerCase());
 
-    return lines.slice(headerIdx + 1).map(line => {
-      const cols = split(line);
+    return grid.slice(headerIdx + 1).map(cols => {
       const obj: any = {};
       headers.forEach((h, i) => { if (h) obj[h] = cols[i] || ''; });
       return this.rowToEntry(obj);
-    }).filter(e => e.description && e.date);
+    }).filter(e => e.description && e.date && e.amount > 0);
   }
 
   // Lê TODAS as abas da planilha — cada aba pode ser um extrato diferente.
-  // Extratos de banco costumam ter linhas de título antes da tabela, então
-  // procuramos a linha de cabeçalho real (que tem Data + Valor/Histórico).
   private parseExcel(buffer: Buffer) {
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const entries: any[] = [];
-    const isHeaderCell = (c: string) =>
-      /^data|data$|hist|lan[çc]|descr|valor|cr[eé]dito|d[eé]bito|value|amount/.test(c);
     for (const sheetName of workbook.SheetNames) {
       const grid: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false });
-      // localiza a linha de cabeçalho: tem uma coluna de "data" E uma de valor/histórico
-      let headerIdx = -1;
-      for (let i = 0; i < Math.min(grid.length, 40); i++) {
-        const cells = grid[i].map((c: any) => String(c).trim().toLowerCase());
-        const hasDate = cells.some(c => c === 'data' || c.startsWith('data') || c === 'dt');
-        const hasValueOrDesc = cells.some(c => /valor|hist|lan[çc]|descr|cr[eé]dito|d[eé]bito|value|amount/.test(c));
-        if (hasDate && hasValueOrDesc) { headerIdx = i; break; }
-      }
+      const headerIdx = this.findHeaderRow(grid.map(r => r.map((c: any) => String(c))));
       if (headerIdx === -1) continue;
       const headers = grid[headerIdx].map((c: any) => String(c).trim().toLowerCase());
       for (let i = headerIdx + 1; i < grid.length; i++) {
         const obj: any = {};
         headers.forEach((h: string, idx: number) => { if (h) obj[h] = grid[i][idx] ?? ''; });
         const entry = this.rowToEntry(obj);
-        if (entry.description && entry.date) entries.push(entry);
+        if (entry.description && entry.date && entry.amount > 0) entries.push(entry);
       }
     }
     return entries;
@@ -194,8 +192,9 @@ export class ImportService {
       pick(['descr', 'hist', 'lan', 'memo', 'lançamento', 'name']) || ''
     ).trim();
 
-    // Valor único, ou colunas separadas de crédito/débito
-    let val = parseAmount(pick(['valor', 'value', 'amount', 'montante']) || 0);
+    // Valor único, ou colunas separadas de crédito/débito.
+    // "movimenta" cobre o "Movimentação R$" do BTG. "saldo" nunca é o valor.
+    let val = parseAmount(pick(['valor', 'movimenta', 'value', 'amount', 'montante']) || 0);
     if (!val) {
       const credito = parseAmount(pick(['crédito', 'credito', 'entrada']) || 0);
       const debito = parseAmount(pick(['débito', 'debito', 'saída', 'saida']) || 0);
