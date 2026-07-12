@@ -77,11 +77,12 @@ export default function DashboardPage() {
 
       {/* KPIs */}
       <div className="kpi-grid">
-        <KPICard title="Patrimônio Total" value={formatBRL(data.totalPatrimony)} color="#C9A227" />
-        <KPICard title="Renda Passiva Mensal" value={formatBRL(data.monthlyPassiveIncome)} color="#22C55E"
-          sub="Aluguéis + recebíveis + rendimentos" />
-        <KPICard title="Aluguéis Mensais" value={formatBRL(data.monthlyRent)} sub="Renda de imóveis" />
-        <KPICard title="Recebíveis Mensais" value={formatBRL(data.monthlyReceivables)} sub="Carteiras de loteamento" />
+        <KPICard title="Patrimônio Total" value={formatBRL(data.totalPatrimony)} color="#C9A227"
+          sub="Estoque: posições + imóveis + recebíveis" />
+        <KPICard title="Renda Recebida no Mês" value={formatBRL(data.monthlyPassiveIncome)} color="#22C55E"
+          sub={`Aluguéis + recebíveis + proventos lançados em ${MONTH_NAMES[(data.selectedMonth || data.currentMonth) - 1]}/${data.selectedYear || data.currentYear}`} />
+        <KPICard title="Aluguéis do Mês" value={formatBRL(data.monthlyRent)} sub="Renda de imóveis (contratos vigentes)" />
+        <KPICard title="Recebíveis do Mês" value={formatBRL(data.monthlyReceivables)} sub="Recebido nas carteiras (competência)" />
         <KPICard
           title="Reserva de Emergência"
           value={data.emergencyReserve?.monthsCovered != null ? `${data.emergencyReserve.monthsCovered.toFixed(1)} meses` : '—'}
