@@ -165,7 +165,10 @@ export class ImportService {
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const entries: any[] = [];
     for (const sheetName of workbook.SheetNames) {
-      const grid: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false });
+      // raw: true => células numéricas vêm como NÚMERO puro (sem formatação de
+      // texto, que sairia em padrão americano "-9.95" e quebraria o parser BR).
+      // Datas vêm como Date (cellDates) ou serial — ambos tratados no normalizeDate.
+      const grid: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: true });
       const headerIdx = this.findHeaderRow(grid.map(r => r.map((c: any) => String(c))));
       if (headerIdx === -1) continue;
       const headers = grid[headerIdx].map((c: any) => String(c).trim().toLowerCase());
