@@ -73,6 +73,8 @@ export const api = {
     create: (data: any) => fetchAPI('/cash-flow', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => fetchAPI(`/cash-flow/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI(`/cash-flow/${id}`, { method: 'DELETE' }),
+    bulkDelete: (ids: string[]) =>
+      fetchAPI('/cash-flow/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   },
   receivables: {
     list: () => fetchAPI('/receivables'),

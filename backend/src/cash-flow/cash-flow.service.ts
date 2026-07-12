@@ -57,4 +57,13 @@ export class CashFlowService {
   async remove(id: string) {
     return this.prisma.cashFlowEntry.delete({ where: { id } });
   }
+
+  async bulkDelete(userId: string, ids: string[]) {
+    if (!ids.length) return { deleted: 0 };
+    // userId no filtro garante que so lancamentos do proprio usuario sao apagados
+    const result = await this.prisma.cashFlowEntry.deleteMany({
+      where: { id: { in: ids }, userId },
+    });
+    return { deleted: result.count };
+  }
 }

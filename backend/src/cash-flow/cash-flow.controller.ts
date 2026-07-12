@@ -37,6 +37,11 @@ export class CashFlowController {
     return this.service.update(id, body);
   }
 
+  @Post('bulk-delete')
+  bulkDelete(@Request() req: any, @Body() body: { ids: string[] }) {
+    return this.service.bulkDelete(req.user.id, body.ids || []);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);

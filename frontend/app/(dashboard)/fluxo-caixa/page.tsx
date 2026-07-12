@@ -34,6 +34,7 @@ export default function FluxoCaixaPage() {
   const [modal, setModal] = useState<Entry | null | 'new'>(null);
   const [form, setForm] = useState<any>({});
   const [tab, setTab] = useState<'all' | 'receitas' | 'despesas'>('all');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = async () => {
     setLoading(true);
@@ -77,6 +78,28 @@ export default function FluxoCaixaPage() {
     if (!confirm('Excluir lançamento?')) return;
     await api.cashFlow.delete(id);
     load();
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (list: Entry[]) => {
+    setSelected(prev => prev.size === list.length ? new Set() : new Set(list.map(e => e.id)));
+  };
+
+  const bulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Excluir ${selected.size} lançamento(s) selecionado(s)? Essa ação não pode ser desfeita.`)) return;
+    try {
+      await api.cashFlow.bulkDelete(Array.from(selected));
+      setSelected(new Set());
+      load();
+    } catch (e: any) { alert(e.message); }
   };
 
   const filtered = entries.filter(e => tab === 'all' || (tab === 'receitas' ? e.type === 'RECEITA' : e.type === 'DESPESA'));
@@ -164,13 +187,24 @@ export default function FluxoCaixaPage() {
               <button key={v} className={`tab${tab === v ? ' active' : ''}`} onClick={() => setTab(v as any)}>{l}</button>
             ))}
           </div>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>{filtered.length} lançamentos</span>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            {selected.size > 0 && (
+              <button className="btn-danger" style={{ fontSize: 13, padding: '6px 14px' }} onClick={bulkDelete}>
+                🗑️ Excluir {selected.size} selecionado(s)
+              </button>
+            )}
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>{filtered.length} lançamentos</span>
+          </div>
         </div>
 
         {loading ? <p style={{ color: 'var(--muted)' }}>Carregando...</p> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th style={{ padding: '8px 12px', width: 30 }}>
+                  <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length}
+                    onChange={() => toggleSelectAll(filtered)} title="Selecionar todos" />
+                </th>
                 {['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor', ''].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{h}</th>
                 ))}
@@ -178,7 +212,10 @@ export default function FluxoCaixaPage() {
             </thead>
             <tbody>
               {filtered.map(e => (
-                <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                <tr key={e.id} style={{ borderBottom: '1px solid var(--border)', background: selected.has(e.id) ? 'rgba(201,162,39,0.06)' : 'transparent' }}>
+                  <td style={{ padding: '10px 12px' }}>
+                    <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSelect(e.id)} />
+                  </td>
                   <td style={{ padding: '10px 12px', fontSize: 13 }}>{new Date(e.date).toLocaleDateString('pt-BR')}</td>
                   <td style={{ padding: '10px 12px', fontSize: 13 }}>{e.description}</td>
                   <td style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>{CATEGORY_LABELS[e.category] || e.category}</td>
@@ -199,7 +236,7 @@ export default function FluxoCaixaPage() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Nenhum lançamento encontrado</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Nenhum lançamento encontrado</td></tr>
               )}
             </tbody>
           </table>
