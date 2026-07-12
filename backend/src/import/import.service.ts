@@ -23,10 +23,15 @@ function normalizeDate(raw: any): string {
 }
 
 // Converte valores BR ("1.234,56") e internacionais ("1234.56") para número
+// Padrão Brasil estrito: vírgula é o separador decimal; ponto é separador de
+// milhar e é sempre descartado. "1.155" => 1155 | "1.234,56" => 1234.56
+// (extratos brasileiros nunca usam ponto como decimal)
 function parseAmount(raw: any): number {
   if (typeof raw === 'number') return raw;
-  const s = String(raw || '0').replace(/[R$\s]/g, '');
-  if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+  const s = String(raw || '0')
+    .replace(/[R$\s ]/g, '') // remove R$, espaços e espaço não separável
+    .replace(/\./g, '')            // ponto = milhar, descarta
+    .replace(',', '.');            // vírgula = decimal
   return parseFloat(s) || 0;
 }
 
