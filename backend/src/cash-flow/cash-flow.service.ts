@@ -44,14 +44,29 @@ export class CashFlowService {
     return results;
   }
 
+  // Garante month/year coerentes com a data do lançamento (a tela manda só a
+  // data; mes/ano são campos obrigatórios usados nos filtros por competência)
+  private withCompetence(rest: any) {
+    if (rest.date) {
+      const d = new Date(rest.date);
+      if (!isNaN(d.getTime())) {
+        rest.month = d.getUTCMonth() + 1;
+        rest.year = d.getUTCFullYear();
+        rest.date = d;
+      }
+    }
+    if (rest.amount !== undefined) rest.amount = Number(rest.amount);
+    return rest;
+  }
+
   async create(userId: string, data: any) {
     const { id: _id, createdAt, updatedAt, user, ...rest } = data;
-    return this.prisma.cashFlowEntry.create({ data: { ...rest, userId } });
+    return this.prisma.cashFlowEntry.create({ data: { ...this.withCompetence(rest), userId } });
   }
 
   async update(id: string, data: any) {
     const { id: _id, createdAt, updatedAt, user, userId, ...rest } = data;
-    return this.prisma.cashFlowEntry.update({ where: { id }, data: rest });
+    return this.prisma.cashFlowEntry.update({ where: { id }, data: this.withCompetence(rest) });
   }
 
   async remove(id: string) {
