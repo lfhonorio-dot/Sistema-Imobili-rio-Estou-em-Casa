@@ -1,0 +1,1 @@
+ALTER TABLE "CashFlowEntry" ADD COLUMN IF NOT EXISTS "notes" TEXT;

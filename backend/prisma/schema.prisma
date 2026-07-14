@@ -278,6 +278,7 @@ model CashFlowEntry {
   type        CashFlowType
   category    CashFlowCategory
   description String?
+  notes       String?
   amount      Decimal          @db.Decimal(18, 2)
   month       Int
   year        Int
