@@ -129,6 +129,155 @@ ${body}
     return { partnerLines, agencyLine, agencyPct, agencyValor, partnersPct };
   }
 
+  // Nome do índice de reajuste por extenso
+  private indexLabel(idx: unknown): string {
+    const map: Record<string, string> = {
+      IGPM: 'IGP-M/FGV',
+      IPCA: 'IPCA/IBGE',
+      INCC: 'INCC/FGV',
+      IGPDI: 'IGP-DI/FGV',
+      INPC: 'INPC/IBGE',
+    };
+    return map[String(idx ?? '').toUpperCase()] ?? 'IGP-M/FGV';
+  }
+
+  // Cláusula da garantia locatícia (art. 37 da Lei 8.245/91).
+  // Modalidades não podem ser cumuladas (art. 37, parágrafo único).
+  private buildGuaranteeClause(contract: any, guarantors: any[], rentalValue: number): string {
+    const type = String(contract.guaranteeType ?? '').toUpperCase();
+    const details = contract.guaranteeDetails ? String(contract.guaranteeDetails) : null;
+    const value = contract.guaranteeValue ? Number(contract.guaranteeValue) : null;
+
+    if (type === 'FIADOR') {
+      const names = guarantors.length
+        ? guarantors.map((g: any) => `<span class="bold">${this.fmt(g.name)}</span>, ${
+            g.cnpj ? `CNPJ n.º ${this.fmtDoc(g.cnpj)}` : `CPF n.º ${this.fmtDoc(g.cpf)}`
+          }`).join('; e ')
+        : '______________________________________';
+      return `<p class="clause-text">
+  A presente locação é garantida por <span class="bold">FIANÇA</span>, nos termos do art. 37, inciso II, da Lei
+  n.º 8.245/91, figurando como FIADORES ${names}, que assumem responsabilidade solidária por todas as obrigações
+  decorrentes deste contrato até a efetiva entrega das chaves e quitação de todos os débitos.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Primeiro.</span> A responsabilidade dos FIADORES permanecerá íntegra mesmo na
+  hipótese de prorrogação da locação por prazo indeterminado, renunciando expressamente ao benefício de ordem
+  previsto no artigo 827 do Código Civil, na forma do artigo 828, inciso I, do mesmo diploma legal.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Segundo.</span> Em caso de falecimento, incapacidade, insolvência ou exoneração
+  dos FIADORES, poderá o LOCADOR exigir a apresentação de nova garantia locatícia, no prazo de 15 (quinze) dias,
+  sob pena de rescisão contratual.
+</p>`;
+    }
+
+    if (type === 'CAUCAO') {
+      const months = value && rentalValue > 0 ? Math.round((value / rentalValue) * 10) / 10 : null;
+      return `<p class="clause-text">
+  A presente locação é garantida por <span class="bold">CAUÇÃO EM DINHEIRO</span>, nos termos do art. 37, inciso
+  I, da Lei n.º 8.245/91, no valor de <span class="bold">${this.fmtCurrency(value)}</span>${
+    months ? ` (equivalente a ${months} ${months === 1 ? 'aluguel' : 'aluguéis'})` : ''
+  }, entregue pelo LOCATÁRIO ao LOCADOR neste ato.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Primeiro.</span> Nos termos do art. 38, §2º, da Lei n.º 8.245/91, a caução em
+  dinheiro não excede o equivalente a 3 (três) meses de aluguel e será depositada em caderneta de poupança,
+  revertendo em benefício do LOCATÁRIO, com os respectivos rendimentos, ao final da locação.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Segundo.</span> A caução será restituída ao LOCATÁRIO após a entrega das chaves e
+  a vistoria final, deduzidos eventuais débitos de aluguéis, encargos ou danos ao imóvel apurados.
+</p>${details ? `
+<p class="paragrafo">${details}</p>` : ''}`;
+    }
+
+    if (type === 'SEGURO_FIANCA') {
+      return `<p class="clause-text">
+  A presente locação é garantida por <span class="bold">SEGURO DE FIANÇA LOCATÍCIA</span>, nos termos do art. 37,
+  inciso III, da Lei n.º 8.245/91${details ? `, conforme apólice ${details}` : ''}${
+    value ? `, no valor segurado de ${this.fmtCurrency(value)}` : ''
+  }.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Primeiro.</span> Cabe ao LOCATÁRIO contratar e manter vigente a apólice durante
+  todo o prazo da locação, inclusive nas prorrogações, indicando o LOCADOR como beneficiário, bem como entregar
+  cópia da apólice e dos comprovantes de pagamento sempre que solicitado.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Segundo.</span> A não renovação ou o cancelamento da apólice constituirá infração
+  contratual, facultando ao LOCADOR exigir nova garantia no prazo de 15 (quinze) dias, sob pena de rescisão.
+</p>`;
+    }
+
+    if (type === 'TITULO_CAPITALIZACAO') {
+      return `<p class="clause-text">
+  A presente locação é garantida por <span class="bold">TÍTULO DE CAPITALIZAÇÃO</span>, nos termos do art. 37 da
+  Lei n.º 8.245/91${value ? `, no valor de ${this.fmtCurrency(value)}` : ''}${details ? `, ${details}` : ''},
+  cedido em favor do LOCADOR durante toda a vigência da locação.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Único.</span> Encerrada a locação e quitados todos os débitos, o título será
+  liberado em favor do LOCATÁRIO, deduzidos eventuais valores devidos.
+</p>`;
+    }
+
+    if (type === 'NONE') {
+      return `<p class="clause-text">
+  As partes ajustam que a presente locação é celebrada <span class="bold">SEM GARANTIA</span>, respondendo o
+  LOCATÁRIO pessoalmente por todas as obrigações assumidas neste contrato.
+</p>`;
+    }
+
+    // Sem modalidade definida: mantém campo para preenchimento
+    return `<p class="clause-text">
+  As partes elegem, como garantia desta locação, a modalidade de ______________________ (caução, fiança,
+  seguro de fiança locatícia ou título de capitalização), nos termos do art. 37 da Lei n.º 8.245/91, vedada a
+  cumulação de modalidades.
+</p>`;
+  }
+
+  // Cláusula de administração/comissão com split de pagamento (locação)
+  private buildRentalSplitClause(
+    contract: any, splitRules: any[], imobiliaria: { name: string; cnpj: string },
+  ): string {
+    const rate = contract.commissionRate ? Number(contract.commissionRate) : 0;
+    if (!rate) return '';
+    const rentalValue = contract.rentalValue ? Number(contract.rentalValue) : 0;
+    const adminAmount = (rentalValue * rate) / 100;
+    const { partnerLines, agencyLine } = this.buildSplitBeneficiaries(splitRules, adminAmount, imobiliaria);
+
+    return `<p class="clause-text">
+  A presente locação é intermediada e/ou administrada por <span class="bold">${imobiliaria.name}</span>, CNPJ
+  n.º ${imobiliaria.cnpj} ("ADMINISTRADORA"), à qual é devida taxa de administração/comissão de
+  <span class="bold">${this.fmtPct(rate)}</span> sobre o valor do aluguel (${this.fmtCurrency(adminAmount)} por
+  competência).
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Primeiro.</span> Do valor pago mensalmente serão deduzidos, no ato da liquidação
+  financeira, mediante mecanismo de divisão automática de pagamento ("split de pagamento") operado por
+  instituição de pagamento autorizada pelo Banco Central do Brasil: (i) a taxa de administração devida à
+  ADMINISTRADORA; e, quando aplicável, (ii) a comissão devida a corretor(es) parceiro(s), cabendo ao LOCADOR
+  receber diretamente o valor líquido remanescente.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Segundo.</span> Beneficiários da divisão automática, a cada vencimento:
+</p>
+<ul class="clause-text">
+  ${agencyLine}
+  ${partnerLines}
+</ul>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Terceiro.</span> Em caso de indisponibilidade ou falha do split, o valor integral
+  será retido pela ADMINISTRADORA e repassado ao LOCADOR, deduzida a taxa de administração, no prazo de até 2
+  (dois) dias úteis.
+</p>
+<p class="paragrafo">
+  <span class="bold">Parágrafo Quarto.</span> A ADMINISTRADORA e o(s) corretor(es) parceiro(s) pessoa jurídica
+  obrigam-se a emitir nota fiscal de serviços correspondente ao valor efetivamente recebido, respondendo cada
+  qual pelos tributos incidentes sobre sua própria receita.
+</p>`;
+  }
+
   // ─────────────────────────────────────────────────────────────
   // Roteia pelo tipo de contrato
   async generate(workspaceId: string, contractId: string): Promise<string> {
@@ -376,6 +525,7 @@ ${notes}
   // CONTRATO DE LOCAÇÃO RESIDENCIAL (com split + DIMOB)
   async generateRentalContract(workspaceId: string, contractId: string): Promise<string> {
     const { contract, workspace, taxConfig } = await this.loadData(workspaceId, contractId);
+    const guarantors = await this.loadGuarantors(workspaceId, (contract as any).guarantorIds ?? []);
 
     const owner = contract.owner as any;   // LOCADOR
     const tenant = contract.tenant as any; // LOCATÁRIO
@@ -409,6 +559,7 @@ ${notes}
 
     const splitRules = (contract as any).splitRules ?? [];
     const { partnerLines, agencyLine } = this.buildSplitBeneficiaries(splitRules, adminAmount, imobiliaria);
+    const guaranteeClause = this.buildGuaranteeClause(contract, guarantors, Number(contract.rentalValue ?? 0));
 
     const customClauses = contract.customClauses ? `<h2 class="clause-title">Cláusulas Adicionais</h2><p class="clause-text">${contract.customClauses}</p>` : '';
     const notes = contract.notes ? `<p class="obs"><strong>Observações:</strong> ${contract.notes}</p>` : '';
@@ -482,14 +633,11 @@ ${notes}
 <h2 class="clause-title">Cláusula 4ª — Do Reajuste</h2>
 <p class="clause-text">
   O aluguel será reajustado anualmente, na menor periodicidade permitida em lei, pela variação acumulada do
-  IGP-M/FGV ou índice oficial que venha a substituí-lo.
+  ${this.indexLabel(contract.adjustmentIndex)} ou índice oficial que venha a substituí-lo.
 </p>
 
 <h2 class="clause-title">Cláusula 5ª — Da Garantia Locatícia</h2>
-<p class="clause-text">
-  As partes elegem, como garantia desta locação, a modalidade de ______________ (caução / fiança /
-  seguro-fiança), nos termos do art. 37 da Lei n.º 8.245/1991, vedada a cumulação de modalidades.
-</p>
+${guaranteeClause}
 
 <h2 class="clause-title">Cláusula 6ª — Das Obrigações das Partes</h2>
 <p class="clause-text">
@@ -587,6 +735,7 @@ ${notes}
   // renovação automática e reajuste anual pelo índice do contrato.
   async generateWarehouseRentalContract(workspaceId: string, contractId: string): Promise<string> {
     const { contract, workspace, taxConfig } = await this.loadData(workspaceId, contractId);
+    const guarantors = await this.loadGuarantors(workspaceId, (contract as any).guarantorIds ?? []);
 
     const owner = contract.owner as any;   // LOCADOR
     const tenant = contract.tenant as any; // LOCATÁRIO
@@ -608,7 +757,7 @@ ${notes}
     const startDate = this.fmtDate(contract.startDate);
     const endDate = this.fmtDate(contract.endDate);
     const contractDate = this.fmtDate(contract.signedAt ?? contract.createdAt);
-    const indexName = contract.adjustmentIndex === 'IPCA' ? 'IPCA/IBGE' : 'IGP-M/FGV';
+    const indexName = this.indexLabel(contract.adjustmentIndex);
     const lateFee = contract.lateFee ? this.fmtPct(contract.lateFee) : '10% (dez por cento)';
 
     // Primeiro vencimento: mês seguinte ao início, no dia de vencimento
@@ -619,6 +768,10 @@ ${notes}
       d.setDate(contract.dueDay);
       firstDueText = this.fmtDate(d);
     }
+
+    const splitRules = (contract as any).splitRules ?? [];
+    const guaranteeClause = this.buildGuaranteeClause(contract, guarantors, Number(contract.rentalValue ?? 0));
+    const splitClause = this.buildRentalSplitClause(contract, splitRules, imobiliaria);
 
     const customClauses = contract.customClauses
       ? `<h2 class="clause-title">Cláusulas Adicionais</h2><p class="clause-text">${contract.customClauses}</p>` : '';
@@ -679,7 +832,13 @@ ${notes}
   ${indexName}, ou, na sua extinção, por outro índice oficial que venha a substituí-lo.
 </p>
 
-<h2 class="clause-title">Cláusula Quarta – Da Renovação Automática</h2>
+<h2 class="clause-title">Cláusula Quarta – Da Garantia Locatícia</h2>
+${guaranteeClause}
+
+${splitClause ? `<h2 class="clause-title">Cláusula Quinta – Da Administração e do Split de Pagamento</h2>
+${splitClause}` : ''}
+
+<h2 class="clause-title">Cláusula Sexta – Da Renovação Automática</h2>
 <p class="clause-text">
   Findo o prazo estabelecido neste contrato, não havendo manifestação expressa de qualquer das partes, por
   escrito, com antecedência mínima de 30 (trinta) dias, o presente contrato será automaticamente renovado por
@@ -687,7 +846,7 @@ ${notes}
   condições, inclusive quanto aos reajustes do aluguel.
 </p>
 
-<h2 class="clause-title">Cláusula Quinta – Do Inadimplemento</h2>
+<h2 class="clause-title">Cláusula Sétima – Do Inadimplemento</h2>
 <p class="clause-text">
   O atraso no pagamento do aluguel ou de qualquer obrigação pecuniária prevista neste contrato acarretará:
 </p>
@@ -702,7 +861,7 @@ ${notes}
   aplicável.
 </p>
 
-<h2 class="clause-title">Cláusula Sexta – Dos Encargos da Locação</h2>
+<h2 class="clause-title">Cláusula Oitava – Dos Encargos da Locação</h2>
 <p class="clause-text">
   Além do aluguel convencionado, correrão por conta do LOCATÁRIO todas as despesas decorrentes da utilização do
   imóvel durante a vigência deste contrato.
@@ -727,7 +886,7 @@ ${notes}
   correção monetária e demais encargos previstos neste contrato.
 </p>
 
-<h2 class="clause-title">Cláusula Sétima – Da Conservação do Imóvel</h2>
+<h2 class="clause-title">Cláusula Nona – Da Conservação do Imóvel</h2>
 <p class="clause-text">
   O LOCATÁRIO obriga-se a conservar o imóvel em perfeitas condições de limpeza, higiene e utilização,
   responsabilizando-se pelos reparos decorrentes do uso normal ou inadequado durante a vigência da locação.
@@ -743,7 +902,7 @@ ${notes}
   LOCATÁRIO, sem prejuízo das demais penalidades previstas neste contrato.
 </p>
 
-<h2 class="clause-title">Cláusula Oitava – Das Benfeitorias</h2>
+<h2 class="clause-title">Cláusula Décima – Das Benfeitorias</h2>
 <p class="clause-text">
   Nenhuma obra, reforma, adaptação, ampliação ou modificação poderá ser realizada no imóvel sem autorização
   prévia e expressa do LOCADOR.
@@ -759,7 +918,7 @@ ${notes}
   das condições originais.
 </p>
 
-<h2 class="clause-title">Cláusula Nona – Da Devolução do Imóvel</h2>
+<h2 class="clause-title">Cláusula Décima Primeira – Da Devolução do Imóvel</h2>
 <p class="clause-text">
   Encerrada a locação, o LOCATÁRIO deverá devolver o imóvel livre e desocupado, nas mesmas condições em que o
   recebeu, ressalvado apenas o desgaste natural decorrente do uso regular.
@@ -774,7 +933,7 @@ ${notes}
   os respectivos custos suportados pelo LOCATÁRIO.
 </p>
 
-<h2 class="clause-title">Cláusula Décima – Da Responsabilidade</h2>
+<h2 class="clause-title">Cláusula Décima Segunda – Da Responsabilidade</h2>
 <p class="clause-text">
   O LOCATÁRIO responderá integralmente pelos danos causados ao imóvel, às suas instalações e equipamentos, bem
   como por prejuízos causados a terceiros em razão da utilização do imóvel durante a vigência deste contrato.
@@ -785,7 +944,7 @@ ${notes}
   no interior do imóvel, salvo quando decorrentes de comprovada culpa exclusiva do LOCADOR.
 </p>
 
-<h2 class="clause-title">Cláusula Décima Primeira – Da Cessão e Sublocação</h2>
+<h2 class="clause-title">Cláusula Décima Terceira – Da Cessão e Sublocação</h2>
 <p class="clause-text">
   É vedado ao LOCATÁRIO ceder, transferir, emprestar, sublocar, total ou parcialmente, o imóvel objeto deste
   contrato, bem como transferir os direitos e obrigações dele decorrentes, sem a prévia e expressa autorização
@@ -797,7 +956,7 @@ ${notes}
   sem prejuízo da cobrança da multa contratual e das perdas e danos eventualmente apurados.
 </p>
 
-<h2 class="clause-title">Cláusula Décima Segunda – Da Rescisão Contratual</h2>
+<h2 class="clause-title">Cláusula Décima Quarta – Da Rescisão Contratual</h2>
 <p class="clause-text">O presente contrato poderá ser rescindido:</p>
 <ul class="clause-text">
   <li>I – por comum acordo entre as partes;</li>
@@ -816,7 +975,7 @@ ${notes}
   escrito entre as partes ou nas hipóteses expressamente previstas em lei.
 </p>
 
-<h2 class="clause-title">Cláusula Décima Terceira – Das Disposições Gerais</h2>
+<h2 class="clause-title">Cláusula Décima Quinta – Das Disposições Gerais</h2>
 <p class="clause-text">
   A eventual tolerância de qualquer das partes quanto ao descumprimento de cláusulas deste contrato será
   considerada mera liberalidade, não constituindo novação, renúncia de direito ou alteração contratual.
@@ -830,7 +989,7 @@ ${notes}
   inexequível, as demais cláusulas permanecerão plenamente válidas e eficazes.
 </p>
 
-<h2 class="clause-title">Cláusula Décima Quarta – Das Comunicações</h2>
+<h2 class="clause-title">Cláusula Décima Sexta – Das Comunicações</h2>
 <p class="clause-text">
   Toda comunicação entre as partes referente ao presente contrato poderá ser realizada por escrito, mediante
   correspondência, e-mail, aplicativo de mensagens ou outro meio eletrônico que permita comprovar seu envio e
@@ -841,7 +1000,7 @@ ${notes}
   físicos ou eletrônicos informados pelas partes, até que haja comunicação formal de eventual alteração.
 </p>
 
-<h2 class="clause-title">Cláusula Décima Quinta – Do Foro</h2>
+<h2 class="clause-title">Cláusula Décima Sétima – Do Foro</h2>
 <p class="clause-text">
   Fica eleito o foro da Comarca de ${propCity}/${propState}, com renúncia expressa de qualquer outro, por mais
   privilegiado que seja, para dirimir quaisquer dúvidas ou controvérsias oriundas deste contrato.
@@ -903,7 +1062,7 @@ ${notes}
     const startDate = this.fmtDate(contract.startDate);
     const endDate = this.fmtDate(contract.endDate);
     const contractDate = this.fmtDate(contract.signedAt ?? contract.createdAt);
-    const indexName = contract.adjustmentIndex === 'IPCA' ? 'IPCA/IBGE' : 'IGP-M/FGV';
+    const indexName = this.indexLabel(contract.adjustmentIndex);
     const lateFee = contract.lateFee ? this.fmtPct(contract.lateFee) : '10% (dez por cento)';
 
     let firstDueText = '______________';
@@ -914,8 +1073,10 @@ ${notes}
       firstDueText = this.fmtDate(d);
     }
 
-    // Bloco dos fiadores (quando cadastrados no contrato)
-    const guarantorBlock = guarantors.length
+    const isFiador = String((contract as any).guaranteeType ?? '').toUpperCase() === 'FIADOR';
+
+    // Bloco dos fiadores no preâmbulo (apenas quando a garantia for fiança)
+    const guarantorBlock = !isFiador ? '' : guarantors.length
       ? `<h2 class="clause-title">Fiadores</h2>
 <p class="clause-text">${guarantors.map((g: any) => this.qualifyParty(g)).join('; e ')}, doravante denominados
 <span class="bold">FIADORES</span>.</p>`
@@ -933,6 +1094,9 @@ ${notes}
       }</strong><br>${i === 0 ? 'FIADOR(A)' : 'FIADOR(A)'}<br>CPF: ${g ? this.fmtDoc(g.cpf) : '_______________'}</div></div>`)
       .join('');
 
+    const splitRules = (contract as any).splitRules ?? [];
+    const guaranteeClause = this.buildGuaranteeClause(contract, guarantors, Number(contract.rentalValue ?? 0));
+    const splitClause = this.buildRentalSplitClause(contract, splitRules, imobiliaria);
     const customClauses = contract.customClauses
       ? `<h2 class="clause-title">Cláusulas Adicionais</h2><p class="clause-text">${contract.customClauses}</p>` : '';
     const notes = contract.notes ? `<p class="obs"><strong>Observações:</strong> ${contract.notes}</p>` : '';
@@ -1064,8 +1228,8 @@ ${condoValue ? `<p class="clause-text">
 </p>
 <p class="paragrafo">
   <span class="bold">Parágrafo Único.</span> O inadimplemento de um ou mais aluguéis e/ou encargos da locação
-  autorizará o protesto do presente contrato, bem como a inscrição do nome da LOCATÁRIA e dos FIADORES nos
-  cadastros de proteção ao crédito, sem prejuízo das demais medidas judiciais cabíveis.
+  autorizará o protesto do presente contrato, bem como a inscrição do nome da LOCATÁRIA${isFiador ? ' e dos FIADORES' : ''}
+  nos cadastros de proteção ao crédito, sem prejuízo das demais medidas judiciais cabíveis.
 </p>
 <p class="clause-text">
   <span class="bold">Cláusula 8ª.</span> Sempre que for necessária a adoção de medidas judiciais para a defesa
@@ -1156,25 +1320,19 @@ ${condoValue ? `<p class="clause-text">
   contrato.
 </p>
 <p class="clause-text">
-  <span class="bold">Cláusula 17 – Dos Fiadores.</span> ${guarantorNames} assumem responsabilidade solidária por
-  todas as obrigações decorrentes deste contrato, respondendo pelo cumprimento integral das obrigações assumidas
-  pela LOCATÁRIA até a efetiva entrega das chaves e quitação de todos os débitos.
+  <span class="bold">Cláusula 17 – Da Garantia Locatícia.</span>
 </p>
-<p class="paragrafo">
-  <span class="bold">Parágrafo Primeiro.</span> A responsabilidade dos FIADORES permanecerá íntegra mesmo na
-  hipótese de prorrogação da locação por prazo indeterminado, renunciando expressamente ao benefício de ordem
-  previsto no artigo 827 do Código Civil, na forma do artigo 828, inciso I, do mesmo diploma legal.
-</p>
-<p class="paragrafo">
-  <span class="bold">Parágrafo Segundo.</span> Em caso de falecimento, incapacidade, insolvência ou exoneração
-  dos FIADORES, poderá o LOCADOR exigir a apresentação de nova garantia locatícia, no prazo de 15 (quinze) dias,
-  sob pena de rescisão contratual.
-</p>
+${guaranteeClause}
 <p class="clause-text">
   <span class="bold">Cláusula 18.</span> A eventual tolerância do LOCADOR quanto ao descumprimento de qualquer
   cláusula deste contrato constituirá mera liberalidade, não implicando novação, renúncia de direitos ou
   alteração das condições pactuadas.
 </p>
+
+${splitClause ? `<p class="clause-text">
+  <span class="bold">Cláusula 18-A – Da Administração e do Split de Pagamento.</span>
+</p>
+${splitClause}` : ''}
 
 <h2 class="clause-title">VI – Da Venda do Imóvel</h2>
 <p class="clause-text">
@@ -1199,8 +1357,8 @@ ${customClauses}
 ${notes}
 
 <p class="clause-text" style="margin-top:24px;">
-  E, por estarem justos e contratados, LOCADOR, LOCATÁRIA e FIADORES assinam o presente instrumento em 02 (duas)
-  vias de igual teor e forma, para que produza todos os efeitos de direito.
+  E, por estarem justos e contratados, LOCADOR, LOCATÁRIA${isFiador ? ' e FIADORES' : ''} assinam o presente
+  instrumento em 02 (duas) vias de igual teor e forma, para que produza todos os efeitos de direito.
 </p>
 <p class="clause-text" style="text-align:right;margin-top:16px;">${propCity}/${propState}, ${contractDate}.</p>
 
@@ -1213,9 +1371,9 @@ ${notes}
       tenant?.cnpj ? `CNPJ: ${this.fmtDoc(tenant.cnpj)}` : `CPF: ${this.fmtDoc(tenant?.cpf)}`
     }</div></div>
   </div>
-  <div class="ass-linha">
+  ${isFiador ? `<div class="ass-linha">
     ${guarantorSignatures}
-  </div>
+  </div>` : ''}
 </div>`;
 
     return this.shell(`Locação Não Residencial (Sala Comercial) — ${prop?.code ?? contractId}`, body);

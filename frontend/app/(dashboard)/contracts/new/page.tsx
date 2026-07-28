@@ -38,6 +38,10 @@ export default function NewContractPage() {
     commissionRate: '',
     notes: '',
     templateKey: '',
+    adjustmentIndex: 'IGPM',
+    guaranteeType: '',
+    guaranteeValue: '',
+    guaranteeDetails: '',
   });
   // Fiadores (usados no modelo de sala comercial)
   const [guarantorIds, setGuarantorIds] = useState<string[]>([]);
@@ -75,7 +79,9 @@ export default function NewContractPage() {
   const isSale = form.type === 'SALE';
   const isBrokerage = form.type === 'BROKERAGE';
   const isCommercial = form.type === 'RENTAL_COMMERCIAL';
-  const needsGuarantors = isCommercial && form.templateKey === 'RENTAL_COMMERCIAL_ROOM';
+  const needsGuarantors = isRental && form.guaranteeType === 'FIADOR';
+  const needsGuaranteeValue = isRental && (form.guaranteeType === 'CAUCAO' || form.guaranteeType === 'TITULO_CAPITALIZACAO');
+  const needsInsurer = isRental && form.guaranteeType === 'SEGURO_FIANCA';
 
   async function handleSubmit() {
     if (!form.type || !form.propertyId) {
@@ -104,6 +110,10 @@ export default function NewContractPage() {
         commissionRate: parseBR(form.commissionRate),
         notes: form.notes || undefined,
         templateKey: isCommercial && form.templateKey ? form.templateKey : undefined,
+        adjustmentIndex: isRental ? form.adjustmentIndex : undefined,
+        guaranteeType: isRental && form.guaranteeType ? form.guaranteeType : undefined,
+        guaranteeValue: needsGuaranteeValue ? parseBR(form.guaranteeValue) : undefined,
+        guaranteeDetails: form.guaranteeDetails || undefined,
         guarantorIds: guarantorIds.length ? guarantorIds : undefined,
       };
 
@@ -203,41 +213,109 @@ export default function NewContractPage() {
             </div>
           )}
 
-          {/* Fiadores (modelo sala comercial) */}
-          {needsGuarantors && (
-            <div className="space-y-1.5">
-              <Label>Fiadores</Label>
-              <Select value="" onValueChange={(v) => setGuarantorIds((prev) => prev.includes(v) ? prev : [...prev, v])}>
-                <SelectTrigger><SelectValue placeholder="Adicionar fiador..." /></SelectTrigger>
-                <SelectContent>
-                  {contacts.filter((c) => !guarantorIds.includes(c.id)).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {guarantorIds.length > 0 && (
-                <div className="space-y-1 pt-1">
-                  {guarantorIds.map((gid) => {
-                    const c = contacts.find((x) => x.id === gid);
-                    return (
-                      <div key={gid} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
-                        <span>{c?.name ?? gid}</span>
-                        <button
-                          type="button"
-                          onClick={() => setGuarantorIds((prev) => prev.filter((x) => x !== gid))}
-                          className="text-red-600 text-xs"
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    );
-                  })}
+          {/* Índice de reajuste e garantia locatícia */}
+          {isRental && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Índice de Reajuste</Label>
+                <Select value={form.adjustmentIndex} onValueChange={(v) => setField('adjustmentIndex', v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o índice..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="IGPM">IGP-M/FGV (mais usado em locação)</SelectItem>
+                    <SelectItem value="IPCA">IPCA/IBGE</SelectItem>
+                    <SelectItem value="INPC">INPC/IBGE</SelectItem>
+                    <SelectItem value="IGPDI">IGP-DI/FGV</SelectItem>
+                    <SelectItem value="INCC">INCC/FGV</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Usado na cláusula de reajuste e no reajuste automático anual (IGP-M e IPCA são buscados no
+                  Banco Central).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Garantia Locatícia</Label>
+                <Select value={form.guaranteeType} onValueChange={(v) => setField('guaranteeType', v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a garantia..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FIADOR">Fiador</SelectItem>
+                    <SelectItem value="CAUCAO">Caução (aluguel calção)</SelectItem>
+                    <SelectItem value="SEGURO_FIANCA">Seguro Fiança</SelectItem>
+                    <SelectItem value="TITULO_CAPITALIZACAO">Título de Capitalização</SelectItem>
+                    <SelectItem value="NONE">Sem garantia</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Art. 37 da Lei 8.245/91 — as modalidades não podem ser cumuladas.
+                </p>
+              </div>
+
+              {needsGuaranteeValue && (
+                <div className="space-y-1.5">
+                  <Label>Valor da {form.guaranteeType === 'CAUCAO' ? 'Caução' : 'Título'} (R$)</Label>
+                  <Input
+                    type="text" inputMode="decimal" placeholder="0,00"
+                    value={form.guaranteeValue}
+                    onChange={(e) => setField('guaranteeValue', e.target.value)}
+                  />
+                  {form.guaranteeType === 'CAUCAO' && (
+                    <p className="text-xs text-muted-foreground">
+                      Limite legal: até 3 aluguéis{parseNum(form.rentalValue) > 0
+                        ? ` (${brl(parseNum(form.rentalValue) * 3)})`
+                        : ''} — art. 38, §2º.
+                    </p>
+                  )}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                Respondem solidariamente pelas obrigações do contrato (Cláusula 17).
-              </p>
-            </div>
+
+              {needsInsurer && (
+                <div className="space-y-1.5">
+                  <Label>Seguradora / Apólice</Label>
+                  <Input
+                    placeholder="Ex.: Porto Seguro, apólice n.º 123456"
+                    value={form.guaranteeDetails}
+                    onChange={(e) => setField('guaranteeDetails', e.target.value)}
+                  />
+                </div>
+              )}
+
+              {needsGuarantors && (
+                <div className="space-y-1.5">
+                  <Label>Fiadores</Label>
+                  <Select value="" onValueChange={(v) => setGuarantorIds((prev) => prev.includes(v) ? prev : [...prev, v])}>
+                    <SelectTrigger><SelectValue placeholder="Adicionar fiador..." /></SelectTrigger>
+                    <SelectContent>
+                      {contacts.filter((c) => !guarantorIds.includes(c.id)).map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {guarantorIds.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      {guarantorIds.map((gid) => {
+                        const c = contacts.find((x) => x.id === gid);
+                        return (
+                          <div key={gid} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
+                            <span>{c?.name ?? gid}</span>
+                            <button
+                              type="button"
+                              onClick={() => setGuarantorIds((prev) => prev.filter((x) => x !== gid))}
+                              className="text-red-600 text-xs"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Respondem solidariamente pelas obrigações do contrato.
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           {/* Imóvel */}

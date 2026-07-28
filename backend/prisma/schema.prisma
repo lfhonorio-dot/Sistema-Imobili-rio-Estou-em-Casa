@@ -671,6 +671,9 @@ model Contract {
   ownerId          String?   // Contact id proprietário/vendedor
   tenantId         String?   // Contact id inquilino/comprador
   guarantorIds     String[]  @default([])
+  guaranteeType    String?   // FIADOR, CAUCAO, SEGURO_FIANCA, TITULO_CAPITALIZACAO, NONE
+  guaranteeValue   Decimal?  @db.Decimal(15, 2) // valor da caução/título
+  guaranteeDetails String?   // seguradora/apólice ou observações da garantia
   // Datas
   startDate        DateTime?
   endDate          DateTime?

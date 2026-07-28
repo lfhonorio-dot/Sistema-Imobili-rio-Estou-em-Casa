@@ -65,6 +65,19 @@ export class CreateContractDto {
   @IsString({ each: true })
   guarantorIds?: string[];
 
+  // Garantia locatícia (art. 37 da Lei 8.245/91) — modalidades não cumuláveis
+  @IsOptional()
+  @IsIn(['FIADOR', 'CAUCAO', 'SEGURO_FIANCA', 'TITULO_CAPITALIZACAO', 'NONE'])
+  guaranteeType?: string;
+
+  @IsOptional()
+  @IsNumber()
+  guaranteeValue?: number;
+
+  @IsOptional()
+  @IsString()
+  guaranteeDetails?: string;
+
   @IsOptional()
   @IsDateString()
   startDate?: string;
