@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, FileSignature, FileText, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileSignature, FileText, Trash2, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useContract, useChangeContractStatus, useGenerateInstallments, useRequestSignature } from '@/hooks/use-contracts';
+import { useContract, useChangeContractStatus, useGenerateInstallments, useRequestSignature, useUpdateContract } from '@/hooks/use-contracts';
+import { useContacts } from '@/hooks/use-contacts';
 import { usePayEntry } from '@/hooks/use-financial';
 import { FinancialEntryRow } from '@/components/erp/financial-entry-row';
 import { format } from 'date-fns';
@@ -73,6 +74,52 @@ export default function ContractDetailPage() {
   const [signatureMessage, setSignatureMessage] = useState('');
   const [months, setMonths] = useState('12');
   const [loadingDoc, setLoadingDoc] = useState(false);
+
+  // Edição das condições (índice de reajuste e garantia locatícia)
+  const updateContract = useUpdateContract();
+  const { data: contactsData } = useContacts({ limit: 500 });
+  const allContacts = contactsData?.items ?? [];
+  const [showTermsDialog, setShowTermsDialog] = useState(false);
+  const [terms, setTerms] = useState({
+    adjustmentIndex: '', guaranteeType: '', guaranteeValue: '', guaranteeDetails: '',
+  });
+  const [termsGuarantors, setTermsGuarantors] = useState<string[]>([]);
+
+  function openTermsDialog() {
+    const c = contract as any;
+    setTerms({
+      adjustmentIndex: c?.adjustmentIndex ?? 'IGPM',
+      guaranteeType: c?.guaranteeType ?? '',
+      guaranteeValue: c?.guaranteeValue != null ? String(c.guaranteeValue) : '',
+      guaranteeDetails: c?.guaranteeDetails ?? '',
+    });
+    setTermsGuarantors(c?.guarantorIds ?? []);
+    setShowTermsDialog(true);
+  }
+
+  async function handleSaveTerms() {
+    const parseBR = (v: string) => {
+      if (!v) return undefined;
+      const n = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+      return isNaN(n) ? undefined : n;
+    };
+    const needsValue = terms.guaranteeType === 'CAUCAO' || terms.guaranteeType === 'TITULO_CAPITALIZACAO';
+    try {
+      await updateContract.mutateAsync({
+        id,
+        adjustmentIndex: terms.adjustmentIndex || undefined,
+        guaranteeType: terms.guaranteeType || undefined,
+        guaranteeValue: needsValue ? parseBR(terms.guaranteeValue) : undefined,
+        guaranteeDetails: terms.guaranteeDetails || undefined,
+        guarantorIds: terms.guaranteeType === 'FIADOR' ? termsGuarantors : [],
+      } as any);
+      toast.success('Condições atualizadas! Gere o contrato novamente para ver o texto.');
+      setShowTermsDialog(false);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message;
+      toast.error(Array.isArray(msg) ? msg[0] : msg || 'Erro ao atualizar as condições.');
+    }
+  }
 
   async function handleViewContract() {
     setLoadingDoc(true);
@@ -186,6 +233,128 @@ export default function ContractDetailPage() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* Editar condições: índice de reajuste e garantia (locação) */}
+          {isRental && (
+            <Dialog open={showTermsDialog} onOpenChange={setShowTermsDialog}>
+              <Button variant="outline" size="sm" onClick={openTermsDialog}>
+                <Settings2 className="w-4 h-4 mr-1.5" />
+                Editar Condições
+              </Button>
+              <DialogContent className="max-h-[85vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>Índice de Reajuste e Garantia</DialogTitle></DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Índice de Reajuste</Label>
+                    <Select
+                      value={terms.adjustmentIndex}
+                      onValueChange={(v) => setTerms((p) => ({ ...p, adjustmentIndex: v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Selecione o índice..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="IGPM">IGP-M/FGV (mais usado em locação)</SelectItem>
+                        <SelectItem value="IPCA">IPCA/IBGE</SelectItem>
+                        <SelectItem value="INPC">INPC/IBGE</SelectItem>
+                        <SelectItem value="IGPDI">IGP-DI/FGV</SelectItem>
+                        <SelectItem value="INCC">INCC/FGV</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Garantia Locatícia</Label>
+                    <Select
+                      value={terms.guaranteeType}
+                      onValueChange={(v) => setTerms((p) => ({ ...p, guaranteeType: v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Selecione a garantia..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FIADOR">Fiador</SelectItem>
+                        <SelectItem value="CAUCAO">Caução (aluguel calção)</SelectItem>
+                        <SelectItem value="SEGURO_FIANCA">Seguro Fiança</SelectItem>
+                        <SelectItem value="TITULO_CAPITALIZACAO">Título de Capitalização</SelectItem>
+                        <SelectItem value="NONE">Sem garantia</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Art. 37 da Lei 8.245/91 — as modalidades não podem ser cumuladas.
+                    </p>
+                  </div>
+
+                  {(terms.guaranteeType === 'CAUCAO' || terms.guaranteeType === 'TITULO_CAPITALIZACAO') && (
+                    <div className="space-y-1.5">
+                      <Label>Valor da {terms.guaranteeType === 'CAUCAO' ? 'Caução' : 'Título'} (R$)</Label>
+                      <Input
+                        type="text" inputMode="decimal" placeholder="0,00"
+                        value={terms.guaranteeValue}
+                        onChange={(e) => setTerms((p) => ({ ...p, guaranteeValue: e.target.value }))}
+                      />
+                      {terms.guaranteeType === 'CAUCAO' && (contract as any)?.rentalValue && (
+                        <p className="text-xs text-muted-foreground">
+                          Limite legal: até 3 aluguéis ({new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+                            .format(Number((contract as any).rentalValue) * 3)}) — art. 38, §2º.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {terms.guaranteeType === 'SEGURO_FIANCA' && (
+                    <div className="space-y-1.5">
+                      <Label>Seguradora / Apólice</Label>
+                      <Input
+                        placeholder="Ex.: Porto Seguro, apólice n.º 123456"
+                        value={terms.guaranteeDetails}
+                        onChange={(e) => setTerms((p) => ({ ...p, guaranteeDetails: e.target.value }))}
+                      />
+                    </div>
+                  )}
+
+                  {terms.guaranteeType === 'FIADOR' && (
+                    <div className="space-y-1.5">
+                      <Label>Fiadores</Label>
+                      <Select
+                        value=""
+                        onValueChange={(v) => setTermsGuarantors((prev) => prev.includes(v) ? prev : [...prev, v])}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Adicionar fiador..." /></SelectTrigger>
+                        <SelectContent>
+                          {allContacts.filter((c) => !termsGuarantors.includes(c.id)).map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {termsGuarantors.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          {termsGuarantors.map((gid) => {
+                            const c = allContacts.find((x) => x.id === gid);
+                            return (
+                              <div key={gid} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
+                                <span>{c?.name ?? gid}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setTermsGuarantors((prev) => prev.filter((x) => x !== gid))}
+                                  className="text-red-600 text-xs"
+                                >
+                                  Remover
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 justify-end pt-2">
+                    <Button variant="outline" onClick={() => setShowTermsDialog(false)}>Cancelar</Button>
+                    <Button onClick={handleSaveTerms} disabled={updateContract.isPending}>
+                      {updateContract.isPending ? 'Salvando...' : 'Salvar'}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
 
           {/* Gerar Parcelas (só para locação) */}
           {isRental && (

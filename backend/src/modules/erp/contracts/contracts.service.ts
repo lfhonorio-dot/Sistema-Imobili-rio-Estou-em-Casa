@@ -682,10 +682,14 @@ export class ContractsService {
     });
     if (!existing) throw new NotFoundException('Contrato não encontrado');
 
+    // partnerSplits não é coluna do contrato (vira SplitRule na criação) — o
+    // spread direto no Prisma quebraria o update.
+    const { partnerSplits: _ignoredSplits, ...contractDto } = dto as any;
+
     const updated = await this.prisma.contract.update({
       where: { id },
       data: {
-        ...dto,
+        ...contractDto,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
         signedAt: dto.signedAt ? new Date(dto.signedAt) : undefined,

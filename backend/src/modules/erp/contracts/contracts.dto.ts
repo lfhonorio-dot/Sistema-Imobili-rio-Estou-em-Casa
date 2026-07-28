@@ -15,6 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { PartialType } from '@nestjs/mapped-types';
 
 // Repasse de parte da comissão para um corretor parceiro (% da comissão)
 export class PartnerSplitDto {
@@ -186,7 +187,9 @@ export class CreateContractDto {
   notes?: string;
 }
 
-export class UpdateContractDto extends CreateContractDto {}
+// Atualização parcial: nenhum campo é obrigatório (PATCH). Sem isso, editar
+// apenas o índice ou a garantia exigiria reenviar type e propertyId.
+export class UpdateContractDto extends PartialType(CreateContractDto) {}
 
 export class ChangeContractStatusDto {
   @IsEnum(ContractStatus)
