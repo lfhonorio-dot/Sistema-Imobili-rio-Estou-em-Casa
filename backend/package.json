@@ -12,6 +12,7 @@
     "test:cov": "jest --coverage",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "seed": "ts-node prisma/seed.ts",
+    "reset-data": "ts-node prisma/reset-data.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
