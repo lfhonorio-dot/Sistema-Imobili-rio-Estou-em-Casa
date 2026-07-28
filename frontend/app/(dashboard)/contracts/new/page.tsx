@@ -37,7 +37,10 @@ export default function NewContractPage() {
     dueDay: '',
     commissionRate: '',
     notes: '',
+    templateKey: '',
   });
+  // Fiadores (usados no modelo de sala comercial)
+  const [guarantorIds, setGuarantorIds] = useState<string[]>([]);
   const [generateMonths, setGenerateMonths] = useState('12');
 
   // Corretores parceiros que recebem repasse de % da comissão
@@ -71,6 +74,8 @@ export default function NewContractPage() {
   const isRental = form.type === 'RENTAL_RESIDENTIAL' || form.type === 'RENTAL_COMMERCIAL';
   const isSale = form.type === 'SALE';
   const isBrokerage = form.type === 'BROKERAGE';
+  const isCommercial = form.type === 'RENTAL_COMMERCIAL';
+  const needsGuarantors = isCommercial && form.templateKey === 'RENTAL_COMMERCIAL_ROOM';
 
   async function handleSubmit() {
     if (!form.type || !form.propertyId) {
@@ -98,6 +103,8 @@ export default function NewContractPage() {
         dueDay: form.dueDay ? parseInt(form.dueDay) : undefined,
         commissionRate: parseBR(form.commissionRate),
         notes: form.notes || undefined,
+        templateKey: isCommercial && form.templateKey ? form.templateKey : undefined,
+        guarantorIds: guarantorIds.length ? guarantorIds : undefined,
       };
 
       // Repasses aos corretores parceiros (% da comissão)
@@ -177,6 +184,61 @@ export default function NewContractPage() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Modelo do documento (locação comercial) */}
+          {isCommercial && (
+            <div className="space-y-1.5">
+              <Label>Modelo do Contrato</Label>
+              <Select value={form.templateKey} onValueChange={(v) => setField('templateKey', v)}>
+                <SelectTrigger><SelectValue placeholder="Automático (pelo tipo do imóvel)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="RENTAL_WAREHOUSE">Barracão / Galpão (não residencial)</SelectItem>
+                  <SelectItem value="RENTAL_COMMERCIAL_ROOM">Sala Comercial (com fiadores)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Define o texto do contrato gerado. Sem escolha, o sistema usa o modelo de barracão para
+                galpões/áreas e o de sala comercial para os demais imóveis.
+              </p>
+            </div>
+          )}
+
+          {/* Fiadores (modelo sala comercial) */}
+          {needsGuarantors && (
+            <div className="space-y-1.5">
+              <Label>Fiadores</Label>
+              <Select value="" onValueChange={(v) => setGuarantorIds((prev) => prev.includes(v) ? prev : [...prev, v])}>
+                <SelectTrigger><SelectValue placeholder="Adicionar fiador..." /></SelectTrigger>
+                <SelectContent>
+                  {contacts.filter((c) => !guarantorIds.includes(c.id)).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {guarantorIds.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  {guarantorIds.map((gid) => {
+                    const c = contacts.find((x) => x.id === gid);
+                    return (
+                      <div key={gid} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
+                        <span>{c?.name ?? gid}</span>
+                        <button
+                          type="button"
+                          onClick={() => setGuarantorIds((prev) => prev.filter((x) => x !== gid))}
+                          className="text-red-600 text-xs"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Respondem solidariamente pelas obrigações do contrato (Cláusula 17).
+              </p>
+            </div>
+          )}
 
           {/* Imóvel */}
           <div className="space-y-1.5">

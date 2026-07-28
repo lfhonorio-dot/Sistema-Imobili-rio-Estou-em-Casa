@@ -9,6 +9,7 @@ import {
   IsArray,
   IsEnum,
   IsInt,
+  IsIn,
   Min,
   Max,
   ValidateNested,
@@ -121,6 +122,12 @@ export class CreateContractDto {
   @IsOptional()
   @IsString()
   customClauses?: string;
+
+  // Modelo do documento gerado: RENTAL_WAREHOUSE (barracão/galpão) ou
+  // RENTAL_COMMERCIAL_ROOM (sala comercial com fiadores). Vazio = automático.
+  @IsOptional()
+  @IsIn(['RENTAL_WAREHOUSE', 'RENTAL_COMMERCIAL_ROOM'])
+  templateKey?: string;
 
   @IsOptional()
   @IsNumber()

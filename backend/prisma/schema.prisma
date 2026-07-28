@@ -664,6 +664,7 @@ model Contract {
   workspaceId      String
   code             String?   // Código sequencial: C-{ano}-{NNNN}
   type             String    // SALE, RENTAL_RESIDENTIAL, RENTAL_COMMERCIAL, BROKERAGE
+  templateKey      String?   // modelo do documento: RENTAL_WAREHOUSE, RENTAL_COMMERCIAL_ROOM
   status           String    @default("DRAFT") // DRAFT, ACTIVE, TERMINATED, RESCINDED
   propertyId       String
   // Partes
