@@ -17,8 +17,12 @@
   contratos (código C-ANO-NNNN, criação atômica com $transaction, validação por tipo).
 - Tipos de contrato: SALE, RENTAL_*, BROKERAGE (valor da negociação em `saleValue`,
   contas a receber = comissão total).
-- Templates de documento: Compra e Venda (com cláusulas de split de pagamento e DIMOB)
-  e Locação Residencial — roteados por tipo em `contract-template.service.generate()`.
+- Templates de documento: Compra e Venda (com cláusulas de split e DIMOB), Locação
+  Residencial, Locação Não Residencial de **Barracão/Galpão** (15 cláusulas) e de
+  **Sala Comercial** (seções I–VII, cláusulas 1–20, com fiadores solidários, condomínio,
+  seguro incêndio e direito de preferência). Roteados em
+  `contract-template.service.generate()` pelo campo `contracts.templateKey`
+  (RENTAL_WAREHOUSE | RENTAL_COMMERCIAL_ROOM); vazio = automático pelo tipo do imóvel.
 - Assinatura eletrônica nativa: envelope → e-mail com link → portal `/sign/:token` →
   OTP (por e-mail em produção) → assinado, com trilha de auditoria.
 
@@ -93,6 +97,16 @@
 6. **Módulo incorporadora** (SAC/Price, repasse Caixa): decisão de produto antes.
 7. Hardening: sequence Postgres p/ códigos de contrato; retry/fila (BullMQ) nos
    envios; assinatura com carimbo de tempo/ICP opcional (Clicksign).
+
+## Ambiente da sessão (reinício de container)
+
+Se o container reiniciar, o repositório pode ser reclonado na branch designada
+(`claude/great-bardeen-rylpmg`), que está **desatualizada** — o trabalho vive em `main`.
+Antes de qualquer coisa: `git fetch origin main && git checkout main`. O restart também
+zera `node_modules` (rodar `npm install` em `backend/` e `frontend/`) e o Postgres local
+(recriar user `homolog`/`homolog123` + base `plataforma_homolog`, `prisma migrate deploy`
+e `npm run seed`). Use `./node_modules/.bin/prisma` — `npx prisma` baixa a v7, que rejeita
+o schema (datasource `url`).
 
 ## Dívidas/atenções conhecidas
 
