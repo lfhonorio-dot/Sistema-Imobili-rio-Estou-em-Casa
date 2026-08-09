@@ -230,7 +230,7 @@ export default function ConsultorPage() {
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>🧠 Consultor Patrimonial IA</h1>
           <p style={{ color: 'var(--muted)', fontSize: 14 }}>
-            Análise crítica do seu patrimônio por um agente especializado • Modelo: claude-opus-4-6
+            Análise crítica do seu patrimônio por um agente especializado • Modelo: claude-opus-5
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>

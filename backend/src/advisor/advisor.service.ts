@@ -1,7 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import Anthropic from '@anthropic-ai/sdk';
 import * as pdfParse from 'pdf-parse';
+
+const MODEL = 'claude-opus-5';
+const KB_MAX_CHARS = 40000;
 
 const SYSTEM_PROMPT = `Você é um consultor patrimonial sênior, com 25+ anos de experiência em gestão de fortunas no Brasil, especializado em ativos imobiliários, renda fixa estruturada e planejamento de aposentadoria para empresários do setor imobiliário.
 
@@ -21,12 +24,36 @@ Você não está aqui para ser gentil. Está aqui para ser útil.`;
 
 @Injectable()
 export class AdvisorService {
+  private readonly logger = new Logger(AdvisorService.name);
+
   constructor(private prisma: PrismaService) {}
 
   private getClient(): Anthropic {
-    const key = process.env.ANTHROPIC_API_KEY;
-    if (!key) throw new Error('ANTHROPIC_API_KEY não configurada. Consulte o README para instruções.');
-    return new Anthropic({ apiKey: key });
+    const key = (process.env.ANTHROPIC_API_KEY || '').trim();
+    if (!key) {
+      throw new InternalServerErrorException(
+        'ANTHROPIC_API_KEY não configurada. Coloque a chave no arquivo .env e reinicie o sistema.',
+      );
+    }
+    if (!key.startsWith('sk-ant-')) {
+      throw new InternalServerErrorException(
+        'A ANTHROPIC_API_KEY configurada não parece válida (deve começar com "sk-ant-"). Gere uma nova em console.anthropic.com.',
+      );
+    }
+    return new Anthropic({ apiKey: key, maxRetries: 2 });
+  }
+
+  /** Converte qualquer erro da API em uma mensagem legível para o usuário. */
+  private apiError(e: any, prefixo: string): never {
+    this.logger.error(`${prefixo}: ${e?.status ?? ''} ${e?.message}`, e?.stack);
+    if (e instanceof InternalServerErrorException) throw e;
+    const detalhe = e?.error?.error?.message || e?.message || 'erro desconhecido';
+    if (e?.status === 401) throw new InternalServerErrorException('Chave de API inválida. Verifique a ANTHROPIC_API_KEY em console.anthropic.com.');
+    if (e?.status === 400) throw new InternalServerErrorException(`Requisição recusada pela API: ${detalhe}`);
+    if (e?.status === 404) throw new InternalServerErrorException(`Modelo indisponível para a sua conta (${MODEL}). Detalhe: ${detalhe}`);
+    if (e?.status === 429) throw new InternalServerErrorException('Limite de uso da API atingido. Verifique créditos/limites em console.anthropic.com.');
+    if (e?.status >= 500) throw new InternalServerErrorException('A API da Anthropic está instável no momento. Tente novamente em alguns minutos.');
+    throw new InternalServerErrorException(`${prefixo}: ${detalhe}`);
   }
 
   async buildDataPayload(userId: string) {
@@ -133,19 +160,22 @@ export class AdvisorService {
     const payload = await this.buildDataPayload(userId);
 
     const kb = await this.prisma.advisorKnowledgeBase.findFirst({ where: { userId } });
-    const kbContext = kb ? `\n\nBASE DE CONHECIMENTO DO INVESTIDOR (diretrizes de alocação definidas por ele):\n${kb.content}\n\nConsidere estas diretrizes ao analisar e fazer recomendações.` : '';
+    const kbContext = kb
+      ? `\n\nBASE DE CONHECIMENTO DO INVESTIDOR (diretrizes de alocação definidas por ele):\n${String(kb.content).slice(0, KB_MAX_CHARS)}\n\nConsidere estas diretrizes ao analisar e fazer recomendações.`
+      : '';
 
     const userMessage = `Analise criticamente este patrimônio:\n\n${JSON.stringify(payload, null, 2)}${kbContext}`;
 
     try {
-      const response = await client.messages.create({
-        model: 'claude-opus-4-6',
-        max_tokens: 4096,
+      // Streaming evita timeout de HTTP quando o payload/base de conhecimento é grande.
+      const response = await client.messages.stream({
+        model: MODEL,
+        max_tokens: 8192,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userMessage }],
-      });
+      }).finalMessage();
 
-      const content = response.content[0];
+      const content = response.content.find(c => c.type === 'text') ?? response.content[0];
       if (content.type !== 'text') throw new Error('Resposta inesperada da API');
 
       let agentResponse: any;
@@ -170,10 +200,7 @@ export class AdvisorService {
 
       return { ...analysis, agentResponse };
     } catch (e: any) {
-      if (e.message?.includes('ANTHROPIC_API_KEY')) throw e;
-      if (e.status === 401) throw new Error('Chave de API inválida. Verifique sua ANTHROPIC_API_KEY.');
-      if (e.status === 429) throw new Error('Limite de uso da API atingido. Verifique sua conta em console.anthropic.com.');
-      throw new Error(`Erro ao gerar análise: ${e.message}`);
+      this.apiError(e, 'Erro ao gerar análise');
     }
   }
 
@@ -208,19 +235,19 @@ export class AdvisorService {
     const client = this.getClient();
     const context = `Dados patrimoniais do investidor:\n${JSON.stringify(dataSnapshot, null, 2)}`;
     try {
-      const response = await client.messages.create({
-        model: 'claude-opus-4-6',
-        max_tokens: 2048,
+      const response = await client.messages.stream({
+        model: MODEL,
+        max_tokens: 4096,
         system: SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: context },
           { role: 'assistant', content: 'Contexto patrimonial carregado. Faça sua pergunta.' },
           { role: 'user', content: question },
         ],
-      });
+      }).finalMessage();
 
-      const content = response.content[0];
-      const responseText = content.type === 'text' ? content.text : '';
+      const content = response.content.find(c => c.type === 'text') ?? response.content[0];
+      const responseText = content?.type === 'text' ? content.text : '';
       const tokens = response.usage.input_tokens + response.usage.output_tokens;
 
       if (analysisId) {
@@ -231,8 +258,7 @@ export class AdvisorService {
 
       return { response: responseText, tokensUsed: tokens };
     } catch (e: any) {
-      if (e.status === 401) throw new Error('Chave de API inválida.');
-      throw new Error(`Erro: ${e.message}`);
+      this.apiError(e, 'Erro na conversa com o consultor');
     }
   }
 
