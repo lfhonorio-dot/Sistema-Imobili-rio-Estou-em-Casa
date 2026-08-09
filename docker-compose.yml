@@ -44,6 +44,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-local-dev-secret-mude-em-producao}
       NODE_ENV: development
       PORT: 3001
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "3001:3001"
     volumes:
