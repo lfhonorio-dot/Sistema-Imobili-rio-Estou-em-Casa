@@ -7,9 +7,10 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { AuditModule } from '../../audit/audit.module';
 import { EmailModule } from '../../hub/email/email.module';
 import { FiscalModule } from '../fiscal/fiscal.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [PrismaModule, AuditModule, EmailModule, FiscalModule],
+  imports: [PrismaModule, AuditModule, EmailModule, FiscalModule, BillingModule],
   controllers: [ContractsController],
   providers: [ContractsService, ContractTemplateService, AdjustmentService],
   exports: [ContractsService],

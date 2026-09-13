@@ -86,25 +86,52 @@ export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) 
   const type = watch('type');
   const marketingConsent = watch('marketingConsent');
 
-  const onSubmit = async (data: ContactFormValues) => {
+  // force=true reenvia confirmando a criação apesar do e-mail/telefone repetido
+  const onSubmit = async (data: ContactFormValues, force = false) => {
     try {
       if (isEditing && contact) {
         await updateContact.mutateAsync({ id: contact.id, ...data });
         toast.success('Contato atualizado');
       } else {
-        await createContact.mutateAsync(data);
+        await createContact.mutateAsync(force ? { ...data, force: true } : data);
         toast.success('Contato criado');
       }
       onSuccess?.();
     } catch (err: unknown) {
-      const apiMsg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      const response = (err as {
+        response?: {
+          status?: number;
+          data?: {
+            message?: string | string[];
+            code?: string;
+            duplicates?: Array<{ name: string; email?: string | null; phone?: string | null }>;
+          };
+        };
+      })?.response;
+
+      // 409 com code DUPLICATE_CONTACT = e-mail/telefone já usados por outro
+      // contato. Não é bloqueio: pergunta e reenvia com force. Duplicidade de
+      // CPF/CNPJ vem sem esse code e continua sendo bloqueio de verdade.
+      if (!isEditing && !force && response?.status === 409 && response.data?.code === 'DUPLICATE_CONTACT') {
+        const dup = response.data.duplicates?.[0];
+        const dupLabel = dup
+          ? `${dup.name}${dup.email ? ` (${dup.email})` : dup.phone ? ` (${dup.phone})` : ''}`
+          : 'um contato existente';
+        const confirmed = window.confirm(
+          `Já existe um contato com este e-mail ou telefone: ${dupLabel}.\n\nDeseja cadastrar assim mesmo?`,
+        );
+        if (confirmed) await onSubmit(data, true);
+        return;
+      }
+
+      const apiMsg = response?.data?.message;
       const displayMsg = Array.isArray(apiMsg) ? apiMsg[0] : apiMsg;
       toast.error(displayMsg || 'Erro ao salvar contato. Verifique os dados e tente novamente.');
     }
   };
 
   return (
-    <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="space-y-4">
+    <form onSubmit={(e) => void handleSubmit((data) => onSubmit(data))(e)} className="space-y-4">
       {/* Tipo de Contato */}
       <div className="space-y-1">
         <Label>Tipo de Contato</Label>

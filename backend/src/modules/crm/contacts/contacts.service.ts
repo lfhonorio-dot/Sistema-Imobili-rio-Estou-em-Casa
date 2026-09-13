@@ -137,10 +137,20 @@ export class ContactsService {
       }
     }
 
-    // Email/telefone podem ser compartilhados (família, empresa) — apenas avisa
-    const duplicateCheck = await this.checkDuplicates(workspaceId, dto);
-    if (duplicateCheck.length > 0) {
-      console.warn(`Possíveis duplicatas (email/telefone) no workspace ${workspaceId}:`, duplicateCheck.map(d => d.id));
+    // E-mail/telefone podem ser legitimamente compartilhados (família, empresa),
+    // então isto NÃO é um bloqueio: devolvemos 409 com os possíveis duplicados
+    // para a interface perguntar ao usuário, que reenvia com force=true para
+    // confirmar. Antes disso o duplicado era só um console.warn que ninguém via,
+    // e o contato repetido entrava calado na base.
+    if (!dto.force) {
+      const duplicateCheck = await this.checkDuplicates(workspaceId, dto);
+      if (duplicateCheck.length > 0) {
+        throw new ConflictException({
+          message: 'Já existe um contato com este e-mail ou telefone',
+          code: 'DUPLICATE_CONTACT',
+          duplicates: duplicateCheck,
+        });
+      }
     }
 
     let contact;

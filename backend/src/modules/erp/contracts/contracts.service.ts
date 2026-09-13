@@ -15,6 +15,7 @@ import { AuditService } from '../../audit/audit.service';
 import { EmailService } from '../../hub/email/email.service';
 import { ContractTemplateService } from './contract-template.service';
 import { DimobService } from '../fiscal/dimob.service';
+import { BillingService } from '../billing/billing.service';
 import {
   CreateContractDto,
   UpdateContractDto,
@@ -32,6 +33,7 @@ export class ContractsService {
     private emailService: EmailService,
     private contractTemplate: ContractTemplateService,
     private dimobService: DimobService,
+    private billingService: BillingService,
   ) {}
 
   // Lista contratos com filtros
@@ -394,12 +396,19 @@ export class ContractsService {
       throw err;
     }
 
-    // Envio de e-mail FORA da transação: falha no e-mail não deve reverter o contrato
-    try {
-      await this.sendContractByEmail(workspaceId, contract);
-    } catch (e) {
+    // Envio de e-mail FORA da transação e SEM await de propósito: o SMTP é
+    // externo e pode demorar ou ficar indisponível. Se aguardássemos aqui, o
+    // request do frontend expiraria com o contrato já gravado — o usuário veria
+    // erro e tentaria de novo, criando contrato duplicado.
+    this.sendContractByEmail(workspaceId, contract).catch((e) => {
       console.error('[ContractsService] Erro ao enviar contrato por email:', e);
-    }
+    });
+
+    // Gera o boleto dos lançamentos criados na transação acima (venda e
+    // intermediação). Também sem await: com gateway real cada emissão é uma
+    // chamada HTTP externa, e prender o request nisso reintroduz o mesmo
+    // timeout que gerava contrato duplicado.
+    void this.autoGenerateBoletos(workspaceId, contract.id);
 
     // Registra os eventos DIMOB (venda/intermediação: na data de assinatura) — não bloqueia
     if (contract.type === 'SALE' || contract.type === 'BROKERAGE') {
@@ -425,6 +434,48 @@ export class ContractsService {
   // Gera o HTML do contrato e retorna para visualização/download
   async getContractDocument(workspaceId: string, id: string): Promise<string> {
     return this.contractTemplate.generate(workspaceId, id);
+  }
+
+  // Gera o boleto de cada lançamento a receber em aberto do contrato que ainda
+  // não tenha um. Nunca lança: uma falha aqui não pode derrubar a criação do
+  // contrato nem a geração de parcelas. Sem gateway ativo configurado, o
+  // BillingService emite um boleto simulado com status PENDING.
+  private async autoGenerateBoletos(workspaceId: string, contractId: string) {
+    try {
+      const entries = await this.prisma.financialEntry.findMany({
+        where: {
+          workspaceId,
+          contractId,
+          type: 'RECEIVABLE',
+          status: 'PENDING',
+          deletedAt: null,
+        },
+        select: { id: true },
+        orderBy: { dueDate: 'asc' },
+      });
+
+      for (const entry of entries) {
+        // financialEntryId é @unique em Boleto: um lançamento tem no máximo um
+        const existing = await this.prisma.boleto.findFirst({
+          where: { financialEntryId: entry.id, deletedAt: null },
+          select: { id: true },
+        });
+        if (existing) continue;
+
+        try {
+          await this.billingService.generateBoleto(workspaceId, {
+            financialEntryId: entry.id,
+          });
+        } catch (e) {
+          console.error(
+            `[ContractsService] Não foi possível gerar o boleto do lançamento ${entry.id}:`,
+            (e as Error).message,
+          );
+        }
+      }
+    } catch (e) {
+      console.error('[ContractsService] Erro ao gerar boletos automaticamente:', e);
+    }
   }
 
   private async sendContractByEmail(workspaceId: string, contract: any) {
@@ -809,6 +860,12 @@ export class ContractsService {
     }
 
     await this.prisma.financialEntry.createMany({ data: entries });
+
+    // Emite o boleto de cada parcela recém-criada em segundo plano: são até
+    // dezenas de parcelas, e uma emissão por parcela no gateway estouraria o
+    // tempo do request. autoGenerateBoletos nunca lança e é idempotente —
+    // parcelas que ficarem sem boleto são pegas na próxima execução.
+    void this.autoGenerateBoletos(workspaceId, id);
 
     return { created: entries.length };
   }

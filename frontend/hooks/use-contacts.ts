@@ -141,7 +141,9 @@ export function useCreateContact() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: Partial<Contact>) => {
+    // force=true confirma a criação quando o backend responde 409 apontando
+    // outro contato com o mesmo e-mail/telefone
+    mutationFn: async (data: Partial<Contact> & { force?: boolean }) => {
       const res = await api.post<{ success: boolean; data: Contact }>('/contacts', data, {
         headers: { 'x-workspace-id': workspaceId },
       });
