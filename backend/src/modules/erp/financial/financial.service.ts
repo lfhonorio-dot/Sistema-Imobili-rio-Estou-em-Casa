@@ -3,9 +3,12 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../../hub/email/email.service';
+import { CommissionReceiptService } from './commission-receipt.service';
 import {
   CreateFinancialEntryDto,
   UpdateFinancialEntryDto,
@@ -16,7 +19,11 @@ import {
 
 @Injectable()
 export class FinancialService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+    private commissionReceipt: CommissionReceiptService,
+  ) {}
 
   // Lista lançamentos financeiros com filtros
   async findAllEntries(workspaceId: string, query: FinancialQueryDto) {
@@ -304,16 +311,53 @@ export class FinancialService {
     };
   }
 
-  // Marca comissão como paga
+  // Marca comissão como paga e emite o recibo correspondente
   async payCommission(workspaceId: string, id: string) {
     const commission = await this.prisma.commission.findFirst({
       where: { id, workspaceId },
     });
     if (!commission) throw new NotFoundException('Comissão não encontrada');
+    if (commission.status === 'PAID') {
+      throw new BadRequestException('Comissão já está paga');
+    }
 
-    return this.prisma.commission.update({
+    const updated = await this.prisma.commission.update({
       where: { id },
       data: { status: 'PAID', paidAt: new Date() },
+    });
+
+    // Gera o recibo e envia por e-mail ao corretor (não bloqueia o pagamento
+    // se o envio falhar — o recibo continua disponível para download).
+    this.emailCommissionReceipt(workspaceId, id).catch((e) => {
+      console.error('[FinancialService] Erro ao enviar recibo de comissão por email:', e);
+    });
+
+    return updated;
+  }
+
+  // Retorna o HTML do recibo de uma comissão (visualização/download)
+  async getCommissionReceipt(workspaceId: string, id: string): Promise<string> {
+    return this.commissionReceipt.generateReceipt(workspaceId, id);
+  }
+
+  private async emailCommissionReceipt(workspaceId: string, commissionId: string) {
+    const commission = await this.prisma.commission.findFirst({
+      where: { id: commissionId, workspaceId },
+    });
+    if (!commission) return;
+
+    const workspaceUser = await this.prisma.workspaceUser.findFirst({
+      where: { id: commission.userId },
+      include: { user: { select: { email: true, name: true } } },
+    });
+    if (!workspaceUser?.user?.email) return;
+
+    const receiptHtml = await this.commissionReceipt.generateReceipt(workspaceId, commissionId);
+
+    await this.emailService.sendEmail(workspaceId, {
+      to: workspaceUser.user.email,
+      subject: 'Recibo de comissão — pagamento confirmado',
+      body: receiptHtml,
     });
   }
 }

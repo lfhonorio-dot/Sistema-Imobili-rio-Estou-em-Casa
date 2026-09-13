@@ -78,7 +78,7 @@ export function useCreateContract() {
   const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 
   return useMutation({
-    mutationFn: async (dto: Partial<Contract>) => {
+    mutationFn: async (dto: Partial<Contract> & { force?: boolean }) => {
       const { data } = await api.post('/contracts', dto);
       return data.data as Contract;
     },

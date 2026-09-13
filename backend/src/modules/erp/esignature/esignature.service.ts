@@ -4,13 +4,17 @@ import {
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../../hub/email/email.service';
 import {
   CreateEnvelopeDto, EnvelopeQueryDto, ValidateOtpDto, RejectSignatureDto,
 } from './esignature.dto';
 
 @Injectable()
 export class EsignatureService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   // ── ENVELOPES ─────────────────────────────────────────────
 
@@ -94,9 +98,33 @@ export class EsignatureService {
       throw new BadRequestException('Envelope já foi enviado');
     }
 
-    // Simular envio de notificações (sem integração real de WhatsApp/email)
+    const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+
     for (const sig of envelope.signatories) {
       if (envelope.order === 'SEQUENTIAL' && sig.order > 0) continue;
+
+      const signLink = `${baseUrl}/assinar/${sig.token}`;
+
+      // Envia o e-mail com o link de assinatura de fato (antes isso era só
+      // simulado: o status virava SENT sem nenhum e-mail sair). O envio não
+      // bloqueia a atualização de status caso o SMTP falhe — mas o erro fica
+      // registrado no evento de auditoria para diagnóstico.
+      let emailSent = true;
+      if (sig.email) {
+        try {
+          await this.emailService.sendEmail(workspaceId, {
+            to: sig.email,
+            subject: `Assinatura eletrônica pendente — ${envelope.title}`,
+            body: this.buildSignatureEmailBody(envelope, sig, signLink),
+          });
+        } catch (err) {
+          emailSent = false;
+          console.error(`[EsignatureService] Falha ao enviar e-mail de assinatura para ${sig.email}:`, err);
+        }
+      } else {
+        emailSent = false;
+      }
+
       await this.prisma.signatureSignatory.update({
         where: { id: sig.id },
         data: { status: 'SENT' },
@@ -105,7 +133,7 @@ export class EsignatureService {
         data: {
           signatoryId: sig.id,
           event: 'LINK_SENT',
-          metadata: { link: `/assinar/${sig.token}`, method: 'EMAIL' },
+          metadata: { link: signLink, method: 'EMAIL', emailSent },
         },
       });
     }
@@ -114,6 +142,41 @@ export class EsignatureService {
       where: { id: envelopeId },
       data: { status: 'SENT' },
     });
+  }
+
+  private buildSignatureEmailBody(
+    envelope: { title: string; message?: string | null; deadline?: Date | null },
+    signatory: { name: string; role: string },
+    signLink: string,
+  ): string {
+    const deadlineText = envelope.deadline
+      ? `<p style="font-size:14px;color:#64748b;">Prazo para assinatura: <strong>${new Date(envelope.deadline).toLocaleDateString('pt-BR')}</strong></p>`
+      : '';
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><style>
+  body { font-family: Arial, sans-serif; color: #333; max-width: 680px; margin: 0 auto; padding: 24px; }
+  .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+  .btn { display:inline-block; background:#2563eb; color:#fff; padding:12px 28px; border-radius:6px; text-decoration:none; font-weight:600; }
+  .footer { margin-top:24px; font-size:11px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:12px; }
+</style></head>
+<body>
+  <div class="card">
+    <h2 style="margin-bottom:8px;">${envelope.title}</h2>
+    <p style="font-size:14px;">Olá, ${signatory.name}. Sua assinatura (${signatory.role}) é necessária neste documento.</p>
+    ${envelope.message ? `<p style="font-size:14px;">${envelope.message}</p>` : ''}
+    ${deadlineText}
+  </div>
+  <p style="text-align:center;margin:32px 0;">
+    <a class="btn" href="${signLink}">Visualizar e assinar documento</a>
+  </p>
+  <p style="font-size:12px;color:#94a3b8;">Se o botão não funcionar, copie e cole este link no navegador:<br>${signLink}</p>
+  <div class="footer">
+    Este e-mail foi enviado automaticamente pelo Sistema Imobiliário Estou em Casa.<br>
+    Data de envio: ${new Date().toLocaleString('pt-BR')}
+  </div>
+</body>
+</html>`;
   }
 
   async cancel(workspaceId: string, envelopeId: string) {

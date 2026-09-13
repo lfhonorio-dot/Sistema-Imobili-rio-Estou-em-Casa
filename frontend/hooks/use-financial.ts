@@ -151,3 +151,32 @@ export function useCommissions(query: { userId?: string; status?: string } = {})
     enabled: !!workspaceId,
   });
 }
+
+// Marca uma comissão como paga. O backend gera o recibo automaticamente
+// e o envia por e-mail ao corretor — o recibo também fica disponível
+// para download a qualquer momento via getCommissionReceiptUrl.
+export function usePayCommission() {
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await api.patch(`/financial/commissions/${id}/pay`);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['commissions', workspaceId] });
+    },
+  });
+}
+
+// Monta a URL autenticável do recibo em HTML de uma comissão.
+// Abrir em uma nova aba usa o token já presente nos headers do axios,
+// então preferimos baixar via api e abrir como blob.
+export async function fetchCommissionReceiptHtml(id: string): Promise<string> {
+  const { data } = await api.get(`/financial/commissions/${id}/receipt`, {
+    responseType: 'text',
+    headers: { Accept: 'text/html' },
+  });
+  return data as string;
+}

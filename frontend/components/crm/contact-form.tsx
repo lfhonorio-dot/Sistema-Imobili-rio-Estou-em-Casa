@@ -86,23 +86,38 @@ export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) 
   const type = watch('type');
   const marketingConsent = watch('marketingConsent');
 
-  const onSubmit = async (data: ContactFormValues) => {
+  const onSubmit = async (data: ContactFormValues, force = false) => {
     try {
       if (isEditing && contact) {
         await updateContact.mutateAsync({ id: contact.id, ...data });
         toast.success('Contato atualizado');
       } else {
-        await createContact.mutateAsync(data);
+        await createContact.mutateAsync(force ? { ...data, force: true } : data);
         toast.success('Contato criado');
       }
       onSuccess?.();
-    } catch {
+    } catch (err: unknown) {
+      const response = (err as { response?: { status?: number; data?: { code?: string; duplicates?: Array<{ name: string; email?: string; phone?: string }> } } })?.response;
+
+      if (!isEditing && response?.status === 409 && response.data?.code === 'DUPLICATE_CONTACT') {
+        const dup = response.data.duplicates?.[0];
+        const dupLabel = dup ? `${dup.name}${dup.email ? ` (${dup.email})` : dup.phone ? ` (${dup.phone})` : ''}` : 'um contato existente';
+        const confirmed = window.confirm(
+          `Já existe um contato parecido: ${dupLabel}.\n\nDeseja criar mesmo assim?`,
+        );
+        if (confirmed) {
+          await onSubmit(data, true);
+          return;
+        }
+        return;
+      }
+
       toast.error('Erro ao salvar contato');
     }
   };
 
   return (
-    <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="space-y-4">
+    <form onSubmit={(e) => void handleSubmit((data) => onSubmit(data))(e)} className="space-y-4">
       {/* Tipo de Contato */}
       <div className="space-y-1">
         <Label>Tipo de Contato</Label>

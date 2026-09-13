@@ -5,12 +5,14 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { EmailService } from '../../hub/email/email.service';
+import { BillingService } from '../billing/billing.service';
 import { ContractTemplateService } from './contract-template.service';
 import {
   CreateContractDto,
@@ -27,6 +29,7 @@ export class ContractsService {
     private prisma: PrismaService,
     private auditService: AuditService,
     private emailService: EmailService,
+    private billingService: BillingService,
     private contractTemplate: ContractTemplateService,
   ) {}
 
@@ -143,10 +146,37 @@ export class ContractsService {
       if (!tenant) throw new BadRequestException('Inquilino/Comprador não encontrado');
     }
 
+    // Verifica contrato potencialmente duplicado: mesmo imóvel + mesmo tipo,
+    // ainda ativo/em rascunho. Evita duplicidade por double-submit ou reenvio
+    // após timeout, sem impedir renegociações legítimas (force=true).
+    if (!dto.force) {
+      const possibleDuplicate = await this.prisma.contract.findFirst({
+        where: {
+          workspaceId,
+          propertyId: dto.propertyId,
+          type: dto.type,
+          status: { in: ['DRAFT', 'ACTIVE'] },
+          deletedAt: null,
+        },
+        select: { id: true, status: true, createdAt: true, ownerId: true, tenantId: true },
+      });
+      if (possibleDuplicate) {
+        throw new ConflictException({
+          message: 'Já existe um contrato deste tipo em aberto para este imóvel',
+          code: 'DUPLICATE_CONTRACT',
+          duplicate: possibleDuplicate,
+        });
+      }
+    }
+
+    // `force` é apenas um sinalizador de request (não é coluna do Contract);
+    // precisa ser removido antes de espalhar o DTO nos dados do Prisma.
+    const { force: _force, ...contractData } = dto;
+
     const contract = await this.prisma.contract.create({
       data: {
         workspaceId,
-        ...dto,
+        ...contractData,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
         signedAt: dto.signedAt ? new Date(dto.signedAt) : undefined,
@@ -165,13 +195,14 @@ export class ContractsService {
     // Auto-gera lançamento financeiro para contratos de venda (não bloqueia se falhar)
     if (contract.type === 'SALE' && contract.saleValue) {
       const dueDate = contract.startDate ?? new Date();
+      const description = `Compra e venda — ${(contract.property as any)?.code ?? contract.propertyId}`;
       try {
-        await this.prisma.financialEntry.create({
+        const entry = await this.prisma.financialEntry.create({
           data: {
             workspaceId,
             type: 'RECEIVABLE',
             category: 'SALE',
-            description: `Compra e venda — ${(contract.property as any)?.code ?? contract.propertyId}`,
+            description,
             amount: contract.saleValue,
             dueDate,
             status: 'PENDING',
@@ -179,6 +210,9 @@ export class ContractsService {
             contactId: contract.tenantId ?? undefined,
           },
         });
+
+        // Gera o boleto correspondente automaticamente (não bloqueia se falhar)
+        await this.autoGenerateBoleto(workspaceId, entry, contract, description);
       } catch (e) {
         console.error('[ContractsService] Erro ao gerar lançamento financeiro:', e);
       }
@@ -211,12 +245,15 @@ export class ContractsService {
       }
     }
 
-    // Gera documento HTML do contrato e envia por email (não bloqueia se falhar)
-    try {
-      await this.sendContractByEmail(workspaceId, contract);
-    } catch (e) {
+    // Gera documento HTML do contrato e envia por email de forma assíncrona:
+    // NÃO aguardamos aqui de propósito. O envio depende de SMTP externo, que
+    // pode ser lento ou ficar indisponível — se ficássemos bloqueados nisso,
+    // o request do frontend expira, o usuário acha que a criação falhou e
+    // tenta de novo, gerando contratos duplicados (o contrato já foi criado
+    // com sucesso no banco antes deste ponto).
+    this.sendContractByEmail(workspaceId, contract).catch((e) => {
       console.error('[ContractsService] Erro ao enviar contrato por email:', e);
-    }
+    });
 
     await this.auditService.log({
       workspaceId,
@@ -305,6 +342,29 @@ export class ContractsService {
       } catch {
         // falha no envio não bloqueia criação do contrato
       }
+    }
+  }
+
+  // Gera automaticamente o boleto de uma parcela/lançamento financeiro.
+  // Não bloqueia o fluxo principal se falhar (ex.: nenhum gateway configurado
+  // ainda gera o boleto em modo simulado/PENDING, pronto para registro manual).
+  private async autoGenerateBoleto(
+    workspaceId: string,
+    entry: { id: string; amount: unknown; dueDate: Date },
+    contract: { id: string; ownerId?: string | null; tenantId?: string | null },
+    description: string,
+  ) {
+    try {
+      await this.billingService.generateBoleto(workspaceId, {
+        financialEntryId: entry.id,
+        contractId: contract.id,
+        contactId: contract.tenantId ?? contract.ownerId ?? undefined,
+        amount: Number(entry.amount),
+        dueDate: entry.dueDate.toISOString().slice(0, 10),
+        description,
+      });
+    } catch (e) {
+      console.error('[ContractsService] Erro ao gerar boleto automaticamente:', e);
     }
   }
 
@@ -419,10 +479,13 @@ export class ContractsService {
     });
     if (!existing) throw new NotFoundException('Contrato não encontrado');
 
+    // `force` é apenas um sinalizador de request, não uma coluna do Contract.
+    const { force: _force, ...updateData } = dto;
+
     const updated = await this.prisma.contract.update({
       where: { id },
       data: {
-        ...dto,
+        ...updateData,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
         signedAt: dto.signedAt ? new Date(dto.signedAt) : undefined,
@@ -542,6 +605,18 @@ export class ContractsService {
     }
 
     await this.prisma.financialEntry.createMany({ data: entries });
+
+    // Busca as parcelas recém-criadas para gerar o boleto de cada uma
+    // (createMany não retorna os registros criados no Postgres/Prisma).
+    const createdEntries = await this.prisma.financialEntry.findMany({
+      where: { contractId: id, totalInstallments: dto.months, deletedAt: null },
+      orderBy: { installment: 'asc' },
+      take: dto.months,
+    });
+
+    for (const entry of createdEntries) {
+      await this.autoGenerateBoleto(workspaceId, entry, contract, entry.description);
+    }
 
     return { created: entries.length };
   }

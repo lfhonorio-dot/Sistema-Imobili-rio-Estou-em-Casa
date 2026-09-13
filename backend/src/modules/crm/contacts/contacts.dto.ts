@@ -123,6 +123,11 @@ export class CreateContactDto {
   @IsOptional()
   @IsObject()
   customFields?: Record<string, unknown>;
+
+  // Ignora o aviso de duplicata (mesmo CPF/CNPJ/e-mail/telefone) e cria mesmo assim
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }
 
 export class UpdateContactDto {

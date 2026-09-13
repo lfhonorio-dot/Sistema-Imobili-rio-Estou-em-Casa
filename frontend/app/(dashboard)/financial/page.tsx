@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, AlertTriangle, DollarSign } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,19 @@ import {
   useOverdueEntries,
   useCommissions,
   usePayEntry,
+  usePayCommission,
+  fetchCommissionReceiptHtml,
 } from '@/hooks/use-financial';
+
+// Abre o recibo em uma nova aba a partir do HTML retornado pela API
+// (o endpoint exige o header de autenticação, então não dá pra usar
+// diretamente um <a href> apontando pra rota do backend).
+function openReceiptInNewTab(html: string) {
+  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 
 function formatCurrency(value: number | null | undefined) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value ?? 0));
@@ -42,6 +55,26 @@ export default function FinancialPage() {
   });
   const { data: commissionsData } = useCommissions({ status: commissionStatus === 'ALL' ? undefined : commissionStatus });
   const payEntry = usePayEntry();
+  const payCommission = usePayCommission();
+
+  async function handlePayCommission(id: string) {
+    if (!confirm('Confirmar pagamento desta comissão? O recibo será gerado e enviado ao corretor por e-mail.')) return;
+    try {
+      await payCommission.mutateAsync(id);
+      toast.success('Comissão paga e recibo enviado.');
+    } catch {
+      toast.error('Erro ao registrar pagamento da comissão.');
+    }
+  }
+
+  async function handleViewReceipt(id: string) {
+    try {
+      const html = await fetchCommissionReceiptHtml(id);
+      openReceiptInNewTab(html);
+    } catch {
+      toast.error('Erro ao carregar recibo.');
+    }
+  }
 
   const kpis = [
     {
@@ -261,6 +294,7 @@ export default function FinancialPage() {
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Taxa</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Valor</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
+                    <th className="py-3 px-4" />
                   </tr>
                 </thead>
                 <tbody>
@@ -276,6 +310,26 @@ export default function FinancialPage() {
                         <Badge variant={c.status === 'PAID' ? 'default' : 'secondary'}>
                           {c.status === 'PAID' ? 'Pago' : 'Pendente'}
                         </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        {c.status === 'PENDING' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={payCommission.isPending}
+                            onClick={() => void handlePayCommission(c.id)}
+                          >
+                            Pagar
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void handleViewReceipt(c.id)}
+                          >
+                            Ver recibo
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}

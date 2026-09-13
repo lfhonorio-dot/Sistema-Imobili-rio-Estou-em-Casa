@@ -114,10 +114,17 @@ export class ContactsService {
   // Cria novo contato com verificação de duplicatas
   async create(workspaceId: string, userId: string, dto: CreateContactDto) {
     // Verifica duplicatas por CPF, CNPJ, email ou telefone
-    const duplicateCheck = await this.checkDuplicates(workspaceId, dto);
-    if (duplicateCheck.length > 0) {
-      // Avisa mas não bloqueia - permite criar mesmo com duplicata
-      console.warn(`Possíveis duplicatas encontradas para workspace ${workspaceId}:`, duplicateCheck.map(d => d.id));
+    if (!dto.force) {
+      const duplicateCheck = await this.checkDuplicates(workspaceId, dto);
+      if (duplicateCheck.length > 0) {
+        // Bloqueia com 409 e devolve as duplicatas encontradas; o cliente pode
+        // reenviar com force=true para confirmar a criação mesmo assim.
+        throw new ConflictException({
+          message: 'Possível contato duplicado encontrado',
+          code: 'DUPLICATE_CONTACT',
+          duplicates: duplicateCheck,
+        });
+      }
     }
 
     const contact = await this.prisma.contact.create({

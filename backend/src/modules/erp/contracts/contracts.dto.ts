@@ -141,6 +141,11 @@ export class CreateContractDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // Ignora o aviso de contrato potencialmente duplicado e cria mesmo assim
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }
 
 export class UpdateContractDto extends CreateContractDto {}

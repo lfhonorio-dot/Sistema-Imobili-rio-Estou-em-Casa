@@ -141,7 +141,7 @@ export function useCreateContact() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: Partial<Contact>) => {
+    mutationFn: async (data: Partial<Contact> & { force?: boolean }) => {
       const res = await api.post<{ success: boolean; data: Contact }>('/contacts', data, {
         headers: { 'x-workspace-id': workspaceId },
       });

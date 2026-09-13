@@ -47,7 +47,7 @@ export default function NewContractPage() {
   const isRental = form.type === 'RENTAL_RESIDENTIAL' || form.type === 'RENTAL_COMMERCIAL';
   const isSale = form.type === 'SALE';
 
-  async function handleSubmit() {
+  async function handleSubmit(force = false) {
     if (!form.type || !form.propertyId) {
       toast.error('Tipo e imóvel são obrigatórios.');
       return;
@@ -66,6 +66,7 @@ export default function NewContractPage() {
         dueDay: form.dueDay ? parseInt(form.dueDay) : undefined,
         commissionRate: form.commissionRate ? parseFloat(form.commissionRate) : undefined,
         notes: form.notes || undefined,
+        ...(force ? { force: true } : {}),
       };
 
       const contract = await createContract.mutateAsync(payload as any);
@@ -87,7 +88,19 @@ export default function NewContractPage() {
 
       router.push(`/contracts/${contract.id}`);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao criar contrato.';
+      const response = (err as { response?: { status?: number; data?: { message?: string | string[]; code?: string } } })?.response;
+
+      if (!force && response?.status === 409 && response.data?.code === 'DUPLICATE_CONTRACT') {
+        const confirmed = window.confirm(
+          'Já existe um contrato em aberto deste tipo para este imóvel.\n\nDeseja criar mesmo assim?',
+        );
+        if (confirmed) {
+          await handleSubmit(true);
+        }
+        return;
+      }
+
+      const msg = response?.data?.message || 'Erro ao criar contrato.';
       toast.error(Array.isArray(msg) ? msg[0] : msg);
     }
   }
@@ -235,7 +248,7 @@ export default function NewContractPage() {
 
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => router.back()}>Cancelar</Button>
-        <Button onClick={handleSubmit} disabled={createContract.isPending || generateInstallments.isPending}>
+        <Button onClick={() => handleSubmit()} disabled={createContract.isPending || generateInstallments.isPending}>
           {createContract.isPending ? 'Criando...' : 'Criar Contrato'}
         </Button>
       </div>
