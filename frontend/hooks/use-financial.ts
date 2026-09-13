@@ -195,3 +195,14 @@ export function useProcessCommissionSplit() {
     },
   });
 }
+
+// Busca o HTML do recibo de comissão. O endpoint exige autenticação, então não
+// dá para apontar um <a href> direto para a rota do backend: baixamos pelo
+// axios e abrimos como blob — mesmo padrão do documento do contrato.
+export async function fetchCommissionReceiptHtml(id: string): Promise<string> {
+  const { data } = await api.get(`/financial/commissions/${id}/receipt`, {
+    responseType: 'text',
+    headers: { Accept: 'text/html' },
+  });
+  return data as string;
+}

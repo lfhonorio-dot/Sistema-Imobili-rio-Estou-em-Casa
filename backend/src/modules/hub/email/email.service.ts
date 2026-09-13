@@ -22,6 +22,12 @@ export class EmailService {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      // Teto de espera por etapa da conexão SMTP. Sem isso, um host mal
+      // configurado ou fora do ar segura o envio por minutos — e em rotas que
+      // aguardam o envio isso derruba a resposta ao frontend por timeout.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
     });
   }
 

@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCommissions, useReceiveCommission, useProcessCommissionSplit, type CommissionItem } from '@/hooks/use-financial';
+import { useCommissions, useReceiveCommission, useProcessCommissionSplit, fetchCommissionReceiptHtml, type CommissionItem } from '@/hooks/use-financial';
 import { useSplitTransactions, useConfirmSplitTransaction } from '@/hooks/use-split';
 
 function brl(v: number | null | undefined) {
@@ -34,6 +34,23 @@ export default function CommissionsPage() {
   const confirmSplit = useConfirmSplitTransaction();
   const processSplit = useProcessCommissionSplit();
   const splitTransactions = splitData?.items ?? [];
+  const [receiptId, setReceiptId] = useState<string | null>(null);
+
+  // O recibo exige autenticação, então buscamos pelo axios e abrimos como blob
+  async function verRecibo(commissionId: string) {
+    setReceiptId(commissionId);
+    try {
+      const html = await fetchCommissionReceiptHtml(commissionId);
+      const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      toast.error('Erro ao gerar o recibo da comissão.');
+    } finally {
+      setReceiptId(null);
+    }
+  }
 
   async function processRepasse(commissionId: string) {
     try {
@@ -178,9 +195,14 @@ export default function CommissionsPage() {
                           Marcar como Recebida
                         </Button>
                       ) : (
-                        <Button size="sm" variant="outline" disabled={processSplit.isPending} onClick={() => processRepasse(c.id)}>
-                          Processar Repasse
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="ghost" disabled={receiptId === c.id} onClick={() => void verRecibo(c.id)}>
+                            {receiptId === c.id ? 'Gerando...' : 'Ver Recibo'}
+                          </Button>
+                          <Button size="sm" variant="outline" disabled={processSplit.isPending} onClick={() => processRepasse(c.id)}>
+                            Processar Repasse
+                          </Button>
+                        </div>
                       )}
                     </td>
                   </tr>

@@ -19,7 +19,16 @@ interface ErrorResponse {
   timestamp: string;
   path: string;
   requestId?: string;
+  // Campos extras vindos de exceções lançadas com corpo de objeto
+  // (ex.: code, duplicates) — ver KNOWN_FIELDS abaixo.
+  [extra: string]: unknown;
 }
+
+// Campos tratados explicitamente. O restante do corpo da exceção — quando ela é
+// lançada com um objeto customizado, ex.:
+// `throw new ConflictException({ message, code, duplicates })` — é repassado
+// como veio, senão o frontend não teria como agir sobre esses dados.
+const KNOWN_FIELDS = new Set(['statusCode', 'message', 'error']);
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -35,11 +44,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const exceptionResponse = exception.getResponse();
     let message: string | string[];
     let error: string;
+    let extraFields: Record<string, unknown> = {};
 
     if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
       const resp = exceptionResponse as Record<string, unknown>;
       message = (resp['message'] as string | string[]) || exception.message;
       error = (resp['error'] as string) || HttpStatus[statusCode] || 'Error';
+      extraFields = Object.fromEntries(
+        Object.entries(resp).filter(([key]) => !KNOWN_FIELDS.has(key)),
+      );
     } else {
       message = exception.message;
       error = HttpStatus[statusCode] || 'Error';
@@ -63,6 +76,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       error,
       timestamp: new Date().toISOString(),
       path: request.path,
+      ...extraFields,
     };
 
     response.status(statusCode).json(errorResponse);

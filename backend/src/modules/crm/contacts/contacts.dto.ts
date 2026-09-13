@@ -123,6 +123,12 @@ export class CreateContactDto {
   @IsOptional()
   @IsObject()
   customFields?: Record<string, unknown>;
+
+  // Confirma a criação mesmo havendo outro contato com o mesmo e-mail ou
+  // telefone. Não vale para CPF/CNPJ: documento repetido continua bloqueado.
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }
 
 export class UpdateContactDto {

@@ -11,7 +11,9 @@ import {
   Query,
   Headers,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { FinancialService } from './financial.service';
 import { DunningService } from './dunning.service';
@@ -105,6 +107,19 @@ export class FinancialController {
     @Body() dto: ReceiveCommissionDto,
   ) {
     return this.financialService.receiveCommission(workspaceId, id, dto);
+  }
+
+  // GET /financial/commissions/:id/receipt - recibo em HTML (visualizar/imprimir)
+  @Get('commissions/:id/receipt')
+  async getCommissionReceipt(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const html = await this.financialService.getCommissionReceipt(workspaceId, id);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="recibo-comissao-${id}.html"`);
+    res.send(html);
   }
 
   // POST /financial/commissions/:id/process-split - gera repasses aos parceiros

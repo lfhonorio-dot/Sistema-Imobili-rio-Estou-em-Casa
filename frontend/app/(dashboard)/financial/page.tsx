@@ -18,6 +18,7 @@ import {
   useOverdueEntries,
   useCommissions,
   usePayEntry,
+  fetchCommissionReceiptHtml,
 } from '@/hooks/use-financial';
 
 interface BoletoResult {
@@ -30,6 +31,15 @@ interface BoletoResult {
 
 function formatCurrency(value: number | null | undefined) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value ?? 0));
+}
+
+// Abre um HTML vindo da API numa aba nova (o endpoint exige autenticação,
+// então não dá para linkar direto para a rota do backend)
+function openHtmlInNewTab(html: string) {
+  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 export default function FinancialPage() {
@@ -55,6 +65,18 @@ export default function FinancialPage() {
   const { generateBoleto } = useBilling();
   const [boletoResult, setBoletoResult] = useState<BoletoResult | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [receiptId, setReceiptId] = useState<string | null>(null);
+
+  async function handleViewReceipt(id: string) {
+    setReceiptId(id);
+    try {
+      openHtmlInNewTab(await fetchCommissionReceiptHtml(id));
+    } catch {
+      toast.error('Erro ao gerar o recibo.');
+    } finally {
+      setReceiptId(null);
+    }
+  }
 
   async function handleGenerateBoleto(financialEntryId: string) {
     setGeneratingId(financialEntryId);
@@ -280,7 +302,9 @@ export default function FinancialPage() {
             <SelectContent>
               <SelectItem value="ALL">Todos</SelectItem>
               <SelectItem value="PENDING">Pendentes</SelectItem>
-              <SelectItem value="PAID">Pagas</SelectItem>
+              {/* O fluxo grava RECEIVED; PAID fica para as comissões antigas */}
+              <SelectItem value="RECEIVED">Recebidas</SelectItem>
+              <SelectItem value="PAID">Pagas (antigas)</SelectItem>
             </SelectContent>
           </Select>
 
@@ -295,6 +319,7 @@ export default function FinancialPage() {
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Taxa</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Valor</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
+                    <th className="py-3 px-4" />
                   </tr>
                 </thead>
                 <tbody>
@@ -307,9 +332,24 @@ export default function FinancialPage() {
                       <td className="py-3 px-4 text-sm">{c.rate}%</td>
                       <td className="py-3 px-4 text-sm font-semibold">{formatCurrency(c.amount)}</td>
                       <td className="py-3 px-4">
-                        <Badge variant={c.status === 'PAID' ? 'default' : 'secondary'}>
-                          {c.status === 'PAID' ? 'Pago' : 'Pendente'}
+                        {/* RECEIVED é o status atual do fluxo; PAID fica por compatibilidade */}
+                        <Badge variant={c.status === 'RECEIVED' || c.status === 'PAID' ? 'default' : 'secondary'}>
+                          {c.status === 'RECEIVED' || c.status === 'PAID' ? 'Recebida' : 'Pendente'}
                         </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        {/* Registrar recebimento fica na tela de Comissões, que
+                            pede valor e forma de pagamento. Aqui é só consulta. */}
+                        {(c.status === 'RECEIVED' || c.status === 'PAID') && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={receiptId === c.id}
+                            onClick={() => void handleViewReceipt(c.id)}
+                          >
+                            {receiptId === c.id ? 'Gerando...' : 'Ver recibo'}
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
