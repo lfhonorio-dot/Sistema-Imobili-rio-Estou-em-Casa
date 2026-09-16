@@ -224,7 +224,7 @@ export class BankingService {
       const dateTo = new Date(tx.date);
       dateTo.setDate(dateTo.getDate() + 3);
 
-      const amount = Math.abs(tx.amount);
+      const amount = Math.abs(Number(tx.amount));
       const entry = await this.prisma.financialEntry.findFirst({
         where: {
           workspaceId,

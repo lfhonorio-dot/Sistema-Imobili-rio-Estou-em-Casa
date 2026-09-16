@@ -70,7 +70,7 @@ export default function BankingPage() {
               )}
             </div>
             <p className="mt-2 text-lg font-bold text-gray-900">
-              {acc.balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {Number(acc.balance).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </p>
             <p className="text-xs text-gray-400">{acc._count?.transactions ?? 0} transações</p>
           </button>
@@ -108,9 +108,9 @@ export default function BankingPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-700">{tx.description as string}</td>
                     <td className={`px-4 py-3 text-right font-medium ${
-                      (tx.amount as number) >= 0 ? 'text-green-600' : 'text-red-600'
+                      Number(tx.amount) >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {(tx.amount as number).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {Number(tx.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </td>
                     <td className="px-4 py-3">
                       {tx.reconciled ? (
