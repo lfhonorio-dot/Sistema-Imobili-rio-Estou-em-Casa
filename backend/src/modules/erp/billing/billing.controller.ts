@@ -163,7 +163,8 @@ export class BillingController {
   processWebhook(
     @Param('workspaceId') workspaceId: string,
     @Body() payload: Record<string, unknown>,
+    @Headers('asaas-access-token') asaasAccessToken?: string,
   ) {
-    return this.service.processWebhook(workspaceId, payload);
+    return this.service.processWebhook(workspaceId, payload, asaasAccessToken);
   }
 }

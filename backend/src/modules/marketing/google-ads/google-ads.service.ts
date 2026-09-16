@@ -2,6 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ContactsService } from '../../crm/contacts/contacts.service';
 import { SaveGoogleIntegrationDto, OfflineConversionDto } from './google-ads.dto';
 
 const ALGO = 'aes-256-cbc';
@@ -22,7 +23,10 @@ function encrypt(text: string): string {
 export class GoogleAdsService {
   private readonly logger = new Logger(GoogleAdsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private contactsService: ContactsService,
+  ) {}
 
   async getIntegration(workspaceId: string) {
     const integration = await this.prisma.marketingIntegration.findFirst({
@@ -37,16 +41,46 @@ export class GoogleAdsService {
     const existing = await this.prisma.marketingIntegration.findFirst({
       where: { workspaceId, provider: 'GOOGLE_ADS' },
     });
+    // Gera (uma vez) uma chave secreta própria deste workspace para o webhook
+    // de Lead Form — o Google reenvia esse valor no campo "google_key" do
+    // corpo, é o que usamos pra saber de qual workspace é o lead e pra
+    // recusar POSTs forjados sem essa chave.
+    const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
+    const webhookKey = (existingConfig.webhookKey as string) ?? crypto.randomBytes(24).toString('hex');
     const data = {
       provider: 'GOOGLE_ADS',
       accessToken: encToken,
       accountId: dto.customerId,
       status: 'ACTIVE',
+      config: { ...existingConfig, webhookKey },
     };
     if (existing) {
       return this.prisma.marketingIntegration.update({ where: { id: existing.id }, data });
     }
     return this.prisma.marketingIntegration.create({ data: { workspaceId, ...data } });
+  }
+
+  // Devolve a chave do webhook (para o usuário colar na configuração do
+  // Google Ads); não é secreto no mesmo sentido de um access token, mas só
+  // é exposta autenticado.
+  async getWebhookKey(workspaceId: string): Promise<string | null> {
+    const integration = await this.prisma.marketingIntegration.findFirst({
+      where: { workspaceId, provider: 'GOOGLE_ADS' },
+    });
+    return ((integration?.config as Record<string, unknown>)?.webhookKey as string) ?? null;
+  }
+
+  // Resolve o workspace a partir da chave que o Google reenvia no webhook.
+  async resolveWorkspaceIdByWebhookKey(key?: string): Promise<string | null> {
+    if (!key) return null;
+    const integrations = await this.prisma.marketingIntegration.findMany({
+      where: { provider: 'GOOGLE_ADS', status: 'ACTIVE' },
+      select: { workspaceId: true, config: true },
+    });
+    const match = integrations.find(
+      (i) => (i.config as Record<string, unknown>)?.webhookKey === key,
+    );
+    return match?.workspaceId ?? null;
   }
 
   async deleteIntegration(workspaceId: string) {
@@ -101,19 +135,18 @@ export class GoogleAdsService {
     const gclid = (body.gclid as string) ?? '';
     const campaignName = (body.campaign_name as string) ?? 'google-ads';
 
-    const pipeline = await this.prisma.pipeline.findFirst({ where: { workspaceId } });
+    const pipeline = await this.prisma.pipeline.findFirst({
+      where: { workspaceId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
 
-    const contact = await this.prisma.contact.create({
-      data: {
-        workspaceId,
-        name,
-        email: email || null,
-        phone: phone || null,
-        type: 'PERSON',
-        origin: 'GOOGLE_ADS',
-        utmSource: 'google',
-        utmCampaign: campaignName,
-      },
+    const contact = await this.contactsService.findOrCreateFromLead(workspaceId, {
+      name,
+      email,
+      phone,
+      origin: 'GOOGLE_ADS',
+      utmSource: 'google',
+      utmCampaign: campaignName,
     });
 
     let deal = null;

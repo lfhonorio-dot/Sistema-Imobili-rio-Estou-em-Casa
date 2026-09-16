@@ -76,6 +76,20 @@ export class ActivitiesService {
 
   // Cria nova atividade
   async create(workspaceId: string, userId: string, dto: CreateActivityDto) {
+    // Valida que o contato/negócio (quando informados) pertencem a este workspace
+    if (dto.contactId) {
+      const contact = await this.prisma.contact.findFirst({
+        where: { id: dto.contactId, workspaceId, deletedAt: null },
+      });
+      if (!contact) throw new NotFoundException('Contato não encontrado');
+    }
+    if (dto.dealId) {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: dto.dealId, workspaceId, deletedAt: null },
+      });
+      if (!deal) throw new NotFoundException('Negócio não encontrado');
+    }
+
     const activity = await this.prisma.activity.create({
       data: {
         workspaceId,

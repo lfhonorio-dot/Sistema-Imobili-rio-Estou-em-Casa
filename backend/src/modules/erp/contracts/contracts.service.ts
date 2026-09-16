@@ -627,7 +627,11 @@ export class ContractsService {
 
     // documentUrl: usa URL fornecida ou placeholder identificável
     const documentUrl = dto.documentUrl ?? `contract-template://${contract.id}`;
-    const documentHash = crypto.createHash('sha256').update(documentUrl + Date.now()).digest('hex');
+    // O hash de imutabilidade tem que ser do CONTEÚDO real do contrato, não de
+    // uma URL/placeholder + timestamp (isso não detectava nenhuma alteração
+    // do texto do contrato entre a criação do envelope e a assinatura).
+    const contractHtmlForHash = await this.contractTemplate.generate(workspaceId, contract.id);
+    const documentHash = crypto.createHash('sha256').update(contractHtmlForHash).digest('hex');
 
     const envelope = await this.prisma.signatureEnvelope.create({
       data: {
@@ -900,6 +904,19 @@ export class ContractsService {
 
       return result;
     });
+
+    // Um contrato de venda/intermediação cancelado ou rescindido não pode
+    // continuar aparecendo na declaração anual como se a venda tivesse
+    // acontecido — remove o(s) registro(s) DIMOB dele. Fora da transação
+    // acima e sem bloquear a resposta, no mesmo padrão do registro feito na
+    // criação do contrato.
+    if (leavingActive && isSaleType) {
+      try {
+        await this.dimobService.removeContractEvents(workspaceId, id);
+      } catch (e) {
+        console.error('[ContractsService] Erro ao remover eventos DIMOB:', e);
+      }
+    }
 
     await this.auditService.log({
       workspaceId,

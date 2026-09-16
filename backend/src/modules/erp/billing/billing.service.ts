@@ -1,6 +1,6 @@
 // Serviço de Cobranças — Boletos, PIX, CNAB e Gateways
 import {
-  Injectable, NotFoundException, BadRequestException, Logger,
+  Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -389,7 +389,30 @@ export class BillingService {
 
   // ── WEBHOOK (Gateway) ─────────────────────────────────────
 
-  async processWebhook(workspaceId: string, payload: Record<string, unknown>) {
+  async processWebhook(
+    workspaceId: string,
+    payload: Record<string, unknown>,
+    receivedToken?: string,
+  ) {
+    // Valida o token do webhook (header asaas-access-token, comparado contra
+    // PaymentGatewayConfig.webhookSecret) antes de confiar em qualquer coisa
+    // do payload. Sem isso, qualquer POST com o workspaceId certo na URL
+    // conseguia forjar uma confirmação de pagamento — o número do boleto é
+    // previsível e aparece no próprio boleto que o pagador recebe.
+    const gateway = await this.prisma.paymentGatewayConfig.findFirst({
+      where: { workspaceId, isDefault: true, deletedAt: null },
+    });
+    if (!gateway?.webhookSecret) {
+      this.logger.warn(`Webhook de billing recusado: workspace ${workspaceId} não tem webhookSecret configurado no gateway padrão.`);
+      throw new ForbiddenException('Webhook não configurado ou não autorizado');
+    }
+    const a = Buffer.from(receivedToken ?? '');
+    const b = Buffer.from(gateway.webhookSecret);
+    const valid = a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (!valid) {
+      throw new ForbiddenException('Token de webhook inválido');
+    }
+
     // Confirmação de pagamento do gateway.
     // Formato Asaas: { event: 'PAYMENT_RECEIVED', payment: { id, value, ... } }
     // Formato genérico: { event, nossoNumero|id, value }

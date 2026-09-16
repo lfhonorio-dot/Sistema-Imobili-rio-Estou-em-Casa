@@ -238,13 +238,17 @@ export class FiscalService {
     const startDate = new Date(`${dto.year}-01-01`);
     const endDate = new Date(`${dto.year + 1}-01-01`);
 
+    // 'RENTAL' e 'INCOME' nunca existiram como valores desses enums
+    // (Contract.type é RENTAL_RESIDENTIAL/RENTAL_COMMERCIAL; FinancialEntry.type
+    // é RECEIVABLE/PAYABLE) — esta query sempre retornava zero contratos, mesmo
+    // com aluguéis pagos reais no período.
     const contracts = await this.prisma.contract.findMany({
       where: {
         workspaceId,
-        type: 'RENTAL',
+        type: { in: ['RENTAL_RESIDENTIAL', 'RENTAL_COMMERCIAL'] },
         financialEntries: {
           some: {
-            type: 'INCOME', status: 'PAID',
+            type: 'RECEIVABLE', status: 'PAID',
             paidAt: { gte: startDate, lt: endDate },
           },
         },
@@ -254,7 +258,7 @@ export class FiscalService {
         property: true,
         owner: true,
         financialEntries: {
-          where: { type: 'INCOME', status: 'PAID', paidAt: { gte: startDate, lt: endDate } },
+          where: { type: 'RECEIVABLE', status: 'PAID', paidAt: { gte: startDate, lt: endDate } },
         },
       },
     });
@@ -311,12 +315,22 @@ export class FiscalService {
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + 1);
 
+    // Carnê-Leão é POR PROPRIETÁRIO (pessoa física) — sem filtrar por
+    // contato e por categoria de aluguel, esta consulta somava TODO o
+    // recebível pago da imobiliária no mês (vendas, comissões, de todos os
+    // proprietários) como se fosse renda de uma única pessoa.
+    const owner = await this.prisma.contact.findFirst({
+      where: { workspaceId, cpf: dto.ownerDocument, deletedAt: null },
+    });
+
     const entries = await this.prisma.financialEntry.findMany({
       where: {
         workspaceId,
-        type: 'INCOME',
+        type: 'RECEIVABLE',
+        category: 'RENT',
         status: 'PAID',
         paidAt: { gte: startDate, lt: endDate },
+        ...(owner ? { contactId: owner.id } : { contactId: '__no_owner_found__' }),
       },
     });
 

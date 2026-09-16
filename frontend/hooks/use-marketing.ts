@@ -1,18 +1,10 @@
 'use client';
 import { useState, useCallback } from 'react';
-import axios from 'axios';
-import { useAuthStore } from '@/stores/auth.store';
-
-const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1',
-});
-
-apiClient.interceptors.request.use((cfg) => {
-  const state = useAuthStore.getState();
-  cfg.headers['Authorization'] = `Bearer ${state.accessToken}`;
-  cfg.headers['x-workspace-id'] = state.currentWorkspace?.workspaceId;
-  return cfg;
-});
+// Reaproveita o cliente HTTP compartilhado (com proxy /api-proxy em produção,
+// refresh automático de token e os mesmos headers de auth/workspace) em vez
+// de uma instância própria apontando para localhost — que quebrava 100% das
+// chamadas desta tela em produção.
+import apiClient from '@/lib/api';
 
 export function useMarketing() {
   const [loading, setLoading] = useState(false);

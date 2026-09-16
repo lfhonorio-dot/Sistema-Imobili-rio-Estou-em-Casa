@@ -79,11 +79,26 @@ export class PortalsController {
     return this.service.getPublications(workspaceId, propertyId);
   }
 
-  // Webhook público — sem guards de autenticação
+  // URL do webhook de lead a colar na configuração do portal, com token
+  // amarrado ao workspace (mesmo padrão do feed-url, mas com namespace próprio).
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Get('webhook-url/:portal')
+  getLeadWebhookUrl(@Headers('x-workspace-id') workspaceId: string, @Param('portal') portal: string) {
+    return this.feed.getLeadWebhookUrl(workspaceId, portal);
+  }
+
+  // Webhook público — validado por token HMAC amarrado ao workspace, para
+  // não aceitar leads forjados de qualquer POST externo.
   @Public()
-  @Post('webhook/:portal')
+  @Post('webhook/:workspaceId/:portal/:token')
   @HttpCode(HttpStatus.OK)
-  processWebhook(@Param('portal') portal: string, @Body() body: Record<string, unknown>) {
-    return { received: true, portal };
+  processWebhook(
+    @Param('workspaceId') workspaceId: string,
+    @Param('portal') portal: string,
+    @Param('token') token: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    this.feed.assertLeadToken(workspaceId, token);
+    return this.service.processPortalLead(workspaceId, portal, body);
   }
 }

@@ -214,8 +214,10 @@ export class AuthController {
     @Body() body: { email: string },
     @Headers('x-admin-secret') secret: string,
   ) {
-    const adminSecret = process.env.ADMIN_SECRET || 'estouemcasa-admin-2024';
-    if (secret !== adminSecret) {
+    const adminSecret = process.env.ADMIN_SECRET;
+    if (!adminSecret || secret !== adminSecret) {
+      // Sem ADMIN_SECRET configurado, o endpoint fica sempre bloqueado —
+      // nunca cai para um valor padrão hardcoded no código.
       throw new UnauthorizedException('Acesso negado.');
     }
     await this.authService.unlockUser(body.email);

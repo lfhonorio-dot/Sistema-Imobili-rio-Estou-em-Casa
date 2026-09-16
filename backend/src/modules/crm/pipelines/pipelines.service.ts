@@ -241,6 +241,16 @@ export class PipelinesService {
 
     if (!pipeline) throw new NotFoundException('Pipeline não encontrado');
 
+    // Valida que TODOS os estágios informados pertencem mesmo a este pipeline,
+    // antes de alterar a ordem de qualquer um (evita reordenar estágio de outro workspace).
+    const validStages = await this.prisma.pipelineStage.findMany({
+      where: { id: { in: dto.stageIds }, pipelineId },
+      select: { id: true },
+    });
+    if (validStages.length !== dto.stageIds.length) {
+      throw new BadRequestException('Um ou mais estágios não pertencem a este pipeline');
+    }
+
     const updates = dto.stageIds.map((stageId, index) =>
       this.prisma.pipelineStage.update({
         where: { id: stageId },

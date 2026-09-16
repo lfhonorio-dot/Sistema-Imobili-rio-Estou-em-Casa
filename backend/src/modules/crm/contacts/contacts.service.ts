@@ -547,6 +547,62 @@ export class ContactsService {
     return { removed: true };
   }
 
+  // Find-or-create usado por webhooks de lead (Meta Ads, Google Ads, portais).
+  // Diferente de create(), nunca lança 409 — sempre reaproveita o contato
+  // existente por e-mail/telefone (evita duplicar contato a cada reenvio/retry
+  // do mesmo lead) e atualiza os dados de origem/UTM por cima.
+  async findOrCreateFromLead(
+    workspaceId: string,
+    lead: {
+      name: string;
+      email?: string | null;
+      phone?: string | null;
+      origin: string;
+      utmSource?: string | null;
+      utmCampaign?: string | null;
+      utmContent?: string | null;
+    },
+  ) {
+    const email = lead.email?.trim() || undefined;
+    const phone = lead.phone?.trim() || undefined;
+
+    let existing = null;
+    if (email || phone) {
+      const orConditions: Prisma.ContactWhereInput[] = [];
+      if (email) orConditions.push({ email });
+      if (phone) orConditions.push({ phone });
+      existing = await this.prisma.contact.findFirst({
+        where: { workspaceId, deletedAt: null, OR: orConditions },
+      });
+    }
+
+    if (existing) {
+      return this.prisma.contact.update({
+        where: { id: existing.id },
+        data: {
+          origin: lead.origin,
+          utmSource: lead.utmSource ?? existing.utmSource,
+          utmCampaign: lead.utmCampaign ?? existing.utmCampaign,
+          utmContent: lead.utmContent ?? existing.utmContent,
+        },
+      });
+    }
+
+    return this.prisma.contact.create({
+      data: {
+        workspaceId,
+        type: 'PERSON',
+        name: lead.name || 'Lead sem nome',
+        email,
+        phone,
+        origin: lead.origin,
+        utmSource: lead.utmSource,
+        utmCampaign: lead.utmCampaign,
+        utmContent: lead.utmContent,
+      },
+    });
+  }
+
   // Método auxiliar: verifica duplicatas antes de criar
   private async checkDuplicates(workspaceId: string, dto: CreateContactDto) {
     const orConditions: Prisma.ContactWhereInput[] = [];
