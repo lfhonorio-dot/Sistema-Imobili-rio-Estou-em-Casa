@@ -98,20 +98,78 @@ export class EsignatureService {
       throw new BadRequestException('Envelope já foi enviado');
     }
 
-    // Simular envio de notificações (sem integração real de WhatsApp/email)
+    // Envia o e-mail com o link de assinatura para cada signatário (mesmo
+    // padrão de requestSignature() em contracts.service.ts e de requestOtp()
+    // abaixo). Antes, este método só simulava o envio — marcava tudo como
+    // SENT e gravava um evento de auditoria fabricado, sem nunca chamar o
+    // EmailService, então nenhum e-mail saía de fato.
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const deadlineDate = envelope.deadline
+      ? new Date(envelope.deadline).toLocaleDateString('pt-BR')
+      : null;
+
+    let sentCount = 0;
     for (const sig of envelope.signatories) {
       if (envelope.order === 'SEQUENTIAL' && sig.order > 0) continue;
-      await this.prisma.signatureSignatory.update({
-        where: { id: sig.id },
-        data: { status: 'SENT' },
-      });
+
+      const signLink = `${appUrl}/sign/${sig.token}`;
+      const emailBody = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px">
+          <h2 style="color:#1d4ed8">Assinatura Eletrônica Solicitada</h2>
+          <p>Olá, <strong>${sig.name}</strong>!</p>
+          <p>Você foi solicitado(a) a assinar o seguinte documento:</p>
+          <div style="background:#f3f4f6;border-radius:8px;padding:16px;margin:16px 0">
+            <strong>${envelope.title}</strong><br/>
+            ${envelope.message ?? ''}
+          </div>
+          ${deadlineDate ? `<p><strong>Prazo para assinatura:</strong> ${deadlineDate}</p>` : ''}
+          <p style="margin:24px 0">
+            <a href="${signLink}"
+               style="background:#1d4ed8;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
+              Assinar Documento
+            </a>
+          </p>
+          <p style="color:#6b7280;font-size:13px">
+            Ou acesse pelo link: <a href="${signLink}">${signLink}</a>
+          </p>
+        </div>
+      `;
+
+      let emailSent = false;
+      try {
+        await this.emailService.sendEmail(workspaceId, {
+          to: sig.email,
+          subject: `[Assinatura Pendente] ${envelope.title}`,
+          body: emailBody,
+        });
+        emailSent = true;
+      } catch (e) {
+        console.error(`[EsignatureService] Falha ao enviar e-mail de assinatura para ${sig.email}:`, (e as Error).message);
+      }
+
+      if (emailSent) {
+        sentCount++;
+        await this.prisma.signatureSignatory.update({
+          where: { id: sig.id },
+          data: { status: 'SENT' },
+        });
+      }
       await this.prisma.signatureAuditEvent.create({
         data: {
           signatoryId: sig.id,
-          event: 'LINK_SENT',
-          metadata: { link: `/assinar/${sig.token}`, method: 'EMAIL' },
+          event: emailSent ? 'LINK_SENT' : 'LINK_SEND_FAILED',
+          metadata: { link: signLink, method: 'EMAIL', delivered: emailSent },
         },
       });
+    }
+
+    // Só marca o envelope como SENT se pelo menos um e-mail foi entregue de
+    // verdade — senão fica DRAFT e o erro abaixo avisa o usuário, em vez de
+    // fingir sucesso (mesma regra usada em requestSignature()).
+    if (sentCount === 0) {
+      throw new BadRequestException(
+        'Nenhum e-mail de assinatura pôde ser enviado. Verifique a configuração de SMTP do servidor.',
+      );
     }
 
     return this.prisma.signatureEnvelope.update({

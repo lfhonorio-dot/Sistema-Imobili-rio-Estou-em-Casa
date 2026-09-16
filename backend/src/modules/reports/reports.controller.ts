@@ -57,6 +57,15 @@ export class ReportsController {
   }
 
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Get('cash-flow')
+  getCashFlow(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Query() filter: ReportFilterDto,
+  ) {
+    return this.service.getCashFlow(workspaceId, filter);
+  }
+
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
   @Get('marketing-roi')
   getMarketingRoi(@Headers('x-workspace-id') workspaceId: string) {
     return this.service.getMarketingRoi(workspaceId);

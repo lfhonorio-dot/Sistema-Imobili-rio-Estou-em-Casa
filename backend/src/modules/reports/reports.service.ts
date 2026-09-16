@@ -13,7 +13,9 @@ export class ReportsService {
       totalProperties,
       activeContracts,
       financialIncome,
-      overdueCount,
+      pendingReceivable,
+      pendingPayable,
+      overdueAgg,
       automationRuns,
     ] = await Promise.all([
       this.prisma.contact.count({ where: { workspaceId, deletedAt: null } }),
@@ -27,13 +29,25 @@ export class ReportsService {
         where: { workspaceId, deletedAt: null, type: 'RECEIVABLE', status: 'PAID' },
         _sum: { amount: true },
       }),
-      this.prisma.financialEntry.count({
+      // Previsão de receita: a receber, ainda pendente (não é o mesmo que
+      // "já recebido" acima — antes o dashboard só mostrava o realizado).
+      this.prisma.financialEntry.aggregate({
+        where: { workspaceId, deletedAt: null, type: 'RECEIVABLE', status: 'PENDING' },
+        _sum: { amount: true },
+      }),
+      this.prisma.financialEntry.aggregate({
+        where: { workspaceId, deletedAt: null, type: 'PAYABLE', status: 'PENDING' },
+        _sum: { amount: true },
+      }),
+      this.prisma.financialEntry.aggregate({
         where: {
           workspaceId,
           deletedAt: null,
           status: 'PENDING',
           dueDate: { lt: new Date() },
         },
+        _sum: { amount: true },
+        _count: true,
       }),
       this.prisma.automation.aggregate({
         where: { workspaceId, deletedAt: null },
@@ -54,7 +68,10 @@ export class ReportsService {
       totalProperties,
       activeContracts,
       totalRevenue: Number(financialIncome._sum.amount ?? 0),
-      overdueCount,
+      forecastReceivable: Number(pendingReceivable._sum.amount ?? 0),
+      forecastPayable: Number(pendingPayable._sum.amount ?? 0),
+      overdueCount: overdueAgg._count,
+      overdueAmount: Number(overdueAgg._sum.amount ?? 0),
       automationRuns: Number(automationRuns._sum.executions ?? 0),
     };
   }
@@ -185,6 +202,85 @@ export class ReportsService {
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, v]) => ({ month, income: v.income, expense: v.expense, net: v.income - v.expense }));
+  }
+
+  // Fluxo de caixa real: separa o que já entrou/saiu (realizado, por data de
+  // pagamento) do que está previsto (projetado, por data de vencimento), com
+  // saldo acumulado mês a mês. `getFinancialSummary` acima não serve para
+  // isso — agrupa tudo por data de criação do registro e mistura status
+  // (inclusive CANCELLED/EXEMPT), o que não corresponde a nenhum fluxo real.
+  async getCashFlow(workspaceId: string, filter: ReportFilterDto) {
+    const excludedStatuses = ['CANCELLED', 'EXEMPT'];
+
+    const realizedWhere: any = { workspaceId, deletedAt: null, status: 'PAID' };
+    if (filter.startDate) realizedWhere.paidAt = { ...realizedWhere.paidAt, gte: new Date(filter.startDate) };
+    if (filter.endDate) realizedWhere.paidAt = { ...realizedWhere.paidAt, lte: new Date(filter.endDate) };
+
+    const projectedWhere: any = { workspaceId, deletedAt: null, status: { notIn: ['PAID', ...excludedStatuses] } };
+    if (filter.startDate) projectedWhere.dueDate = { ...projectedWhere.dueDate, gte: new Date(filter.startDate) };
+    if (filter.endDate) projectedWhere.dueDate = { ...projectedWhere.dueDate, lte: new Date(filter.endDate) };
+
+    const [realizedEntries, projectedEntries] = await Promise.all([
+      this.prisma.financialEntry.findMany({
+        where: realizedWhere,
+        select: { type: true, paidAmount: true, amount: true, paidAt: true },
+      }),
+      this.prisma.financialEntry.findMany({
+        where: projectedWhere,
+        select: { type: true, amount: true, dueDate: true },
+      }),
+    ]);
+
+    const monthMap = new Map<
+      string,
+      { realizedIn: number; realizedOut: number; projectedIn: number; projectedOut: number }
+    >();
+    const ensureMonth = (month: string) => {
+      if (!monthMap.has(month)) {
+        monthMap.set(month, { realizedIn: 0, realizedOut: 0, projectedIn: 0, projectedOut: 0 });
+      }
+      return monthMap.get(month)!;
+    };
+
+    for (const e of realizedEntries) {
+      if (!e.paidAt) continue;
+      const month = e.paidAt.toISOString().slice(0, 7);
+      const bucket = ensureMonth(month);
+      const value = Number(e.paidAmount ?? e.amount);
+      if (e.type === 'RECEIVABLE') bucket.realizedIn += value;
+      else bucket.realizedOut += value;
+    }
+
+    for (const e of projectedEntries) {
+      const month = e.dueDate.toISOString().slice(0, 7);
+      const bucket = ensureMonth(month);
+      const value = Number(e.amount);
+      if (e.type === 'RECEIVABLE') bucket.projectedIn += value;
+      else bucket.projectedOut += value;
+    }
+
+    const todayMonth = new Date().toISOString().slice(0, 7);
+    let cumulativeBalance = 0;
+
+    return Array.from(monthMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, v]) => {
+        const realizedNet = v.realizedIn - v.realizedOut;
+        const projectedNet = v.projectedIn - v.projectedOut;
+        // Meses já passados/atuais só contam o que de fato aconteceu no
+        // saldo acumulado; meses futuros somam o que está previsto.
+        cumulativeBalance += month <= todayMonth ? realizedNet : projectedNet;
+        return {
+          month,
+          realizedIn: v.realizedIn,
+          realizedOut: v.realizedOut,
+          realizedNet,
+          projectedIn: v.projectedIn,
+          projectedOut: v.projectedOut,
+          projectedNet,
+          cumulativeBalance,
+        };
+      });
   }
 
   async getMarketingRoi(workspaceId: string) {
