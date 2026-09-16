@@ -253,7 +253,11 @@ export default function FinancialPage() {
                 </thead>
                 <tbody>
                   {payables?.items.map((entry) => (
-                    <FinancialEntryRow key={entry.id} entry={entry} />
+                    <FinancialEntryRow
+                      key={entry.id}
+                      entry={entry}
+                      onPay={(id) => payEntry.mutate({ id })}
+                    />
                   ))}
                 </tbody>
               </table>
