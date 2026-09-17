@@ -1046,11 +1046,11 @@ model Boleto {
   codigoBarras     String?
   pixQrCode        String?  @db.Text
   pixCopiaECola    String?  @db.Text
-  amount           Float
+  amount           Decimal  @db.Decimal(15, 2)
   dueDate          DateTime
   issueDate        DateTime @default(now())
   paidAt           DateTime?
-  paidAmount       Float?
+  paidAmount       Decimal? @db.Decimal(15, 2)
   cancelledAt      DateTime?
   status           String   @default("PENDING") // PENDING, REGISTERED, SENT, VIEWED, PAID, OVERDUE, CANCELLED
   registeredAt     DateTime?
@@ -1171,7 +1171,7 @@ model SplitTransaction {
   financialEntryId   String?
   recipientId        String
   gatewayTransactionId String?
-  amount             Float
+  amount             Decimal  @db.Decimal(15, 2)
   status             String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, REVERSED
   processedAt        DateTime?
   failReason         String?
@@ -1198,7 +1198,7 @@ model BankAccount {
   openFinanceId       String?  // ID do consentimento Open Finance
   openFinanceConsent  String?  // token de consentimento
   consentExpiresAt    DateTime?
-  balance             Float    @default(0)
+  balance             Decimal  @default(0) @db.Decimal(15, 2)
   balanceDate         DateTime?
   isDefault           Boolean  @default(false)
   isActive            Boolean  @default(true)
@@ -1218,12 +1218,12 @@ model BankTransaction {
   bankAccountId   String
   externalId      String?  // ID no banco ou Open Finance
   date            DateTime
-  amount          Float    // positivo=crédito, negativo=débito
+  amount          Decimal  @db.Decimal(15, 2) // positivo=crédito, negativo=débito
   description     String?
   type            String?  // PIX, TED, DOC, BOLETO, TARIFA, etc.
   counterpart     String?  // nome do pagador/recebedor
   counterpartDoc  String?
-  balance         Float?
+  balance         Decimal? @db.Decimal(15, 2)
   reconciled      Boolean  @default(false)
   financialEntryId String?
   importSource    String?  // OPEN_FINANCE, OFX, CNAB, MANUAL

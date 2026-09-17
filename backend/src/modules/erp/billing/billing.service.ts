@@ -277,7 +277,7 @@ export class BillingService {
       contractId: boleto.contractId ?? undefined,
       contactId: boleto.contactId ?? undefined,
       gatewayId: boleto.gatewayId ?? undefined,
-      amount: boleto.amount,
+      amount: Number(boleto.amount),
       dueDate: newDueDate,
       description: boleto.description ?? undefined,
       fine: boleto.fine,
@@ -293,7 +293,7 @@ export class BillingService {
 
     await this.prisma.boleto.update({
       where: { id },
-      data: { status: 'PAID', paidAt: new Date(), paidAmount: paidAmount ?? boleto.amount },
+      data: { status: 'PAID', paidAt: new Date(), paidAmount: paidAmount ?? Number(boleto.amount) },
     });
 
     if (boleto.financialEntryId) {
@@ -492,7 +492,7 @@ export class BillingService {
 
       // Ocorrência 06 = liquidação / 09 = baixa
       if (boleto && ['06', '09', '00'].includes(occurrence)) {
-        await this.confirmPayment(workspaceId, boleto.id, amount || boleto.amount);
+        await this.confirmPayment(workspaceId, boleto.id, amount || Number(boleto.amount));
       }
       records.push(record);
     }
@@ -522,7 +522,7 @@ export class BillingService {
       ? '00000000'.padEnd(240, ' ')
       : '0'.padEnd(400, ' ');
     const records = boletos.map(b => {
-      const line = `1${String(b['nossoNumero'] || '').padStart(20, '0')}${String(Math.round((b['amount'] as number) * 100)).padStart(15, '0')}`;
+      const line = `1${String(b['nossoNumero'] || '').padStart(20, '0')}${String(Math.round(Number(b['amount']) * 100)).padStart(15, '0')}`;
       return format === 'CNAB240' ? line.padEnd(240, ' ') : line.padEnd(400, ' ');
     });
     const trailer = format === 'CNAB240' ? '9'.padEnd(240, ' ') : '9'.padEnd(400, ' ');

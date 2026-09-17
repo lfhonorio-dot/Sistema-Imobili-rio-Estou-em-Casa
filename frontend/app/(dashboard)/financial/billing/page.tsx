@@ -74,7 +74,7 @@ export default function BillingPage() {
                 <tr key={b.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs text-gray-600">{b.nossoNumero}</td>
                   <td className="px-4 py-3 text-right font-medium">
-                    {b.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {Number(b.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {new Date(b.dueDate).toLocaleDateString('pt-BR')}
