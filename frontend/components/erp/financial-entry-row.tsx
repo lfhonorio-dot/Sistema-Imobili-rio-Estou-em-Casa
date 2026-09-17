@@ -76,7 +76,7 @@ export function FinancialEntryRow({ entry, onPay, onGenerateBoleto, generatingBo
           )}
           {entry.status === 'PENDING' && onPay && (
             <Button size="sm" variant="outline" onClick={() => onPay(entry.id)}>
-              Receber
+              {entry.type === 'PAYABLE' ? 'Pagar' : 'Receber'}
             </Button>
           )}
         </div>
