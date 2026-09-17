@@ -1,0 +1,35 @@
+name: Testes automáticos do backend
+
+# Roda sozinho toda vez que alguém abrir um Pull Request pra main ou
+# enviar (push) direto pra main. Não precisa de banco de dados: os testes
+# de Nível 1 chamam as regras de negócio direto (com o Prisma "fingido"),
+# então terminam em segundos e não arriscam mexer em dado nenhum de verdade.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar cliente do Prisma
+        run: npx prisma generate
+
+      - name: Rodar testes (npx jest)
+        run: npx jest --ci
