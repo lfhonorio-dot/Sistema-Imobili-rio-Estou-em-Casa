@@ -98,7 +98,10 @@ export interface DashboardKpis {
   totalProperties: number;
   activeContracts: number;
   totalRevenue: number;
+  forecastReceivable: number;
+  forecastPayable: number;
   overdueCount: number;
+  overdueAmount: number;
   automationRuns: number;
 }
 

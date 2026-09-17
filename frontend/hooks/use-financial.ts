@@ -95,6 +95,32 @@ export function useFinancialForecast() {
   });
 }
 
+export interface CashFlowMonth {
+  month: string;
+  realizedIn: number;
+  realizedOut: number;
+  realizedNet: number;
+  projectedIn: number;
+  projectedOut: number;
+  projectedNet: number;
+  cumulativeBalance: number;
+}
+
+// Fluxo de caixa real: realizado (por data de pagamento) separado de
+// previsto (por data de vencimento), com saldo acumulado mês a mês.
+export function useCashFlow() {
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+
+  return useQuery({
+    queryKey: ['cash-flow', workspaceId],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/cash-flow');
+      return data.data as CashFlowMonth[];
+    },
+    enabled: !!workspaceId,
+  });
+}
+
 export function useOverdueEntries() {
   const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 

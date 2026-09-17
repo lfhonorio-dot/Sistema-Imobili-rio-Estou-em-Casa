@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Users, Home, FileText, DollarSign } from 'lucide-react';
+import { Users, Home, FileText, DollarSign, TrendingUp } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/auth.store';
@@ -50,6 +50,14 @@ export default function DashboardPage() {
       bg: 'bg-emerald-50',
       hint: kpis ? 'Lançamentos pagos' : 'Carregando...',
     },
+    {
+      title: 'Previsão de Receita',
+      value: kpis ? brl(kpis.forecastReceivable) : '—',
+      icon: TrendingUp,
+      color: 'text-amber-600',
+      bg: 'bg-amber-50',
+      hint: kpis && kpis.overdueAmount > 0 ? `${brl(kpis.overdueAmount)} em atraso` : (kpis ? 'A receber, ainda pendente' : 'Carregando...'),
+    },
   ];
 
   return (
@@ -71,7 +79,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Cards de métricas */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
           {metricsCards.map((card) => (
             <Card key={card.title}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

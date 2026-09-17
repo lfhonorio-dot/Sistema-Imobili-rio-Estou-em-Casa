@@ -175,6 +175,23 @@ export class ContractsService {
     });
     if (!property) throw new BadRequestException('Imóvel não encontrado neste workspace');
 
+    // Bloqueia contrato de venda para imóvel já vendido, e de locação para
+    // imóvel já alugado — independente do tipo/status do contrato que gerou
+    // essa condição (SALE e BROKERAGE podem vender o mesmo imóvel por
+    // caminhos diferentes; o que importa é o estado atual do imóvel).
+    const isSaleType = dto.type === 'SALE' || dto.type === 'BROKERAGE';
+    const isRentalType = dto.type === 'RENTAL_RESIDENTIAL' || dto.type === 'RENTAL_COMMERCIAL';
+    if (isSaleType && property.status === 'SOLD') {
+      throw new ConflictException(
+        'Este imóvel já está marcado como vendido. Verifique o cadastro do imóvel antes de criar um novo contrato de venda.',
+      );
+    }
+    if (isRentalType && property.status === 'RENTED') {
+      throw new ConflictException(
+        'Este imóvel já está marcado como alugado. Encerre o contrato de locação vigente antes de criar um novo.',
+      );
+    }
+
     // Bloqueia contrato ATIVO duplicado para o mesmo imóvel + tipo
     // (rascunhos e encerrados não contam — permite histórico e renegociação)
     const activeDuplicate = await this.prisma.contract.findFirst({
@@ -787,7 +804,9 @@ export class ContractsService {
     return { success: true };
   }
 
-  // Altera status do contrato
+  // Altera status do contrato — e sincroniza o status do imóvel quando o
+  // contrato entra/sai de ACTIVE (antes disso o imóvel nunca era atualizado
+  // automaticamente, o que permitia vender/alugar um imóvel duas vezes).
   async changeStatus(
     workspaceId: string,
     id: string,
@@ -799,9 +818,87 @@ export class ContractsService {
     });
     if (!existing) throw new NotFoundException('Contrato não encontrado');
 
-    const updated = await this.prisma.contract.update({
-      where: { id },
-      data: { status: dto.status },
+    const isSaleType = existing.type === 'SALE' || existing.type === 'BROKERAGE';
+    const isRentalType = existing.type === 'RENTAL_RESIDENTIAL' || existing.type === 'RENTAL_COMMERCIAL';
+    const becomingActive = dto.status === 'ACTIVE' && existing.status !== 'ACTIVE';
+    const leavingActive = existing.status === 'ACTIVE' && (dto.status === 'TERMINATED' || dto.status === 'RESCINDED');
+
+    // Ao ativar um contrato de venda para um imóvel já vendido (ou de locação
+    // para um já alugado), bloqueia — mesma checagem de create(), necessária
+    // aqui porque todo contrato nasce DRAFT e só vira ACTIVE neste endpoint.
+    if (becomingActive) {
+      const property = await this.prisma.property.findFirst({
+        where: { id: existing.propertyId, workspaceId, deletedAt: null },
+      });
+      if (property) {
+        if (isSaleType && property.status === 'SOLD') {
+          throw new ConflictException(
+            'Este imóvel já está marcado como vendido. Não é possível ativar outro contrato de venda para ele.',
+          );
+        }
+        if (isRentalType && property.status === 'RENTED') {
+          throw new ConflictException(
+            'Este imóvel já está marcado como alugado. Não é possível ativar outro contrato de locação para ele.',
+          );
+        }
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.contract.update({
+        where: { id },
+        data: { status: dto.status },
+      });
+
+      if (becomingActive && (isSaleType || isRentalType)) {
+        const newPropertyStatus = isSaleType ? 'SOLD' : 'RENTED';
+        await tx.property.update({
+          where: { id: existing.propertyId },
+          data: { status: newPropertyStatus },
+        });
+        await tx.propertyStatusHistory.create({
+          data: {
+            propertyId: existing.propertyId,
+            status: newPropertyStatus,
+            userId,
+            note: `Automático — contrato ${existing.code ?? existing.id} ativado`,
+          },
+        });
+      } else if (leavingActive && (isSaleType || isRentalType)) {
+        // Só reverte para AVAILABLE se não houver outro contrato ativo do
+        // mesmo tipo de efeito (venda/locação) usando o imóvel — evita
+        // reabrir um imóvel que outro contrato ainda mantém ocupado.
+        const stillActive = await tx.contract.findFirst({
+          where: {
+            workspaceId,
+            propertyId: existing.propertyId,
+            status: 'ACTIVE',
+            deletedAt: null,
+            id: { not: existing.id },
+          },
+          select: { id: true },
+        });
+        if (!stillActive) {
+          const property = await tx.property.findFirst({ where: { id: existing.propertyId } });
+          const expectedStatus = isSaleType ? 'SOLD' : 'RENTED';
+          if (property && property.status === expectedStatus) {
+            await tx.property.update({
+              where: { id: existing.propertyId },
+              data: { status: 'AVAILABLE' },
+            });
+            await tx.propertyStatusHistory.create({
+              data: {
+                propertyId: existing.propertyId,
+                status: 'AVAILABLE',
+                userId,
+                note: `Automático — contrato ${existing.code ?? existing.id} ${dto.status === 'TERMINATED' ? 'encerrado' : 'rescindido'}`,
+              },
+            });
+          }
+        }
+      }
+
+      return result;
     });
 
     await this.auditService.log({

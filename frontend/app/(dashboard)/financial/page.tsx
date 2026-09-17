@@ -15,6 +15,7 @@ import {
   useFinancialSummary,
   useFinancialEntries,
   useFinancialForecast,
+  useCashFlow,
   useOverdueEntries,
   useCommissions,
   usePayEntry,
@@ -49,6 +50,7 @@ export default function FinancialPage() {
 
   const { data: summary } = useFinancialSummary();
   const { data: forecast } = useFinancialForecast();
+  const { data: cashFlow, isLoading: loadingCashFlow } = useCashFlow();
   const { data: overdueData } = useOverdueEntries();
   const { data: receivables, isLoading: loadingReceivable } = useFinancialEntries({
     type: 'RECEIVABLE',
@@ -183,6 +185,7 @@ export default function FinancialPage() {
           <TabsTrigger value="payable">Contas a Pagar</TabsTrigger>
           <TabsTrigger value="overdue">Em Atraso</TabsTrigger>
           <TabsTrigger value="commissions">Comissões</TabsTrigger>
+          <TabsTrigger value="cashflow">Fluxo de Caixa</TabsTrigger>
         </TabsList>
 
         {/* Contas a Receber */}
@@ -350,6 +353,51 @@ export default function FinancialPage() {
                             {receiptId === c.id ? 'Gerando...' : 'Ver recibo'}
                           </Button>
                         )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Fluxo de Caixa: realizado (o que já entrou/saiu) x previsto (o que
+            está por vencer), com saldo acumulado mês a mês. */}
+        <TabsContent value="cashflow" className="mt-4">
+          {loadingCashFlow ? (
+            <p className="text-muted-foreground text-sm">Carregando...</p>
+          ) : !cashFlow || cashFlow.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Nenhum lançamento para exibir no fluxo de caixa</p>
+          ) : (
+            <div className="border rounded-lg overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Mês</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Entradas (realizado)</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Saídas (realizado)</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Saldo realizado</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Entradas (previsto)</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Saídas (previsto)</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Saldo acumulado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashFlow.map((m) => (
+                    <tr key={m.month} className="border-t hover:bg-gray-50/50">
+                      <td className="py-3 px-4 text-sm font-medium">
+                        {new Date(`${m.month}-01T00:00:00`).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-right text-emerald-700">{formatCurrency(m.realizedIn)}</td>
+                      <td className="py-3 px-4 text-sm text-right text-red-700">{formatCurrency(m.realizedOut)}</td>
+                      <td className={`py-3 px-4 text-sm text-right font-semibold ${m.realizedNet >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {formatCurrency(m.realizedNet)}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-right text-muted-foreground">{formatCurrency(m.projectedIn)}</td>
+                      <td className="py-3 px-4 text-sm text-right text-muted-foreground">{formatCurrency(m.projectedOut)}</td>
+                      <td className={`py-3 px-4 text-sm text-right font-bold ${m.cumulativeBalance >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {formatCurrency(m.cumulativeBalance)}
                       </td>
                     </tr>
                   ))}
