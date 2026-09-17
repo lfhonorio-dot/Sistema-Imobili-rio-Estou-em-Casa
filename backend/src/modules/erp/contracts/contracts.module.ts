@@ -13,6 +13,6 @@ import { BillingModule } from '../billing/billing.module';
   imports: [PrismaModule, AuditModule, EmailModule, FiscalModule, BillingModule],
   controllers: [ContractsController],
   providers: [ContractsService, ContractTemplateService, AdjustmentService],
-  exports: [ContractsService],
+  exports: [ContractsService, ContractTemplateService],
 })
 export class ContractsModule {}

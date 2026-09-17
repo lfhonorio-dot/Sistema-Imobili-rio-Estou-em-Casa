@@ -49,8 +49,18 @@ async function bootstrap() {
   // Compressão Gzip das respostas
   app.use(compression());
 
-  // Limite de tamanho de requisição (10MB)
-  app.use(express.json({ limit: '10mb' }));
+  // Limite de tamanho de requisição (10MB). `verify` guarda o corpo bruto em
+  // req.rawBody — necessário para validar assinatura HMAC de webhooks (Meta),
+  // já que o hash tem que ser calculado sobre os bytes exatos recebidos, não
+  // sobre o objeto já re-serializado pelo JSON.parse.
+  app.use(
+    express.json({
+      limit: '10mb',
+      verify: (req: any, _res, buf: Buffer) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   // -----------------------------------------------

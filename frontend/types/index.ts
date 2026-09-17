@@ -12,6 +12,7 @@ export interface User {
   twoFactorEnabled: boolean;
   lastLoginAt?: string;
   workspaces: WorkspaceMembership[];
+  isPlatformAdmin?: boolean;
 }
 
 export interface WorkspaceMembership {

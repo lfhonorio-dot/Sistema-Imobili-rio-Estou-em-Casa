@@ -812,8 +812,17 @@ export class AuthService {
 
     if (!user) throw new Error('Usuário não encontrado');
 
+    // Admin de plataforma (cross-tenant) é definido por allowlist de e-mail,
+    // não por papel de workspace — ver PlatformAdminGuard.
+    const platformAdminAllowlist = (process.env.PLATFORM_ADMIN_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const isPlatformAdmin = platformAdminAllowlist.includes(user.email.toLowerCase());
+
     return {
       ...user,
+      isPlatformAdmin,
       workspaces: user.workspaces.map((m: { workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string }; role: { id: string; name: string; permissions: unknown } }) => ({
         workspaceId: m.workspaceId,
         isOwner: m.isOwner,

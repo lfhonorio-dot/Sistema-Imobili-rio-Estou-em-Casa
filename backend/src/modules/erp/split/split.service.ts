@@ -208,6 +208,22 @@ export class SplitService {
     if (!tx) throw new NotFoundException('Transação não encontrada');
     if (tx.status === 'COMPLETED') return tx;
 
+    // Trava atômica: só quem conseguir mover PENDING/FAILED → PROCESSING
+    // segue para chamar o gateway. Sem isso, dois cliques/requisições
+    // simultâneas passavam ambos pela checagem de status antes de qualquer
+    // update, e cada um chamava o Asaas — gerando duas transferências PIX
+    // reais para o mesmo recebedor.
+    const claimed = await this.prisma.splitTransaction.updateMany({
+      where: { id, workspaceId, status: { in: ['PENDING', 'FAILED'] } },
+      data: { status: 'PROCESSING' },
+    });
+    if (claimed.count === 0) {
+      // Outra requisição já está processando (ou já completou) esta transação.
+      const current = await this.prisma.splitTransaction.findFirst({ where: { id, workspaceId } });
+      if (current?.status === 'COMPLETED') return current;
+      throw new BadRequestException('Esta transação já está sendo processada.');
+    }
+
     // Repasse REAL via PIX quando há gateway Asaas ativo e o recebedor tem
     // chave PIX habilitada (KYC). Sem gateway: confirmação manual (controle).
     const gateway = await this.prisma.paymentGatewayConfig.findFirst({

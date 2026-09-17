@@ -2,6 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ContactsService } from '../../crm/contacts/contacts.service';
 import { SaveMetaIntegrationDto, FieldMappingDto, CapiEventDto } from './meta-ads.dto';
 
 const ALGO = 'aes-256-cbc';
@@ -32,7 +33,50 @@ function decrypt(enc: string): string {
 export class MetaAdsService {
   private readonly logger = new Logger(MetaAdsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private contactsService: ContactsService,
+  ) {}
+
+  // Valida a assinatura HMAC-SHA256 que o Meta envia no header
+  // X-Hub-Signature-256 (sha256=<hash>), calculada sobre o corpo bruto (raw)
+  // da requisição, usando o App Secret. Sem isso, qualquer POST externo
+  // seria aceito como se fosse um lead real do Meta.
+  verifySignature(rawBody: Buffer | string, signatureHeader?: string): boolean {
+    const appSecret = process.env.META_APP_SECRET;
+    if (!appSecret) {
+      this.logger.warn('META_APP_SECRET não configurado — webhook do Meta Ads rejeitado por segurança.');
+      return false;
+    }
+    if (!signatureHeader || !signatureHeader.startsWith('sha256=')) return false;
+
+    const expected = crypto
+      .createHmac('sha256', appSecret)
+      .update(rawBody)
+      .digest('hex');
+    const received = signatureHeader.slice('sha256='.length);
+
+    if (expected.length !== received.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(received, 'hex'));
+  }
+
+  // Handshake GET exigido pelo Meta para validar a URL do webhook
+  verifyHandshake(mode?: string, token?: string, challenge?: string): string {
+    const verifyToken = process.env.META_ADS_VERIFY_TOKEN;
+    if (mode === 'subscribe' && verifyToken && token === verifyToken) {
+      return challenge ?? '';
+    }
+    throw new Error('Verificação de webhook falhou');
+  }
+
+  // Resolve o workspace a partir do pageId do Meta (salvo em saveIntegration)
+  async resolveWorkspaceIdByPageId(pageId?: string): Promise<string | null> {
+    if (!pageId) return null;
+    const integration = await this.prisma.marketingIntegration.findFirst({
+      where: { provider: 'META_ADS', pageId },
+    });
+    return integration?.workspaceId ?? null;
+  }
 
   async getIntegration(workspaceId: string) {
     const integration = await this.prisma.marketingIntegration.findFirst({
@@ -132,20 +176,22 @@ export class MetaAdsService {
     const phone = getName('phone_number');
     const campaignName = (value?.campaign_name as string) ?? 'meta-ads';
 
-    // Busca pipeline padrão para criar deal
-    const pipeline = await this.prisma.pipeline.findFirst({ where: { workspaceId } });
+    // Busca pipeline padrão para criar deal — o mais antigo do workspace,
+    // já que hoje não existe um flag explícito de "pipeline padrão".
+    const pipeline = await this.prisma.pipeline.findFirst({
+      where: { workspaceId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
 
-    const contact = await this.prisma.contact.create({
-      data: {
-        workspaceId,
-        name,
-        email: email || null,
-        phone: phone || null,
-        type: 'PERSON',
-        origin: 'META_ADS',
-        utmSource: 'meta',
-        utmCampaign: campaignName,
-      },
+    // Reaproveita contato existente por e-mail/telefone em vez de criar um novo
+    // a cada reenvio do mesmo lead (o Meta reenvia o mesmo evento em retry).
+    const contact = await this.contactsService.findOrCreateFromLead(workspaceId, {
+      name,
+      email,
+      phone,
+      origin: 'META_ADS',
+      utmSource: 'meta',
+      utmCampaign: campaignName,
     });
 
     let deal = null;
@@ -168,6 +214,10 @@ export class MetaAdsService {
           },
         });
       }
+    }
+
+    if (!pipeline) {
+      this.logger.warn(`Lead Meta ${leadgen}: contato criado, mas workspace ${workspaceId} não tem nenhum pipeline — negócio NÃO foi criado.`);
     }
 
     this.logger.log(`Lead Meta processado: ${leadgen}`);

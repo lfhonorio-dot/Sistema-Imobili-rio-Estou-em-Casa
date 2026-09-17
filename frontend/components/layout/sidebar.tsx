@@ -201,6 +201,12 @@ export function Sidebar() {
 
   const permissions = currentWorkspace?.role.permissions || {};
 
+  // "Admin" é área de plataforma (cross-tenant) — só aparece para quem
+  // o backend marcou como isPlatformAdmin (allowlist PLATFORM_ADMIN_EMAILS).
+  const visibleNavItems = navItems.filter(
+    (item) => item.href !== '/admin' || user?.isPlatformAdmin,
+  );
+
   return (
     <aside className="flex h-screen w-64 flex-col border-r bg-white">
       {/* Cabeçalho com logo */}
@@ -216,7 +222,7 @@ export function Sidebar() {
       {/* Navegação principal */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <div className="space-y-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link

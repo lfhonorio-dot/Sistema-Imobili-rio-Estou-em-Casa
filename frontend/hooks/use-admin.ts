@@ -1,8 +1,9 @@
 'use client';
 import { useState, useCallback } from 'react';
-import axios from 'axios';
-
-const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1' });
+// Reaproveita o cliente HTTP compartilhado (com proxy /api-proxy em produção
+// e refresh automático de token) em vez de uma instância própria apontando
+// para localhost — que quebrava 100% das chamadas desta tela em produção.
+import api from '@/lib/api';
 
 function headers(token: string, workspaceId: string) {
   return { Authorization: `Bearer ${token}`, 'x-workspace-id': workspaceId };

@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as QRCode from 'qrcode';
@@ -346,6 +347,36 @@ export class PropertiesService {
       where: { id, workspaceId, deletedAt: null },
     });
     if (!property) throw new NotFoundException('Imóvel não encontrado');
+
+    // Impede que este endpoint genérico contorne o bloqueio de venda/locação
+    // duplicada: se o imóvel está SOLD/RENTED por causa de um contrato ACTIVE,
+    // não deixa mudar o status manualmente sem antes encerrar esse contrato
+    // (senão o imóvel "libera" e um segundo contrato pode ser criado por cima).
+    if (
+      (property.status === 'SOLD' || property.status === 'RENTED') &&
+      dto.status !== property.status
+    ) {
+      const contractTypes =
+        property.status === 'SOLD'
+          ? ['SALE', 'BROKERAGE']
+          : ['RENTAL_RESIDENTIAL', 'RENTAL_COMMERCIAL'];
+
+      const activeContract = await this.prisma.contract.findFirst({
+        where: {
+          propertyId: id,
+          workspaceId,
+          status: 'ACTIVE',
+          type: { in: contractTypes },
+          deletedAt: null,
+        },
+      });
+
+      if (activeContract) {
+        throw new ConflictException(
+          'Este imóvel está vinculado a um contrato ativo. Encerre ou rescinda o contrato antes de alterar o status do imóvel manualmente.',
+        );
+      }
+    }
 
     const [updated] = await this.prisma.$transaction([
       this.prisma.property.update({

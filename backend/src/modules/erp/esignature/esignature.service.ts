@@ -5,6 +5,7 @@ import {
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../hub/email/email.service';
+import { ContractTemplateService } from '../contracts/contract-template.service';
 import {
   CreateEnvelopeDto, EnvelopeQueryDto, ValidateOtpDto, RejectSignatureDto,
 } from './esignature.dto';
@@ -14,6 +15,7 @@ export class EsignatureService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
+    private contractTemplate: ContractTemplateService,
   ) {}
 
   // ── ENVELOPES ─────────────────────────────────────────────
@@ -49,8 +51,10 @@ export class EsignatureService {
   }
 
   async create(workspaceId: string, userId: string, dto: CreateEnvelopeDto) {
-    // Calcular hash SHA-256 do documento
-    const documentHash = this.hashString(dto.documentUrl + Date.now());
+    // Hash SHA-256 do CONTEÚDO real do documento (garantia de imutabilidade).
+    // Antes era um hash de "documentUrl + Date.now()" — decorativo, nunca
+    // detectava alteração nenhuma no conteúdo do contrato/documento.
+    const documentHash = await this.computeDocumentHash(workspaceId, dto.contractId, dto.documentUrl);
 
     const envelope = await this.prisma.signatureEnvelope.create({
       data: {
@@ -380,5 +384,38 @@ export class EsignatureService {
 
   private hashString(value: string): string {
     return crypto.createHash('sha256').update(value).digest('hex');
+  }
+
+  // Calcula o hash sobre o conteúdo real do documento, não sobre a URL:
+  // - se o envelope está ligado a um contrato, usa o HTML gerado pelo
+  //   template (mesmo conteúdo que será mostrado/assinado);
+  // - senão, se documentUrl é um link http(s) de verdade, baixa o conteúdo
+  //   e hasheia os bytes recebidos;
+  // - como último recurso (documentUrl que não é uma URL buscável), hasheia
+  //   a própria string — pior que os dois casos acima, mas ainda determinístico
+  //   (sem timestamp misturado, que tornava o hash decorativo).
+  private async computeDocumentHash(
+    workspaceId: string,
+    contractId?: string,
+    documentUrl?: string,
+  ): Promise<string> {
+    if (contractId) {
+      const html = await this.contractTemplate.generate(workspaceId, contractId);
+      return this.hashString(html);
+    }
+
+    if (documentUrl && /^https?:\/\//i.test(documentUrl)) {
+      try {
+        const res = await fetch(documentUrl);
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          return crypto.createHash('sha256').update(buf).digest('hex');
+        }
+      } catch {
+        // Cai para o fallback abaixo se o download falhar.
+      }
+    }
+
+    return this.hashString(documentUrl ?? '');
   }
 }

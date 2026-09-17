@@ -40,6 +40,15 @@ export class DimobService {
     return { contract, workspace, partners };
   }
 
+  // Remove os registros DIMOB de um contrato — usado quando o contrato de
+  // venda/intermediação é cancelado ou rescindido. Sem isso, uma venda
+  // desfeita continuava aparecendo pra sempre na declaração anual.
+  async removeContractEvents(workspaceId: string, contractId: string) {
+    const result = await this.prisma.dimobRecord.deleteMany({ where: { workspaceId, contractId } });
+    this.logger.log(`DIMOB removido: contrato=${contractId} registros=${result.count}`);
+    return { removed: result.count };
+  }
+
   // Registra os eventos DIMOB de um contrato de VENDA ou INTERMEDIAÇÃO
   // (data do evento = contratação/assinatura, não o recebimento).
   async registerSaleEvents(workspaceId: string, contractId: string) {

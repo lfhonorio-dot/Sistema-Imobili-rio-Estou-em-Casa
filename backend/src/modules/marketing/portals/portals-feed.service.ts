@@ -47,6 +47,32 @@ export class PortalsFeedService {
     }
   }
 
+  // Token determinístico por workspace para o webhook de LEAD dos portais
+  // (namespace diferente do token do feed, para não reaproveitar o mesmo
+  // segredo em dois contextos distintos).
+  leadWebhookToken(workspaceId: string): string {
+    const secret = process.env.HMAC_SECRET || 'homolog-hmac-secret';
+    return crypto.createHmac('sha256', secret).update(`portal-lead:${workspaceId}`).digest('hex').slice(0, 32);
+  }
+
+  assertLeadToken(workspaceId: string, token: string): void {
+    const expected = this.leadWebhookToken(workspaceId);
+    const a = Buffer.from((token || '').padEnd(32, '0').slice(0, 32));
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      throw new ForbiddenException('Token de webhook inválido');
+    }
+  }
+
+  getLeadWebhookUrl(workspaceId: string, portal: string): { url: string; token: string } {
+    const base = process.env.BACKEND_PUBLIC_URL || process.env.APP_URL || '';
+    const token = this.leadWebhookToken(workspaceId);
+    return {
+      token,
+      url: `${base}/api/v1/marketing/portals/webhook/${workspaceId}/${portal}/${token}`,
+    };
+  }
+
   // URL do feed para o usuário colar nos portais
   async getFeedUrl(workspaceId: string): Promise<{ url: string; token: string }> {
     const base = process.env.BACKEND_PUBLIC_URL || process.env.APP_URL || '';

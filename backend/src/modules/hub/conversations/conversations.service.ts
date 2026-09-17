@@ -1,8 +1,10 @@
 // Serviço de Conversas — inbox unificado multicanal
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
+import { EmailService } from '../email/email.service';
 import {
   CreateConversationDto, UpdateConversationDto, ConversationQueryDto,
   ChangeStatusDto, AssignDto, SendMessageDto,
@@ -13,6 +15,8 @@ export class ConversationsService {
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
+    private whatsAppService: WhatsAppService,
+    private emailService: EmailService,
   ) {}
 
   async findAll(workspaceId: string, query: ConversationQueryDto) {
@@ -144,12 +148,50 @@ export class ConversationsService {
     return { items, meta: { page, limit, total, pages: Math.ceil(total / limit) } };
   }
 
+  // Responder pelo Inbox precisa realmente entregar a mensagem no canal —
+  // antes, este método só gravava status:'SENT' no banco sem nunca chamar a
+  // API do WhatsApp ou o SMTP (o cliente nunca recebia nada, apesar do
+  // atendente ver "enviado" na tela). Agora cada canal aciona o serviço real
+  // e só grava a mensagem depois de confirmar o envio — falha do WhatsApp/SMTP
+  // propaga como erro visível em vez de fingir sucesso.
   async sendMessage(workspaceId: string, userId: string, conversationId: string, dto: SendMessageDto) {
     const conv = await this.prisma.conversation.findFirst({
       where: { id: conversationId, workspaceId, deletedAt: null },
+      include: { contact: true },
     });
     if (!conv) throw new NotFoundException('Conversa não encontrada');
 
+    if (conv.channel === 'WHATSAPP') {
+      if (!conv.contact?.phone) {
+        throw new BadRequestException('Esta conversa não tem um telefone de contato para enviar WhatsApp');
+      }
+      // Envia de verdade via Graph API; lança erro (inclusive de janela de 24h
+      // se o provedor recusar) em vez de deixar essa camada fingir sucesso.
+      await this.whatsAppService.sendMessage(workspaceId, userId, {
+        to: conv.contact.phone,
+        type: (dto.type ?? 'TEXT') as any,
+        body: dto.body,
+        mediaUrl: dto.mediaUrl,
+      });
+    } else if (conv.channel === 'EMAIL') {
+      if (!conv.contact?.email) {
+        throw new BadRequestException('Esta conversa não tem um e-mail de contato para enviar');
+      }
+      await this.emailService.sendEmail(workspaceId, {
+        to: conv.contact.email,
+        subject: conv.subject || 'Nova mensagem',
+        body: dto.body || '',
+      });
+    } else if (conv.channel !== 'CHAT_INTERNO') {
+      // Canal sem integração de envio real implementada — não finge sucesso.
+      throw new BadRequestException(
+        `Envio pelo canal ${conv.channel} ainda não está implementado neste sistema.`,
+      );
+    }
+
+    // Só grava a mensagem (e marca como SENT) depois do envio real confirmar
+    // sucesso — para WHATSAPP/EMAIL a chamada acima já teria lançado erro antes
+    // daqui se a entrega tivesse falhado.
     const msg = await this.prisma.message.create({
       data: {
         workspaceId,

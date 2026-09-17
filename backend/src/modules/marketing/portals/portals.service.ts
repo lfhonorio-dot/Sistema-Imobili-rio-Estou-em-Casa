@@ -3,6 +3,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ContactsService } from '../../crm/contacts/contacts.service';
 import { SavePortalIntegrationDto, PublishPropertyDto, PortalType } from './portals.dto';
 
 const ALGO = 'aes-256-cbc';
@@ -23,7 +24,10 @@ function encrypt(text: string): string {
 export class PortalsService {
   private readonly logger = new Logger(PortalsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private contactsService: ContactsService,
+  ) {}
 
   async getIntegrations(workspaceId: string) {
     const integrations = await this.prisma.portalIntegration.findMany({
@@ -128,18 +132,17 @@ export class PortalsService {
     const phone = (body.phone as string) || (body.telefone as string) || null;
     const portalTag = portal.toLowerCase();
 
-    const pipeline = await this.prisma.pipeline.findFirst({ where: { workspaceId } });
+    const pipeline = await this.prisma.pipeline.findFirst({
+      where: { workspaceId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
 
-    const contact = await this.prisma.contact.create({
-      data: {
-        workspaceId,
-        name,
-        email,
-        phone,
-        type: 'PERSON',
-        origin: portal.toUpperCase(),
-        utmSource: portalTag,
-      },
+    const contact = await this.contactsService.findOrCreateFromLead(workspaceId, {
+      name,
+      email,
+      phone,
+      origin: portal.toUpperCase(),
+      utmSource: portalTag,
     });
 
     let deal = null;

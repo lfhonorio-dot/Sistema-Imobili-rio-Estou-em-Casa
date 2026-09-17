@@ -1,6 +1,6 @@
 // Controller Google Ads
 import {
-  Controller, Get, Post, Delete, Body, Headers, HttpCode, HttpStatus, UseGuards,
+  Controller, Get, Post, Delete, Body, Headers, HttpCode, HttpStatus, UseGuards, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { GoogleAdsService } from './google-ads.service';
 import { SaveGoogleIntegrationDto, OfflineConversionDto } from './google-ads.dto';
@@ -51,11 +51,23 @@ export class GoogleAdsController {
     return this.service.sendOfflineConversion(workspaceId, dto);
   }
 
-  // Webhook público — sem guards de autenticação
+  // Chave a colar na configuração de webhook do Google Ads (campo google_key)
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Get('webhook-key')
+  async getWebhookKey(@Headers('x-workspace-id') workspaceId: string) {
+    return { webhookKey: await this.service.getWebhookKey(workspaceId) };
+  }
+
+  // Webhook público — validado pela chave própria do workspace (google_key no
+  // corpo), já que o Lead Form do Google não assina a requisição por HMAC.
   @Public()
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
-  processWebhook(@Body() body: Record<string, unknown>) {
-    return { received: true };
+  async processWebhook(@Body() body: Record<string, unknown> & { google_key?: string }) {
+    const workspaceId = await this.service.resolveWorkspaceIdByWebhookKey(body.google_key);
+    if (!workspaceId) {
+      throw new ForbiddenException('Chave de webhook inválida ou ausente');
+    }
+    return this.service.processLeadWebhook(workspaceId, body);
   }
 }

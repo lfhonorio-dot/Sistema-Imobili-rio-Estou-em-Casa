@@ -108,6 +108,14 @@ export class InspectionsService {
     roomId: string,
     dto: AddRoomDto,
   ) {
+    // Valida a vistoria contra o workspace antes de tocar no cômodo
+    // (o mesmo padrão usado em addRoom) — sem isso, um roomId de outro
+    // workspace poderia ser editado por qualquer usuário autenticado.
+    const inspection = await this.prisma.inspection.findFirst({
+      where: { id: inspectionId, workspaceId, deletedAt: null },
+    });
+    if (!inspection) throw new NotFoundException('Vistoria não encontrada');
+
     const room = await this.prisma.inspectionRoom.findFirst({
       where: { id: roomId, inspectionId },
     });
@@ -123,6 +131,11 @@ export class InspectionsService {
   }
 
   async removeRoom(workspaceId: string, inspectionId: string, roomId: string) {
+    const inspection = await this.prisma.inspection.findFirst({
+      where: { id: inspectionId, workspaceId, deletedAt: null },
+    });
+    if (!inspection) throw new NotFoundException('Vistoria não encontrada');
+
     const room = await this.prisma.inspectionRoom.findFirst({
       where: { id: roomId, inspectionId },
     });

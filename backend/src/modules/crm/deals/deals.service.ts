@@ -126,6 +126,20 @@ export class DealsService {
 
   // Cria novo negócio
   async create(workspaceId: string, userId: string, dto: CreateDealDto) {
+    // Valida que o pipeline pertence a este workspace antes de usar
+    const pipeline = await this.prisma.pipeline.findFirst({
+      where: { id: dto.pipelineId, workspaceId },
+    });
+    if (!pipeline) throw new NotFoundException('Pipeline não encontrado');
+
+    // Valida que o contato (quando informado) pertence a este workspace
+    if (dto.contactId) {
+      const contact = await this.prisma.contact.findFirst({
+        where: { id: dto.contactId, workspaceId, deletedAt: null },
+      });
+      if (!contact) throw new NotFoundException('Contato não encontrado');
+    }
+
     // Se stageId não foi informado, usa o primeiro estágio do pipeline
     let stageId = dto.stageId;
     if (!stageId) {
@@ -135,6 +149,12 @@ export class DealsService {
       });
       if (!firstStage) throw new BadRequestException('Pipeline não tem estágios');
       stageId = firstStage.id;
+    } else {
+      // Valida que o estágio informado pertence mesmo a este pipeline
+      const stage = await this.prisma.pipelineStage.findFirst({
+        where: { id: stageId, pipelineId: dto.pipelineId },
+      });
+      if (!stage) throw new NotFoundException('Estágio não encontrado neste pipeline');
     }
 
     const deal = await this.prisma.deal.create({
@@ -317,6 +337,10 @@ export class DealsService {
     });
 
     if (!deal) throw new NotFoundException('Negócio não encontrado');
+
+    // Valida que a tag pertence a este workspace antes de vincular
+    const tag = await this.prisma.tag.findFirst({ where: { id: tagId, workspaceId } });
+    if (!tag) throw new NotFoundException('Tag não encontrada');
 
     await this.prisma.dealTag.upsert({
       where: { dealId_tagId: { dealId, tagId } },
