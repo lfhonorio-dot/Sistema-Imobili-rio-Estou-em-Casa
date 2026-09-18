@@ -65,6 +65,80 @@ export function useFinancialEntries(query: FinancialQuery = {}) {
   });
 }
 
+export interface CreateFinancialEntryInput {
+  type: 'RECEIVABLE' | 'PAYABLE';
+  category: string;
+  description: string;
+  amount: number;
+  /** Data no formato YYYY-MM-DD (input type="date") */
+  dueDate: string;
+  contractId?: string;
+  propertyId?: string;
+  contactId?: string;
+  notes?: string;
+  /** Repete o lançamento por N meses a partir do vencimento (1 = lançamento único) */
+  months?: number;
+}
+
+// Extrai a mensagem que o backend mandou; sem ela, cai no texto genérico.
+function apiErrorMessage(err: unknown, fallback: string) {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  if (Array.isArray(msg)) return msg[0] ?? fallback;
+  return msg ?? fallback;
+}
+
+// Cria lançamento manual (POST /financial/entries). Com months > 1 gera uma
+// parcela por mês, sequencialmente — se uma falhar, o erro diz quantas já
+// entraram, para não dar a impressão de que nada foi gravado.
+export function useCreateEntry() {
+  const queryClient = useQueryClient();
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+
+  return useMutation({
+    mutationFn: async ({ months, ...input }: CreateFinancialEntryInput) => {
+      const total = Math.min(Math.max(Math.trunc(months ?? 1), 1), 60);
+      // Meio-dia local: converter para ISO não pode empurrar a data para o dia
+      // anterior por causa do fuso (Brasil é UTC-3).
+      const base = new Date(`${input.dueDate}T12:00:00`);
+      if (Number.isNaN(base.getTime())) throw new Error('Data de vencimento inválida.');
+
+      const created: FinancialEntry[] = [];
+      for (let i = 0; i < total; i++) {
+        const dueDate = new Date(base);
+        dueDate.setMonth(dueDate.getMonth() + i);
+        // Dia 31 em mês de 30 dias transborda para o mês seguinte: volta para
+        // o último dia do mês pretendido.
+        if (dueDate.getDate() !== base.getDate()) dueDate.setDate(0);
+
+        try {
+          const { data } = await api.post('/financial/entries', {
+            ...input,
+            dueDate: dueDate.toISOString(),
+            ...(total > 1 ? { installment: i + 1, totalInstallments: total } : {}),
+          });
+          created.push(data.data as FinancialEntry);
+        } catch (err) {
+          const detail = apiErrorMessage(err, 'Erro ao criar lançamento.');
+          throw new Error(
+            created.length > 0
+              ? `${created.length} de ${total} parcelas foram criadas. A parcela ${i + 1} falhou: ${detail}`
+              : detail,
+          );
+        }
+      }
+      return created;
+    },
+    // onSettled: mesmo em falha parcial o que entrou precisa aparecer na tela.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['financial-entries', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['financial-summary', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['financial-forecast', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['financial-overdue', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['cash-flow', workspaceId] });
+    },
+  });
+}
+
 export function useFinancialSummary() {
   const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
 

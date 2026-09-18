@@ -69,8 +69,40 @@ export class FinancialService {
     };
   }
 
+  // Valida que contrato/imóvel/contato informados pertencem ao workspace do
+  // usuário. Sem isso, um ID de outra imobiliária entraria pela FK (o Prisma só
+  // checa a existência do registro, não o tenant).
+  private async assertLinksBelongToWorkspace(
+    workspaceId: string,
+    dto: { contractId?: string; propertyId?: string; contactId?: string },
+  ) {
+    if (dto.contractId) {
+      const contract = await this.prisma.contract.findFirst({
+        where: { id: dto.contractId, workspaceId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!contract) throw new BadRequestException('Contrato não encontrado neste workspace');
+    }
+    if (dto.propertyId) {
+      const property = await this.prisma.property.findFirst({
+        where: { id: dto.propertyId, workspaceId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!property) throw new BadRequestException('Imóvel não encontrado neste workspace');
+    }
+    if (dto.contactId) {
+      const contact = await this.prisma.contact.findFirst({
+        where: { id: dto.contactId, workspaceId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!contact) throw new BadRequestException('Contato não encontrado neste workspace');
+    }
+  }
+
   // Cria lançamento manual
   async createEntry(workspaceId: string, dto: CreateFinancialEntryDto) {
+    await this.assertLinksBelongToWorkspace(workspaceId, dto);
+
     return this.prisma.financialEntry.create({
       data: {
         workspaceId,
@@ -98,6 +130,8 @@ export class FinancialService {
       where: { id, workspaceId, deletedAt: null },
     });
     if (!existing) throw new NotFoundException('Lançamento não encontrado');
+
+    await this.assertLinksBelongToWorkspace(workspaceId, dto);
 
     return this.prisma.financialEntry.update({
       where: { id },

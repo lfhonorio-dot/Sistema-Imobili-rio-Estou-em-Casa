@@ -2,14 +2,16 @@
 'use client';
 
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, AlertTriangle, DollarSign, Copy, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, DollarSign, Copy, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FinancialEntryRow } from '@/components/erp/financial-entry-row';
+import { FinancialEntryForm } from '@/components/erp/financial-entry-form';
 import { useBilling } from '@/hooks/use-billing';
 import {
   useFinancialSummary,
@@ -47,6 +49,9 @@ export default function FinancialPage() {
   const [receivablePage, setReceivablePage] = useState(1);
   const [payablePage, setPayablePage] = useState(1);
   const [commissionStatus, setCommissionStatus] = useState('ALL');
+  const [tab, setTab] = useState('receivable');
+  // Guarda o tipo pré-selecionado do lançamento manual (null = modal fechado)
+  const [newEntryType, setNewEntryType] = useState<'RECEIVABLE' | 'PAYABLE' | null>(null);
 
   const { data: summary } = useFinancialSummary();
   const { data: forecast } = useFinancialForecast();
@@ -129,9 +134,15 @@ export default function FinancialPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Financeiro</h1>
-        <p className="text-muted-foreground text-sm">Gestão financeira da imobiliária</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Financeiro</h1>
+          <p className="text-muted-foreground text-sm">Gestão financeira da imobiliária</p>
+        </div>
+        <Button onClick={() => setNewEntryType(tab === 'payable' ? 'PAYABLE' : 'RECEIVABLE')}>
+          <Plus className="w-4 h-4 mr-1.5" />
+          Novo Lançamento
+        </Button>
       </div>
 
       {/* KPIs */}
@@ -179,7 +190,7 @@ export default function FinancialPage() {
       )}
 
       {/* Tabs principais */}
-      <Tabs defaultValue="receivable">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="receivable">Contas a Receber</TabsTrigger>
           <TabsTrigger value="payable">Contas a Pagar</TabsTrigger>
@@ -193,7 +204,13 @@ export default function FinancialPage() {
           {loadingReceivable ? (
             <p className="text-muted-foreground text-sm">Carregando...</p>
           ) : receivables?.items.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Nenhuma conta a receber</p>
+            <div className="space-y-3">
+              <p className="text-muted-foreground text-sm">Nenhuma conta a receber</p>
+              <Button variant="outline" size="sm" onClick={() => setNewEntryType('RECEIVABLE')}>
+                <Plus className="w-4 h-4 mr-1.5" />
+                Incluir conta a receber
+              </Button>
+            </div>
           ) : (
             <>
               <div className="border rounded-lg overflow-hidden">
@@ -238,7 +255,13 @@ export default function FinancialPage() {
           {loadingPayable ? (
             <p className="text-muted-foreground text-sm">Carregando...</p>
           ) : payables?.items.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Nenhuma conta a pagar</p>
+            <div className="space-y-3">
+              <p className="text-muted-foreground text-sm">Nenhuma conta a pagar</p>
+              <Button variant="outline" size="sm" onClick={() => setNewEntryType('PAYABLE')}>
+                <Plus className="w-4 h-4 mr-1.5" />
+                Incluir conta a pagar
+              </Button>
+            </div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <table className="w-full">
@@ -290,7 +313,9 @@ export default function FinancialPage() {
                         className="mt-1"
                         onClick={() => payEntry.mutate({ id: entry.id })}
                       >
-                        Receber
+                        {/* A lista de atrasados inclui os dois tipos: o rótulo
+                            segue o lançamento, não o "receber" fixo de antes. */}
+                        {entry.type === 'PAYABLE' ? 'Pagar' : 'Receber'}
                       </Button>
                     </div>
                   </CardContent>
@@ -411,6 +436,32 @@ export default function FinancialPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Modal de lançamento manual (contas a pagar / a receber) */}
+      <Dialog open={newEntryType !== null} onOpenChange={(open) => { if (!open) setNewEntryType(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Novo Lançamento</DialogTitle>
+          </DialogHeader>
+          {newEntryType && (
+            <FinancialEntryForm
+              defaultType={newEntryType}
+              onCancel={() => setNewEntryType(null)}
+              onSuccess={(type) => {
+                setNewEntryType(null);
+                // Leva o usuário para a aba do que ele acabou de criar
+                if (type === 'PAYABLE') {
+                  setPayablePage(1);
+                  setTab('payable');
+                } else {
+                  setReceivablePage(1);
+                  setTab('receivable');
+                }
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de resultado do boleto */}
       {boletoResult && (
