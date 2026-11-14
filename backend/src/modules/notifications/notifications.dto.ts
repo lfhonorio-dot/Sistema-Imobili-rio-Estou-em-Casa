@@ -15,3 +15,7 @@ export class CreateInAppNotificationDto {
   @IsOptional() @IsString() entityType?: string;
   @IsOptional() @IsArray() userIds?: string[];
 }
+
+export class EmailSwitchDto {
+  @IsBoolean() enabled!: boolean;
+}

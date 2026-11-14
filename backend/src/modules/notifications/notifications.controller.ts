@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Body, Headers, UseGuards,
 } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
-import { UpdateNotificationPreferenceDto, CreateInAppNotificationDto } from './notifications.dto';
+import { EmailSwitchDto, UpdateNotificationPreferenceDto } from './notifications.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../common/guards/workspace.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -32,13 +32,20 @@ export class NotificationsController {
     return this.service.updatePreference(workspaceId, user.sub, dto);
   }
 
+  // Fase 7: a rota POST /notifications/send (que fingia enviar) foi removida;
+  // os avisos reais são gerados pelas regras em hub/notifications.
+
+  // Fase 7: chave geral "receber avisos por e-mail" do próprio usuário
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
-  @Post('send')
-  createNotification(
-    @Headers('x-workspace-id') workspaceId: string,
-    @Body() dto: CreateInAppNotificationDto,
-  ) {
-    return this.service.createNotification(workspaceId, dto);
+  @Get('email-switch')
+  getEmailSwitch(@Headers('x-workspace-id') workspaceId: string, @CurrentUser() user: { sub: string }) {
+    return this.service.getEmailSwitch(workspaceId, user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Patch('email-switch')
+  setEmailSwitch(@Headers('x-workspace-id') workspaceId: string, @CurrentUser() user: { sub: string }, @Body() dto: EmailSwitchDto) {
+    return this.service.setEmailSwitch(workspaceId, user.sub, dto.enabled);
   }
 
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
