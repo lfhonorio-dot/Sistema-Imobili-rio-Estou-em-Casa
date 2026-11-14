@@ -864,6 +864,60 @@ export class AuthService {
     if (lock) this.logger.warn(`Conta ${userId} bloqueada por ${LOCK_DURATION_MINUTES} min após ${attempts} tentativas.`);
   }
 
+  // ── Fase 7: convites ─────────────────────────────────────
+
+  /** Dados do convite para a tela de aceite (sem exigir login). */
+  async getInvite(token: string) {
+    const inv = await this.prisma.inviteToken.findUnique({ where: { token } });
+    if (!inv) throw new BadRequestException('Convite inválido.');
+    const [ws, role, existing] = await Promise.all([
+      this.prisma.workspace.findUnique({ where: { id: inv.workspaceId }, select: { name: true } }),
+      this.prisma.role.findUnique({ where: { id: inv.roleId }, select: { name: true } }),
+      this.prisma.user.findUnique({ where: { email: inv.email }, select: { id: true } }),
+    ]);
+    return {
+      workspaceName: ws?.name ?? '', email: inv.email, roleName: role?.name ?? '',
+      used: !!inv.usedAt, expired: inv.expiresAt < new Date(), hasAccount: !!existing,
+    };
+  }
+
+  /**
+   * Aceita o convite: cria a conta (ou usa a existente, conferindo a senha) e
+   * vincula à imobiliária com o papel do convite. O convite só vale uma vez.
+   */
+  async acceptInvite(dto: { token: string; name?: string; password: string }) {
+    const inv = await this.prisma.inviteToken.findUnique({ where: { token: dto.token } });
+    if (!inv || inv.usedAt) throw new BadRequestException('Convite inválido ou já utilizado.');
+    if (inv.expiresAt < new Date()) throw new BadRequestException('Convite vencido. Peça um novo ao dono da imobiliária.');
+    const role = await this.prisma.role.findFirst({ where: { id: inv.roleId, workspaceId: inv.workspaceId } });
+    if (!role) throw new BadRequestException('O papel deste convite não existe mais. Peça um novo convite.');
+
+    let user = await this.prisma.user.findUnique({ where: { email: inv.email } });
+    if (user) {
+      if (user.deletedAt) throw new BadRequestException('Esta conta foi desativada.');
+      const ok = await bcrypt.compare(dto.password, user.passwordHash);
+      if (!ok) throw new UnauthorizedException('Você já tem conta com este e-mail: digite a senha atual dela para aceitar o convite.');
+    } else {
+      if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(dto.password)) {
+        throw new BadRequestException('A senha precisa ter 8+ caracteres, com maiúscula, minúscula, número e símbolo (@$!%*?&).');
+      }
+      if (!dto.name?.trim()) throw new BadRequestException('Informe seu nome.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const used = await tx.inviteToken.updateMany({ where: { id: inv.id, usedAt: null }, data: { usedAt: new Date() } });
+      if (used.count !== 1) throw new BadRequestException('Convite já utilizado.');
+      if (!user) {
+        user = await tx.user.create({ data: { email: inv.email, name: dto.name!.trim(), passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS) } });
+      }
+      const already = await tx.workspaceUser.findUnique({ where: { workspaceId_userId: { workspaceId: inv.workspaceId, userId: user.id } } });
+      if (already) throw new BadRequestException('Você já faz parte desta imobiliária.');
+      await tx.workspaceUser.create({ data: { workspaceId: inv.workspaceId, userId: user.id, roleId: role.id, isOwner: false } });
+    });
+    this.logger.log(`Convite aceito no workspace ${inv.workspaceId} (papel ${role.name}).`);
+    return { accepted: true, email: inv.email, workspaceId: inv.workspaceId };
+  }
+
   async unlockUser(email: string): Promise<void> {
     await this.prisma.user.update({
       where: { email },

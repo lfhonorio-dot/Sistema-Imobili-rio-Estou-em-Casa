@@ -58,6 +58,8 @@ export class ContactsService {
           { cpf: { contains: search, mode: 'insensitive' } },
         ],
       }),
+      // Fase 7: Corretor só vê os leads dele
+      AND: [contactScope()],
     };
 
     const [contacts, total] = await Promise.all([

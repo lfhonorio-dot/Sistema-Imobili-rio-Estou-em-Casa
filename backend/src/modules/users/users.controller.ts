@@ -91,6 +91,21 @@ export class UsersController {
   }
 
   // PUT /users/workspace/members/:userId/role
+  // Fase 7: convites pendentes
+  @Access(...ADMIN_ONLY)
+  @Get('workspace/invites')
+  @UseGuards(WorkspaceGuard)
+  listInvites(@Headers('x-workspace-id') workspaceId: string) {
+    return this.usersService.listInvites(workspaceId);
+  }
+
+  @Access(...ADMIN_ONLY)
+  @Delete('workspace/invites/:id')
+  @UseGuards(WorkspaceGuard)
+  cancelInvite(@Headers('x-workspace-id') workspaceId: string, @Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.usersService.cancelInvite(workspaceId, id, user.sub);
+  }
+
   @Access(...ADMIN_ONLY)
   @Put('workspace/members/:userId/role')
   @UseGuards(WorkspaceGuard, RolesGuard)

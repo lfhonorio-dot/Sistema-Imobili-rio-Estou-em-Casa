@@ -33,6 +33,7 @@ import {
   ResetPasswordDto,
   Verify2FADto,
   RevokeSessionDto,
+  AcceptInviteDto,
 } from './auth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
@@ -44,6 +45,22 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   // -----------------------------------------------
+  // Fase 7: convite para entrar na imobiliária
+  @Public()
+  @Get('invite/:token')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  getInvite(@Param('token') token: string) {
+    return this.authService.getInvite(token);
+  }
+
+  @Public()
+  @Post('accept-invite')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  acceptInvite(@Body() dto: AcceptInviteDto) {
+    return this.authService.acceptInvite(dto);
+  }
+
   // POST /auth/register
   // Registro de novo workspace e administrador
   // -----------------------------------------------

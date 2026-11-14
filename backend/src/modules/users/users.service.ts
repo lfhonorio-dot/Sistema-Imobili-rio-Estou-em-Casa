@@ -176,7 +176,29 @@ export class UsersService {
       after: { email: dto.email, roleId: dto.roleId },
     });
 
-    return { inviteToken: token, expiresAt: invite.expiresAt };
+    // Fase 7: link para o convidado aceitar (o dono envia por WhatsApp/e-mail)
+    const base = (process.env.FRONTEND_URL || '').split(',')[0].trim().replace(/\/$/, '');
+    return { inviteToken: token, inviteLink: `${base}/invite/${token}`, expiresAt: invite.expiresAt, roleName: role.name };
+  }
+
+  /** Fase 7: convites pendentes (não usados e no prazo). */
+  async listInvites(workspaceId: string) {
+    const invites = await this.prisma.inviteToken.findMany({
+      where: { workspaceId, usedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, email: true, roleId: true, expiresAt: true, createdAt: true, token: true },
+    });
+    const roles = new Map((await this.prisma.role.findMany({ where: { workspaceId }, select: { id: true, name: true } })).map((r) => [r.id, r.name]));
+    const base = (process.env.FRONTEND_URL || '').split(',')[0].trim().replace(/\/$/, '');
+    return invites.map(({ token, ...i }) => ({ ...i, roleName: roles.get(i.roleId) ?? '', inviteLink: `${base}/invite/${token}` }));
+  }
+
+  /** Fase 7: cancela um convite pendente (ele deixa de valer; nada é apagado). */
+  async cancelInvite(workspaceId: string, id: string, userId: string) {
+    const r = await this.prisma.inviteToken.updateMany({ where: { id, workspaceId, usedAt: null }, data: { expiresAt: new Date() } });
+    if (!r.count) throw new NotFoundException('Convite não encontrado.');
+    await this.auditService.log({ workspaceId, userId, action: 'USER_INVITE_CANCELLED', entity: 'InviteToken', entityId: id });
+    return { cancelled: true };
   }
 
   // Atualiza papel de membro no workspace
