@@ -6,6 +6,146 @@ import { ReportFilterDto } from './reports.dto';
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Painel do perfil VENDA (Fase 1). Cada número tem uma regra única e
+  // explícita; o que ainda não existe no sistema volta como `null` com
+  // `available: false`, para a tela dizer "não disponível" em vez de inventar.
+  async getSalesDashboard(workspaceId: string, now: Date = new Date()) {
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    // Semana corrente: segunda 00:00 até domingo 23:59:59.999
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    weekEnd.setMilliseconds(-1);
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const openStatuses = ['PENDING', 'OVERDUE'];
+
+    const [
+      newLeads,
+      visitsWeek,
+      visitsWeekDone,
+      openDeals,
+      salesMonth,
+      commissionsReceivable,
+      commissionPayableEntries,
+      partnerPayouts,
+      bankBalance,
+      receivable30,
+      payable30,
+    ] = await Promise.all([
+      this.prisma.deal.count({
+        where: { workspaceId, deletedAt: null, createdAt: { gte: sevenDaysAgo } },
+      }),
+      this.prisma.activity.count({
+        where: { workspaceId, deletedAt: null, type: 'VISIT', dueAt: { gte: weekStart, lte: weekEnd } },
+      }),
+      this.prisma.activity.count({
+        where: {
+          workspaceId, deletedAt: null, type: 'VISIT',
+          dueAt: { gte: weekStart, lte: weekEnd }, doneAt: { not: null },
+        },
+      }),
+      this.prisma.deal.aggregate({
+        where: {
+          workspaceId,
+          deletedAt: null,
+          stage: { isWon: false, isLost: false },
+          pipeline: { type: { not: 'RENTAL' } },
+        },
+        _sum: { value: true },
+        _count: true,
+      }),
+      this.prisma.contract.aggregate({
+        where: {
+          workspaceId,
+          deletedAt: null,
+          type: { in: ['SALE', 'BROKERAGE'] },
+          status: 'ACTIVE',
+          createdAt: { gte: monthStart, lt: nextMonthStart },
+        },
+        _sum: { saleValue: true },
+        _count: true,
+      }),
+      this.prisma.commission.aggregate({
+        where: { workspaceId, status: 'PENDING', contract: { deletedAt: null } },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.financialEntry.aggregate({
+        where: {
+          workspaceId, deletedAt: null, type: 'PAYABLE', category: 'COMMISSION',
+          status: { in: openStatuses },
+        },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.splitTransaction.aggregate({
+        where: { workspaceId, status: { in: ['PENDING', 'FAILED'] } },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.bankAccount.aggregate({
+        where: { workspaceId, deletedAt: null, isActive: true },
+        _sum: { balance: true },
+        _count: true,
+      }),
+      this.prisma.financialEntry.aggregate({
+        where: {
+          workspaceId, deletedAt: null, type: 'RECEIVABLE',
+          status: { in: openStatuses }, dueDate: { lte: in30Days },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.financialEntry.aggregate({
+        where: {
+          workspaceId, deletedAt: null, type: 'PAYABLE',
+          status: { in: openStatuses }, dueDate: { lte: in30Days },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const n = (v: unknown) => Number(v ?? 0);
+    const balance = n(bankBalance._sum.balance);
+    const in30 = n(receivable30._sum.amount);
+    const out30 = n(payable30._sum.amount);
+
+    return {
+      newLeads7d: newLeads,
+      visitsThisWeek: { total: visitsWeek, done: visitsWeekDone },
+      // Propostas ainda não existem como cadastro (chegam na Fase 3).
+      openProposals: { available: false, count: null as number | null },
+      vgvInNegotiation: { amount: n(openDeals._sum.value), deals: openDeals._count },
+      salesThisMonth: { amount: n(salesMonth._sum.saleValue), count: salesMonth._count },
+      commissionsReceivable: {
+        amount: n(commissionsReceivable._sum.amount),
+        count: commissionsReceivable._count,
+      },
+      commissionsPayable: {
+        amount: n(commissionPayableEntries._sum.amount) + n(partnerPayouts._sum.amount),
+        count: commissionPayableEntries._count + partnerPayouts._count,
+      },
+      projectedBalance30d: {
+        amount: Math.round((balance + in30 - out30) * 100) / 100,
+        bankBalance: balance,
+        bankAccounts: bankBalance._count,
+        receivable: in30,
+        payable: out30,
+      },
+      period: {
+        weekStart: weekStart.toISOString(),
+        weekEnd: weekEnd.toISOString(),
+        monthStart: monthStart.toISOString(),
+      },
+    };
+  }
+
   async getDashboard(workspaceId: string) {
     const [
       totalContacts,

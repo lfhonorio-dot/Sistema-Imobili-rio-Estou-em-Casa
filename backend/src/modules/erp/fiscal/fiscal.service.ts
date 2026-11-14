@@ -26,7 +26,10 @@ export class FiscalService {
     if (existing) {
       return this.prisma.taxConfig.update({ where: { id: existing.id }, data });
     }
-    return this.prisma.taxConfig.create({ data: { workspaceId, ...data } });
+    // Regime padrão da imobiliária: LUCRO PRESUMIDO (decisão do dono).
+    return this.prisma.taxConfig.create({
+      data: { workspaceId, ...data, regime: data.regime ?? 'LUCRO_PRESUMIDO' },
+    });
   }
 
   // ── NFS-e ─────────────────────────────────────────────────
@@ -59,11 +62,18 @@ export class FiscalService {
   }
 
   async emitNfse(workspaceId: string, dto: EmitNfseDto) {
+    // Sem provedor de NFS-e configurado não há emissão: antes o sistema
+    // gravava a nota como ISSUED ("emitida") sem nunca ir à prefeitura.
+    const focus = this.focusBase();
+    if (!focus) {
+      throw new BadRequestException(
+        'Emissão de NFS-e não disponível: o provedor de nota fiscal ainda não foi configurado.',
+      );
+    }
     const config = await this.getTaxConfig(workspaceId);
     const issRate = dto.issRate ?? config?.aliquotaISS ?? 5.0;
     const issAmount = (dto.amount * issRate) / 100;
     const netAmount = dto.issRetained ? dto.amount - issAmount : dto.amount;
-    const focus = this.focusBase();
 
     const nfse = await this.prisma.nfseRecord.create({
       data: {
@@ -78,10 +88,9 @@ export class FiscalService {
         issRate,
         issAmount,
         issRetained: dto.issRetained ?? false,
-        // Com Focus: emissão assíncrona na prefeitura (PENDING até autorizar).
-        // Sem Focus: registro interno (comportamento anterior).
-        status: focus ? 'PENDING' : 'ISSUED',
-        issuedAt: focus ? null : new Date(),
+        // Emissão assíncrona na prefeitura: PENDING até o provedor autorizar.
+        status: 'PENDING',
+        issuedAt: null,
         serie: config?.inscricaoMunicipal ? 'A' : null,
         gatewayResponse: {},
       },
@@ -129,8 +138,6 @@ export class FiscalService {
         });
         throw new BadRequestException(`Emissão NFS-e falhou: ${(err as Error).message}`);
       }
-    } else {
-      this.logger.log(`NFS-e registrada internamente: ${nfse.id} R$${dto.amount}`);
     }
 
     return { ...nfse, netAmount };

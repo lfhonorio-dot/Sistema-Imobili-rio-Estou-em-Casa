@@ -181,6 +181,18 @@ export class ContractsService {
     // caminhos diferentes; o que importa é o estado atual do imóvel).
     const isSaleType = dto.type === 'SALE' || dto.type === 'BROKERAGE';
     const isRentalType = dto.type === 'RENTAL_RESIDENTIAL' || dto.type === 'RENTAL_COMMERCIAL';
+    if (isRentalType) {
+      const ws = await this.prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { operationProfile: true },
+      });
+      if (ws?.operationProfile !== 'VENDA_E_LOCACAO') {
+        throw new BadRequestException(
+          'Contratos de locação não estão disponíveis no perfil de operação "Venda". ' +
+            'Para usá-los, mude o perfil para "Venda e Locação" em Configurações → Workspace.',
+        );
+      }
+    }
     if (isSaleType && property.status === 'SOLD') {
       throw new ConflictException(
         'Este imóvel já está marcado como vendido. Verifique o cadastro do imóvel antes de criar um novo contrato de venda.',

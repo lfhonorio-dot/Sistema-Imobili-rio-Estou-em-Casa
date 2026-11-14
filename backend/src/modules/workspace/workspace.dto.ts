@@ -8,8 +8,10 @@ import {
   MaxLength,
   Matches,
   IsObject,
+  IsIn,
 } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
+import { OPERATION_PROFILES, OperationProfile } from '../../common/decorators/operation-profile.decorator';
 
 // DTO para atualizar configurações do workspace
 export class UpdateWorkspaceDto {
@@ -53,6 +55,16 @@ export class UpdateWorkspaceDto {
   @IsOptional()
   @IsBoolean()
   twoFactorRequired?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Perfil de operação: VENDA (padrão) ou VENDA_E_LOCACAO',
+    enum: OPERATION_PROFILES,
+  })
+  @IsOptional()
+  @IsIn(OPERATION_PROFILES as unknown as string[], {
+    message: 'Perfil de operação inválido. Use VENDA ou VENDA_E_LOCACAO.',
+  })
+  operationProfile?: OperationProfile;
 }
 
 // DTO para criar papel no workspace
