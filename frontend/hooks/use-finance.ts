@@ -465,10 +465,10 @@ export function parseMoney(v: string): number {
   return Number.isFinite(x) ? x : NaN;
 }
 export const METHOD_LABELS: Record<string, string> = {
-  PIX: 'PIX', TRANSFER: 'Transferência', CASH: 'Dinheiro', BOLETO: 'Boleto', CARD: 'Cartão', CHECK: 'Cheque', OTHER: 'Outro',
+  PIX: 'PIX', TRANSFER: 'Transferência', CASH: 'Dinheiro', BOLETO: 'Boleto', CARD: 'Cartão', CHECK: 'Cheque', OTHER: 'Outro', RETENTION: 'Retenção',
 };
 export const SOURCE_LABELS: Record<string, string> = {
-  MANUAL: 'Manual', GATEWAY: 'Asaas (automático)', RECONCILIATION: 'Conciliação bancária', LEGACY: 'Histórico',
+  MANUAL: 'Manual', GATEWAY: 'Asaas (automático)', RECONCILIATION: 'Conciliação bancária', LEGACY: 'Histórico', RETENTION: 'Retenção na fonte (NFS-e)',
 };
 export const CHARGE_STATUS: Record<string, string> = {
   PENDING: 'Pendente', REGISTERED: 'Emitida', SENT: 'Enviada', OVERDUE: 'Vencida', PAID: 'Paga', CANCELLED: 'Cancelada', REFUNDED: 'Estornada',

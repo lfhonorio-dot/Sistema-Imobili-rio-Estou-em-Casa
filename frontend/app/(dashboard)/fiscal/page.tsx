@@ -5,34 +5,10 @@ import { UnavailableNotice } from '@/components/common/error-state';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { useOperationProfile } from '@/hooks/use-operation-profile';
 import { useFiscal } from '@/hooks/use-fiscal';
+import { NfsePanel } from '@/components/nfse/nfse-panel';
 import api from '@/lib/api';
 
-type NfseRecord = {
-  id: string;
-  issuerCnpj: string;
-  takerName: string;
-  amount: number;
-  issRate: number;
-  status: string;
-  number?: string | null;
-  issuedAt?: string;
-};
-
 type Tab = 'nfse' | 'dimob' | 'carne-leao';
-
-const NFSE_STATUS_LABELS: Record<string, string> = {
-  ISSUED: 'Autorizada',
-  PENDING: 'Processando',
-  CANCELLED: 'Cancelada',
-  ERROR: 'Rejeitada',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  ISSUED: 'bg-green-100 text-green-700',
-  PENDING: 'bg-yellow-100 text-yellow-700',
-  CANCELLED: 'bg-red-100 text-red-700',
-  ERROR: 'bg-red-100 text-red-700',
-};
 
 export default function FiscalPage() {
   return (
@@ -46,7 +22,7 @@ export default function FiscalPage() {
 // direto em "Notas Fiscais" ou "Fiscal — DIMOB". Carnê-Leão (aluguel de PF)
 // só aparece no perfil Venda e Locação.
 function FiscalPageContent() {
-  const { findNfse, findDimob, findCarneLeao, generateDimob, loading } = useFiscal();
+  const { findDimob, findCarneLeao, generateDimob, loading } = useFiscal();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -55,7 +31,6 @@ function FiscalPageContent() {
   const tabParam = searchParams.get('tab') as Tab | null;
   const tab: Tab = tabParam && tabs.includes(tabParam) ? tabParam : 'nfse';
   const setTab = (t: Tab) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
-  const [nfseList, setNfseList] = useState<NfseRecord[]>([]);
   const [dimobList, setDimobList] = useState<Array<Record<string, unknown>>>([]);
   const [exportYear, setExportYear] = useState(String(new Date().getFullYear()));
   const [declarants, setDeclarants] = useState<Array<Record<string, unknown>>>([]);
@@ -63,7 +38,6 @@ function FiscalPageContent() {
   const [carneLeaoList, setCarneLeaoList] = useState<Array<Record<string, unknown>>>([]);
 
   useEffect(() => {
-    if (tab === 'nfse') findNfse().then(d => d && setNfseList(d.items));
     if (tab === 'dimob') findDimob().then(d => d && setDimobList(d));
     if (tab === 'carne-leao') findCarneLeao().then(d => d && setCarneLeaoList(d));
   }, [tab]);
@@ -129,62 +103,7 @@ function FiscalPageContent() {
         ))}
       </div>
 
-      {tab === 'nfse' && (
-        <div className="space-y-4">
-          <UnavailableNotice title="Emissão de NFS-e ainda não disponível">
-            O provedor de nota fiscal ainda não foi escolhido; a emissão será ligada quando ele for
-            configurado. Notas marcadas como &quot;registro interno&quot; foram criadas por uma versão
-            anterior do sistema e <strong>não foram enviadas à prefeitura</strong>.
-          </UnavailableNotice>
-          {loading ? (
-            <div className="text-center py-12 text-gray-400">Carregando...</div>
-          ) : nfseList.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">Nenhuma NFS-e encontrada</div>
-          ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="text-left px-4 py-3 text-gray-600 font-medium">Tomador</th>
-                    <th className="text-right px-4 py-3 text-gray-600 font-medium">Valor</th>
-                    <th className="text-right px-4 py-3 text-gray-600 font-medium">ISS %</th>
-                    <th className="text-left px-4 py-3 text-gray-600 font-medium">Emissão</th>
-                    <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {nfseList.map((n) => (
-                    <tr key={n.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-700">{n.takerName}</td>
-                      <td className="px-4 py-3 text-right font-medium">
-                        {n.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-500">{n.issRate}%</td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {n.issuedAt ? new Date(n.issuedAt).toLocaleDateString('pt-BR') : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        {n.status === 'ISSUED' && !n.number ? (
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600"
-                            title="Criada sem provedor: não foi enviada à prefeitura."
-                          >
-                            Registro interno — não emitida
-                          </span>
-                        ) : (
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[n.status] ?? 'bg-gray-100'}`}>
-                            {NFSE_STATUS_LABELS[n.status] ?? n.status}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+      {tab === 'nfse' && <NfsePanel initialSub={searchParams.get('sub')} />}
 
       {tab === 'dimob' && (
         <div>

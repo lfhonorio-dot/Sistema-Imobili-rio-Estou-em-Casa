@@ -21,6 +21,7 @@ import { EntriesTable } from '@/components/finance/entries-table';
 import { PaymentDialog } from '@/components/finance/payment-dialog';
 import { IssueChargeDialog } from '@/components/finance/charge-panels';
 import { EntryDetailSheet } from '@/components/finance/entry-detail';
+import { IssueNfseDialog } from '@/components/nfse/issue-nfse-dialog';
 import { CashFlowPanel, DrePanel } from '@/components/finance/reports-panels';
 import { FinanceSettingsPanel } from '@/components/finance/settings-panels';
 import {
@@ -73,6 +74,7 @@ function FinancialPageContent() {
   const [paying, setPaying] = useState<Entry | null>(null);
   const [charging, setCharging] = useState<Entry | null>(null);
   const [detail, setDetail] = useState<Entry | null>(null);
+  const [nfseEntryId, setNfseEntryId] = useState<string | null>(null);
 
   const summary = useFinancialSummary();
   const { data: forecast } = useFinancialForecast();
@@ -304,7 +306,9 @@ function FinancialPageContent() {
         onPay={(e) => { setDetail(null); setPaying(e); }}
         onCharge={(e) => { setDetail(null); setCharging(e); }}
         onEdit={(e) => { setDetail(null); setEditing(e); }}
+        onIssueNfse={(e) => { setDetail(null); setNfseEntryId(e.id); }}
       />
+      <IssueNfseDialog entryId={nfseEntryId} onClose={() => setNfseEntryId(null)} />
     </div>
   );
 }
