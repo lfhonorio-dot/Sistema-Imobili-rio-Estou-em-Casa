@@ -1,40 +1,40 @@
-// Dashboard Financeiro - DRE, lançamentos, comissões
+// Financeiro (Fase 5): contas a receber e a pagar com baixa parcial, juros,
+// multa, desconto, estorno e comprovante; cobrança por boleto ou PIX; fluxo
+// de caixa realizado x projetado; DRE por regime de caixa; configurações.
 'use client';
 import { getApiErrorMessage } from '@/lib/api-error';
 
 import { Suspense, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { TrendingUp, TrendingDown, AlertTriangle, DollarSign, Copy, X, Plus } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, DollarSign, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FinancialEntryRow } from '@/components/erp/financial-entry-row';
+import { ErrorState } from '@/components/common/error-state';
 import { FinancialEntryForm } from '@/components/erp/financial-entry-form';
-import { useBilling } from '@/hooks/use-billing';
+import { EntriesTable } from '@/components/finance/entries-table';
+import { PaymentDialog } from '@/components/finance/payment-dialog';
+import { IssueChargeDialog } from '@/components/finance/charge-panels';
+import { EntryDetailSheet } from '@/components/finance/entry-detail';
+import { CashFlowPanel, DrePanel } from '@/components/finance/reports-panels';
+import { FinanceSettingsPanel } from '@/components/finance/settings-panels';
 import {
   useFinancialSummary,
-  useFinancialEntries,
   useFinancialForecast,
-  useCashFlow,
   useOverdueEntries,
   useCommissions,
-  usePayEntry,
   fetchCommissionReceiptHtml,
+  type FinancialEntry,
 } from '@/hooks/use-financial';
 
-interface BoletoResult {
-  linhaDigitavel: string;
-  codigoBarras: string;
-  pixCopiaECola?: string;
-  amount: number;
-  dueDate: string;
-}
+type Entry = FinancialEntry & { openAmount?: number; isPartial?: boolean };
 
-function formatCurrency(value: number | null | undefined) {
+function formatCurrency(value: number | string | null | undefined) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value ?? 0));
 }
 
@@ -47,10 +47,10 @@ function openHtmlInNewTab(html: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-const FINANCIAL_TABS = ['receivable', 'payable', 'overdue', 'commissions', 'cashflow'];
+const FINANCIAL_TABS = ['receivable', 'payable', 'overdue', 'commissions', 'cashflow', 'dre', 'settings'];
 
 // A aba ativa vem do endereço (?tab=), para o menu abrir direto em
-// "A Receber", "A Pagar" ou "Fluxo de Caixa".
+// "A Receber", "A Pagar", "Fluxo de Caixa" ou "DRE".
 export default function FinancialPage() {
   return (
     <Suspense fallback={null}>
@@ -63,34 +63,22 @@ function FinancialPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [receivablePage, setReceivablePage] = useState(1);
-  const [payablePage, setPayablePage] = useState(1);
   const [commissionStatus, setCommissionStatus] = useState('ALL');
   const tabParam = searchParams.get('tab');
   const tab = tabParam && FINANCIAL_TABS.includes(tabParam) ? tabParam : 'receivable';
   const setTab = (t: string) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
-  // Guarda o tipo pré-selecionado do lançamento manual (null = modal fechado)
+  // Tipo pré-selecionado do lançamento manual (null = modal fechado)
   const [newEntryType, setNewEntryType] = useState<'RECEIVABLE' | 'PAYABLE' | null>(null);
+  const [editing, setEditing] = useState<Entry | null>(null);
+  const [paying, setPaying] = useState<Entry | null>(null);
+  const [charging, setCharging] = useState<Entry | null>(null);
+  const [detail, setDetail] = useState<Entry | null>(null);
 
-  const { data: summary } = useFinancialSummary();
+  const summary = useFinancialSummary();
   const { data: forecast } = useFinancialForecast();
-  const { data: cashFlow, isLoading: loadingCashFlow } = useCashFlow();
-  const { data: overdueData } = useOverdueEntries();
-  const { data: receivables, isLoading: loadingReceivable } = useFinancialEntries({
-    type: 'RECEIVABLE',
-    page: receivablePage,
-    limit: 20,
-  });
-  const { data: payables, isLoading: loadingPayable } = useFinancialEntries({
-    type: 'PAYABLE',
-    page: payablePage,
-    limit: 20,
-  });
-  const { data: commissionsData } = useCommissions({ status: commissionStatus === 'ALL' ? undefined : commissionStatus });
-  const payEntry = usePayEntry();
-  const { generateBoleto } = useBilling();
-  const [boletoResult, setBoletoResult] = useState<BoletoResult | null>(null);
-  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const overdue = useOverdueEntries();
+  const commissions = useCommissions({ status: commissionStatus === 'ALL' ? undefined : commissionStatus });
+  const commissionsData = commissions.data;
   const [receiptId, setReceiptId] = useState<string | null>(null);
 
   async function handleViewReceipt(id: string) {
@@ -104,59 +92,21 @@ function FinancialPageContent() {
     }
   }
 
-  async function handleGenerateBoleto(financialEntryId: string) {
-    setGeneratingId(financialEntryId);
-    try {
-      const boleto = await generateBoleto({ financialEntryId });
-      setBoletoResult(boleto);
-      toast.success('Boleto gerado com sucesso!');
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao gerar boleto.';
-      toast.error(Array.isArray(msg) ? msg[0] : msg);
-    } finally {
-      setGeneratingId(null);
-    }
-  }
-
-  function copyToClipboard(text: string, label: string) {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copiado!`);
-  }
-
+  const s = summary.data;
   const kpis = [
-    {
-      label: 'A Receber',
-      value: formatCurrency(summary?.totalReceivable),
-      icon: TrendingUp,
-      color: 'text-blue-600',
-    },
-    {
-      label: 'A Pagar',
-      value: formatCurrency(summary?.totalPayable),
-      icon: TrendingDown,
-      color: 'text-orange-600',
-    },
-    {
-      label: 'Recebido no Mês',
-      value: formatCurrency(summary?.totalReceived),
-      icon: DollarSign,
-      color: 'text-green-600',
-    },
-    {
-      label: 'Em Atraso',
-      value: formatCurrency(summary?.totalOverdue),
-      icon: AlertTriangle,
-      color: 'text-red-600',
-      sub: summary?.overdueCount ? `${summary.overdueCount} lançamentos` : undefined,
-    },
+    { label: 'A Receber (em aberto)', value: formatCurrency(s?.totalReceivable), icon: TrendingUp, color: 'text-blue-600' },
+    { label: 'A Pagar (em aberto)', value: formatCurrency(s?.totalPayable), icon: TrendingDown, color: 'text-orange-600' },
+    { label: 'Recebido no Mês', value: formatCurrency(s?.totalReceived), icon: DollarSign, color: 'text-green-600' },
+    { label: 'Em Atraso', value: formatCurrency(s?.totalOverdue), icon: AlertTriangle, color: 'text-red-600', sub: s?.overdueCount ? `${s.overdueCount} lançamentos` : undefined },
   ];
+  const openDetail = (e: Entry) => setDetail(e);
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Financeiro</h1>
-          <p className="text-muted-foreground text-sm">Gestão financeira da imobiliária</p>
+          <p className="text-muted-foreground text-sm">Contas a receber e a pagar, cobranças, fluxo de caixa e DRE</p>
         </div>
         <Button onClick={() => setNewEntryType(tab === 'payable' ? 'PAYABLE' : 'RECEIVABLE')}>
           <Plus className="w-4 h-4 mr-1.5" />
@@ -165,177 +115,84 @@ function FinancialPageContent() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((kpi) => (
-          <Card key={kpi.label}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm text-muted-foreground">{kpi.label}</CardTitle>
-                <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</p>
-              {kpi.sub && <p className="text-xs text-muted-foreground mt-0.5">{kpi.sub}</p>}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {summary.isError ? (
+        <Card><ErrorState error={summary.error} onRetry={() => summary.refetch()} title="Não foi possível carregar o resumo" compact /></Card>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {kpis.map((kpi) => (
+            <Card key={kpi.label}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm text-muted-foreground">{kpi.label}</CardTitle>
+                  <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {summary.isLoading ? <Skeleton className="h-7 w-24" /> : <p className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</p>}
+                {kpi.sub && <p className="text-xs text-muted-foreground mt-0.5">{kpi.sub}</p>}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Previsão */}
       {forecast && (
         <Card>
-          <CardHeader><CardTitle className="text-sm">Previsão de Recebimentos</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm">Previsão de Recebimentos (saldo em aberto)</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4 text-sm">
-              <div className="text-center">
-                <p className="text-muted-foreground">Próx. 30 dias</p>
-                <p className="font-bold text-lg">{formatCurrency(forecast.next30Days.amount)}</p>
-                <p className="text-xs text-muted-foreground">{forecast.next30Days.count} lançamentos</p>
-              </div>
-              <div className="text-center">
-                <p className="text-muted-foreground">30–60 dias</p>
-                <p className="font-bold text-lg">{formatCurrency(forecast.next60Days.amount)}</p>
-                <p className="text-xs text-muted-foreground">{forecast.next60Days.count} lançamentos</p>
-              </div>
-              <div className="text-center">
-                <p className="text-muted-foreground">60–90 dias</p>
-                <p className="font-bold text-lg">{formatCurrency(forecast.next90Days.amount)}</p>
-                <p className="text-xs text-muted-foreground">{forecast.next90Days.count} lançamentos</p>
-              </div>
+              {([['Próx. 30 dias', forecast.next30Days], ['30–60 dias', forecast.next60Days], ['60–90 dias', forecast.next90Days]] as const).map(([l, v]) => (
+                <div key={l} className="text-center">
+                  <p className="text-muted-foreground">{l}</p>
+                  <p className="font-bold text-lg">{formatCurrency(v.amount)}</p>
+                  <p className="text-xs text-muted-foreground">{v.count} lançamentos</p>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Tabs principais */}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="receivable">Contas a Receber</TabsTrigger>
           <TabsTrigger value="payable">Contas a Pagar</TabsTrigger>
           <TabsTrigger value="overdue">Em Atraso</TabsTrigger>
           <TabsTrigger value="commissions">Comissões</TabsTrigger>
           <TabsTrigger value="cashflow">Fluxo de Caixa</TabsTrigger>
+          <TabsTrigger value="dre">DRE</TabsTrigger>
+          <TabsTrigger value="settings">Configurações</TabsTrigger>
         </TabsList>
 
-        {/* Contas a Receber */}
         <TabsContent value="receivable" className="mt-4">
-          {loadingReceivable ? (
-            <p className="text-muted-foreground text-sm">Carregando...</p>
-          ) : receivables?.items.length === 0 ? (
-            <div className="space-y-3">
-              <p className="text-muted-foreground text-sm">Nenhuma conta a receber</p>
-              <Button variant="outline" size="sm" onClick={() => setNewEntryType('RECEIVABLE')}>
-                <Plus className="w-4 h-4 mr-1.5" />
-                Incluir conta a receber
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Descrição</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Vencimento</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Valor</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
-                      <th className="py-3 px-4" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {receivables?.items.map((entry) => (
-                      <FinancialEntryRow
-                        key={entry.id}
-                        entry={entry}
-                        onPay={(id) => payEntry.mutate({ id })}
-                        onGenerateBoleto={handleGenerateBoleto}
-                        generatingBoleto={generatingId === entry.id}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {receivables && receivables.meta.pages > 1 && (
-                <div className="flex justify-between items-center mt-4">
-                  <p className="text-sm text-muted-foreground">Página {receivablePage} de {receivables.meta.pages}</p>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" disabled={receivablePage === 1} onClick={() => setReceivablePage((p) => p - 1)}>Anterior</Button>
-                    <Button variant="outline" size="sm" disabled={receivablePage >= receivables.meta.pages} onClick={() => setReceivablePage((p) => p + 1)}>Próxima</Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+          <EntriesTable type="RECEIVABLE" onNew={() => setNewEntryType('RECEIVABLE')} onPay={setPaying} onCharge={setCharging} onOpen={openDetail} />
         </TabsContent>
 
-        {/* Contas a Pagar */}
         <TabsContent value="payable" className="mt-4">
-          {loadingPayable ? (
-            <p className="text-muted-foreground text-sm">Carregando...</p>
-          ) : payables?.items.length === 0 ? (
-            <div className="space-y-3">
-              <p className="text-muted-foreground text-sm">Nenhuma conta a pagar</p>
-              <Button variant="outline" size="sm" onClick={() => setNewEntryType('PAYABLE')}>
-                <Plus className="w-4 h-4 mr-1.5" />
-                Incluir conta a pagar
-              </Button>
-            </div>
-          ) : (
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Descrição</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Vencimento</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Valor</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
-                    <th className="py-3 px-4" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {payables?.items.map((entry) => (
-                    <FinancialEntryRow
-                      key={entry.id}
-                      entry={entry}
-                      onPay={(id) => payEntry.mutate({ id })}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <EntriesTable type="PAYABLE" onNew={() => setNewEntryType('PAYABLE')} onPay={setPaying} onCharge={setCharging} onOpen={openDetail} />
         </TabsContent>
 
         {/* Em Atraso */}
         <TabsContent value="overdue" className="mt-4">
-          {!overdueData || overdueData.length === 0 ? (
+          {overdue.isLoading ? <Skeleton className="h-24 w-full" /> : overdue.isError ? (
+            <Card><ErrorState error={overdue.error} onRetry={() => overdue.refetch()} /></Card>
+          ) : !overdue.data || overdue.data.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nenhum lançamento em atraso</p>
           ) : (
             <div className="space-y-2">
-              {overdueData.map((entry) => (
+              {(overdue.data as Array<Entry & { daysOverdue: number }>).map((entry) => (
                 <Card key={entry.id} className="border-red-100">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-sm">{entry.description}</p>
+                      <button type="button" className="font-medium text-sm hover:underline" onClick={() => openDetail(entry)}>{entry.description}</button>
                       <p className="text-xs text-muted-foreground">
-                        Venceu {entry.daysOverdue} dias atrás
+                        {entry.type === 'PAYABLE' ? 'A pagar' : 'A receber'} · venceu há {entry.daysOverdue} dia(s)
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-red-600">
-                        {formatCurrency(Number(entry.amount))}
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-1"
-                        onClick={() => payEntry.mutate({ id: entry.id })}
-                      >
-                        {/* A lista de atrasados inclui os dois tipos: o rótulo
-                            segue o lançamento, não o "receber" fixo de antes. */}
-                        {entry.type === 'PAYABLE' ? 'Pagar' : 'Receber'}
-                      </Button>
+                      <p className="font-bold text-red-600">{formatCurrency(Number(entry.amount) - Number(entry.paidAmount ?? 0))}</p>
+                      <Button size="sm" variant="outline" className="mt-1" onClick={() => openDetail(entry)}>Detalhes</Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -359,7 +216,9 @@ function FinancialPageContent() {
             </SelectContent>
           </Select>
 
-          {commissionsData?.items?.length === 0 ? (
+          {commissions.isLoading ? <Skeleton className="h-24 w-full" /> : commissions.isError ? (
+            <Card><ErrorState error={commissions.error} onRetry={() => commissions.refetch()} /></Card>
+          ) : commissionsData?.items?.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nenhuma comissão encontrada</p>
           ) : (
             <div className="border rounded-lg overflow-hidden">
@@ -410,124 +269,42 @@ function FinancialPageContent() {
           )}
         </TabsContent>
 
-        {/* Fluxo de Caixa: realizado (o que já entrou/saiu) x previsto (o que
-            está por vencer), com saldo acumulado mês a mês. */}
-        <TabsContent value="cashflow" className="mt-4">
-          {loadingCashFlow ? (
-            <p className="text-muted-foreground text-sm">Carregando...</p>
-          ) : !cashFlow || cashFlow.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Nenhum lançamento para exibir no fluxo de caixa</p>
-          ) : (
-            <div className="border rounded-lg overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Mês</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Entradas (realizado)</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Saídas (realizado)</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Saldo realizado</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Entradas (previsto)</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Saídas (previsto)</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Saldo acumulado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cashFlow.map((m) => (
-                    <tr key={m.month} className="border-t hover:bg-gray-50/50">
-                      <td className="py-3 px-4 text-sm font-medium">
-                        {new Date(`${m.month}-01T00:00:00`).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-right text-emerald-700">{formatCurrency(m.realizedIn)}</td>
-                      <td className="py-3 px-4 text-sm text-right text-red-700">{formatCurrency(m.realizedOut)}</td>
-                      <td className={`py-3 px-4 text-sm text-right font-semibold ${m.realizedNet >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                        {formatCurrency(m.realizedNet)}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-right text-muted-foreground">{formatCurrency(m.projectedIn)}</td>
-                      <td className="py-3 px-4 text-sm text-right text-muted-foreground">{formatCurrency(m.projectedOut)}</td>
-                      <td className={`py-3 px-4 text-sm text-right font-bold ${m.cumulativeBalance >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                        {formatCurrency(m.cumulativeBalance)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </TabsContent>
+        <TabsContent value="cashflow" className="mt-4"><CashFlowPanel /></TabsContent>
+        <TabsContent value="dre" className="mt-4"><DrePanel /></TabsContent>
+        <TabsContent value="settings" className="mt-4"><FinanceSettingsPanel /></TabsContent>
       </Tabs>
 
-      {/* Modal de lançamento manual (contas a pagar / a receber) */}
-      <Dialog open={newEntryType !== null} onOpenChange={(open) => { if (!open) setNewEntryType(null); }}>
+      {/* Novo lançamento / edição */}
+      <Dialog open={newEntryType !== null || editing !== null} onOpenChange={(open) => { if (!open) { setNewEntryType(null); setEditing(null); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo Lançamento</DialogTitle>
+            <DialogTitle>{editing ? 'Editar lançamento' : 'Novo Lançamento'}</DialogTitle>
           </DialogHeader>
-          {newEntryType && (
+          {(newEntryType || editing) && (
             <FinancialEntryForm
-              defaultType={newEntryType}
-              onCancel={() => setNewEntryType(null)}
+              key={editing?.id ?? newEntryType ?? ''}
+              defaultType={newEntryType ?? undefined}
+              entry={editing}
+              onCancel={() => { setNewEntryType(null); setEditing(null); }}
               onSuccess={(type) => {
                 setNewEntryType(null);
-                // Leva o usuário para a aba do que ele acabou de criar
-                if (type === 'PAYABLE') {
-                  setPayablePage(1);
-                  setTab('payable');
-                } else {
-                  setReceivablePage(1);
-                  setTab('receivable');
-                }
+                setEditing(null);
+                setTab(type === 'PAYABLE' ? 'payable' : 'receivable');
               }}
             />
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Modal de resultado do boleto */}
-      {boletoResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setBoletoResult(null)}>
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Boleto Gerado</h3>
-              <button onClick={() => setBoletoResult(null)} className="text-gray-400 hover:text-gray-600">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex justify-between rounded-lg bg-gray-50 p-3 text-sm">
-                <span className="text-gray-500">Valor</span>
-                <span className="font-semibold">{formatCurrency(Number(boletoResult.amount))}</span>
-              </div>
-
-              <div>
-                <p className="mb-1 text-xs font-medium text-gray-500">Linha Digitável</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 break-all rounded-lg bg-gray-100 p-2 text-xs">{boletoResult.linhaDigitavel}</code>
-                  <Button size="sm" variant="outline" onClick={() => copyToClipboard(boletoResult.linhaDigitavel, 'Linha digitável')}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {boletoResult.pixCopiaECola && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-gray-500">PIX Copia e Cola</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 break-all rounded-lg bg-gray-100 p-2 text-xs">{boletoResult.pixCopiaECola}</code>
-                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(boletoResult.pixCopiaECola!, 'PIX')}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <p className="text-center text-xs text-gray-400">
-                Boleto registrado no Asaas. Envie a linha digitável ou o PIX ao pagador.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      <PaymentDialog entry={paying} onClose={() => setPaying(null)} />
+      <IssueChargeDialog entry={charging} onClose={() => setCharging(null)} />
+      <EntryDetailSheet
+        entry={detail}
+        onClose={() => setDetail(null)}
+        onPay={(e) => { setDetail(null); setPaying(e); }}
+        onCharge={(e) => { setDetail(null); setCharging(e); }}
+        onEdit={(e) => { setDetail(null); setEditing(e); }}
+      />
     </div>
   );
 }

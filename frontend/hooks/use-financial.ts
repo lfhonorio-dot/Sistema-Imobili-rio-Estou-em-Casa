@@ -27,6 +27,15 @@ export interface FinancialEntry {
   cancelReason?: string | null;
   sourceEntryId?: string | null;
   beneficiaryUserId?: string | null;
+  // Fase 5
+  openAmount?: number;
+  isPartial?: boolean;
+  costCenterId?: string | null;
+  costCenter?: { id: string; name: string } | null;
+  contact?: { id: string; name: string } | null;
+  propertyId?: string | null;
+  competence?: string | null;
+  boleto?: { id: string; kind: 'BOLETO' | 'PIX'; status: string } | null;
   createdAt: string;
   updatedAt: string;
   contract?: {
@@ -46,6 +55,8 @@ export interface FinancialQuery {
   contactId?: string;
   dateFrom?: string;
   dateTo?: string;
+  costCenterId?: string;
+  search?: string;
 }
 
 export interface FinancialSummary {
@@ -82,6 +93,7 @@ export interface CreateFinancialEntryInput {
   propertyId?: string;
   contactId?: string;
   supplierId?: string;
+  costCenterId?: string;
   notes?: string;
   /** Repete o lançamento por N meses a partir do vencimento (1 = lançamento único) */
   months?: number;
@@ -242,6 +254,8 @@ export function usePayEntry() {
       queryClient.invalidateQueries({ queryKey: ['financial-entries', workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary', workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['financial-overdue', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['entry-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['cash-flow5'] });
     },
   });
 }
