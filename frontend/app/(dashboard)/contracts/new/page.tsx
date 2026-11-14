@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useContractDraft } from '@/hooks/use-funnel';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -16,7 +18,19 @@ import { useContacts } from '@/hooks/use-contacts';
 import { useOperationProfile } from '@/hooks/use-operation-profile';
 import { getApiErrorMessage } from '@/lib/api-error';
 
+// Fase 3: com ?dealId= o contrato vem preenchido a partir do negócio ganho.
 export default function NewContractPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewContractPageContent />
+    </Suspense>
+  );
+}
+
+function NewContractPageContent() {
+  const dealId = useSearchParams().get('dealId');
+  const draft = useContractDraft(dealId);
+  const prefilled = useRef(false);
   // No perfil VENDA, os tipos de contrato de locação ficam ocultos.
   const fullProfile = useOperationProfile() === 'VENDA_E_LOCACAO';
   const router = useRouter();
@@ -47,6 +61,23 @@ export default function NewContractPage() {
     guaranteeValue: '',
     guaranteeDetails: '',
   });
+  // Preenche uma única vez com o rascunho vindo do negócio ganho (Fase 3)
+  useEffect(() => {
+    const d = draft.data;
+    if (!d || prefilled.current) return;
+    prefilled.current = true;
+    const fmt = (n: number | null) => (n == null ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setForm((f) => ({
+      ...f,
+      type: d.type,
+      propertyId: d.propertyId ?? f.propertyId,
+      ownerId: d.ownerId ?? f.ownerId,
+      tenantId: d.tenantId ?? f.tenantId,
+      saleValue: fmt(d.saleValue),
+      commissionRate: d.commissionRate != null ? String(d.commissionRate).replace('.', ',') : f.commissionRate,
+    }));
+  }, [draft.data]);
+
   // Fiadores (usados no modelo de sala comercial)
   const [guarantorIds, setGuarantorIds] = useState<string[]>([]);
   const [generateMonths, setGenerateMonths] = useState('12');
@@ -119,6 +150,13 @@ export default function NewContractPage() {
         guaranteeValue: needsGuaranteeValue ? parseBR(form.guaranteeValue) : undefined,
         guaranteeDetails: form.guaranteeDetails || undefined,
         guarantorIds: guarantorIds.length ? guarantorIds : undefined,
+        // Fase 3: vínculo com o negócio de origem e dados da proposta aceita
+        ...(dealId && {
+          dealId,
+          paymentMethod: draft.data?.paymentMethod ?? undefined,
+          proposalDate: draft.data?.proposalDate ?? undefined,
+          acceptanceDate: draft.data?.acceptanceDate ?? undefined,
+        }),
       };
 
       // Repasses aos corretores parceiros (% da comissão)
@@ -184,6 +222,35 @@ export default function NewContractPage() {
         </Button>
         <h1 className="text-2xl font-bold">Novo Contrato</h1>
       </div>
+
+      {dealId && (
+        draft.isLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando os dados do negócio…</p>
+        ) : draft.isError ? (
+          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            Não foi possível carregar os dados do negócio: {getApiErrorMessage(draft.error)}{' '}
+            <button className="underline" onClick={() => draft.refetch()}>Tentar de novo</button>
+          </div>
+        ) : draft.data ? (
+          <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 space-y-1">
+            <p>
+              Contrato preenchido a partir do negócio ganho
+              {draft.data.propertyCode ? ` (imóvel ${draft.data.propertyCode}, comprador ${draft.data.buyerName})` : ''}.
+              Confira os dados antes de salvar.
+            </p>
+            {draft.data.existingContractId && (
+              <p>
+                <Link href={`/contracts/${draft.data.existingContractId}`} className="underline font-medium">Abrir o contrato já existente</Link>
+              </p>
+            )}
+            {draft.data.warnings.length > 0 && (
+              <ul className="list-disc pl-5 text-amber-800">
+                {draft.data.warnings.map((w) => <li key={w}>{w}</li>)}
+              </ul>
+            )}
+          </div>
+        ) : null
+      )}
 
       <Card>
         <CardHeader><CardTitle>Dados do Contrato</CardTitle></CardHeader>
