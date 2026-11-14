@@ -82,14 +82,14 @@ export function PaymentDialog({ entry, onClose }: { entry: (FinancialEntry & { o
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1"><Label>Data do {isPay ? 'pagamento' : 'recebimento'}</Label>
               <Input type="date" value={paidAt} max={todayISO()} onChange={(e) => setPaidAt(e.target.value)} /></div>
-            <div className="space-y-1"><Label>Valor a baixar (R$)</Label>
-              <Input inputMode="decimal" value={f.principal} onChange={(e) => setF({ ...f, principal: e.target.value })} /></div>
-            <div className="space-y-1"><Label>Multa (R$)</Label>
-              <Input inputMode="decimal" value={f.fine} onChange={(e) => setF({ ...f, fine: e.target.value })} placeholder="0,00" /></div>
-            <div className="space-y-1"><Label>Juros (R$)</Label>
-              <Input inputMode="decimal" value={f.interest} onChange={(e) => setF({ ...f, interest: e.target.value })} placeholder="0,00" /></div>
-            <div className="space-y-1"><Label>Desconto (R$)</Label>
-              <Input inputMode="decimal" value={f.discount} onChange={(e) => setF({ ...f, discount: e.target.value })} placeholder="0,00" /></div>
+            <div className="space-y-1"><Label htmlFor="pay-principal">Valor a baixar (R$)</Label>
+              <Input id="pay-principal" inputMode="decimal" value={f.principal} onChange={(e) => setF({ ...f, principal: e.target.value })} /></div>
+            <div className="space-y-1"><Label htmlFor="pay-fine">Multa (R$)</Label>
+              <Input id="pay-fine" inputMode="decimal" value={f.fine} onChange={(e) => setF({ ...f, fine: e.target.value })} placeholder="0,00" /></div>
+            <div className="space-y-1"><Label htmlFor="pay-interest">Juros (R$)</Label>
+              <Input id="pay-interest" inputMode="decimal" value={f.interest} onChange={(e) => setF({ ...f, interest: e.target.value })} placeholder="0,00" /></div>
+            <div className="space-y-1"><Label htmlFor="pay-discount">Desconto (R$)</Label>
+              <Input id="pay-discount" inputMode="decimal" value={f.discount} onChange={(e) => setF({ ...f, discount: e.target.value })} placeholder="0,00" /></div>
             <div className="space-y-1"><Label>Forma</Label>
               <Select value={f.method} onValueChange={(v) => setF({ ...f, method: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
