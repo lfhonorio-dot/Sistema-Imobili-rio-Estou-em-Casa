@@ -24,7 +24,13 @@ export class DealsService {
   ) {}
 
   // Lista negócios com filtros (kanban ou lista)
-  async findAll(workspaceId: string, query: DealQueryDto) {
+  async findAll(workspaceId: string, query: DealQueryDto, userId?: string) {
+    // Fase 3: "meus negócios" = atribuídos ao usuário logado (WorkspaceUser)
+    let mineAssigneeId: string | undefined;
+    if (query.mine === 'true' && userId) {
+      const me = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId }, select: { id: true } });
+      mineAssigneeId = me?.id ?? '__nenhum__';
+    }
     const {
       page = 1,
       limit = 50,
@@ -47,6 +53,7 @@ export class DealsService {
       ...(pipelineId && { pipelineId }),
       ...(stageId && { stageId }),
       ...(assigneeId && { assigneeId }),
+      ...(mineAssigneeId && { assigneeId: mineAssigneeId }),
       ...(tags && tags.length > 0 && { tags: { some: { tagId: { in: tags } } } }),
       ...(minValue !== undefined && { value: { gte: minValue } }),
       ...(maxValue !== undefined && { value: { lte: maxValue } }),
@@ -108,7 +115,16 @@ export class DealsService {
           orderBy: { createdAt: 'desc' },
           take: 20,
         },
-        properties: true,
+        properties: {
+          include: {
+            property: {
+              select: {
+                id: true, code: true, type: true, street: true, number: true, neighborhood: true, city: true,
+                salePrice: true, status: true, ownerId: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -157,9 +173,19 @@ export class DealsService {
       if (!stage) throw new NotFoundException('Estágio não encontrado neste pipeline');
     }
 
+    // Fase 3: imóveis de interesse precisam ser deste workspace
+    const propertyIds = [...new Set(dto.propertyIds ?? [])];
+    if (propertyIds.length) {
+      const found = await this.prisma.property.count({
+        where: { id: { in: propertyIds }, workspaceId, deletedAt: null },
+      });
+      if (found !== propertyIds.length) throw new BadRequestException('Imóvel não encontrado neste workspace.');
+    }
+
     const deal = await this.prisma.deal.create({
       data: {
         workspaceId,
+        ...(propertyIds.length && { properties: { create: propertyIds.map((propertyId) => ({ propertyId })) } }),
         title: dto.title,
         value: dto.value,
         contactId: dto.contactId,
@@ -241,57 +267,45 @@ export class DealsService {
 
     if (!deal) throw new NotFoundException('Negócio não encontrado');
 
+    // A etapa precisa ser do MESMO funil do negócio (antes aceitava etapa de
+    // qualquer funil do workspace e o negócio ficava inconsistente).
     const targetStage = await this.prisma.pipelineStage.findFirst({
-      where: { id: dto.stageId, pipeline: { workspaceId } },
+      where: { id: dto.stageId, pipelineId: deal.pipelineId, pipeline: { workspaceId } },
     });
 
-    if (!targetStage) throw new NotFoundException('Estágio não encontrado');
+    if (!targetStage) throw new NotFoundException('Etapa não encontrada no funil deste negócio.');
 
-    // Exige motivo de perda se movendo para estágio de perda
-    if (targetStage.isLost && !dto.lostReason) {
-      throw new BadRequestException('Motivo de perda é obrigatório para estágio de perdido');
+    // Motivo de perda é obrigatório (Fase 3)
+    const lostReason = dto.lostReason?.trim();
+    if (targetStage.isLost && !lostReason) {
+      throw new BadRequestException('Informe o motivo da perda para mover o negócio para "Perdido".');
     }
 
-    // Calcula dias no estágio atual
-    const lastHistory = await this.prisma.dealStageHistory.findFirst({
-      where: { dealId },
-      orderBy: { movedAt: 'desc' },
-    });
-
-    const daysInStage = lastHistory
-      ? Math.floor((Date.now() - lastHistory.movedAt.getTime()) / (1000 * 60 * 60 * 24))
-      : 0;
-
-    // Atualiza dias no estágio anterior
-    if (lastHistory) {
-      await this.prisma.dealStageHistory.update({
-        where: { id: lastHistory.id },
-        data: { daysInStage },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const lastHistory = await tx.dealStageHistory.findFirst({
+        where: { dealId },
+        orderBy: { movedAt: 'desc' },
       });
-    }
-
-    // Atualiza negócio
-    const updated = await this.prisma.deal.update({
-      where: { id: dealId },
-      data: {
-        stageId: dto.stageId,
-        lostReason: dto.lostReason,
-        lostNote: dto.lostNote,
-        closedAt: (targetStage.isWon || targetStage.isLost) ? new Date() : null,
-        lastActivityAt: new Date(),
-      },
+      if (lastHistory) {
+        const daysInStage = Math.floor((Date.now() - lastHistory.movedAt.getTime()) / (1000 * 60 * 60 * 24));
+        await tx.dealStageHistory.update({ where: { id: lastHistory.id }, data: { daysInStage } });
+      }
+      const result = await tx.deal.update({
+        where: { id: dealId },
+        data: {
+          stageId: dto.stageId,
+          // motivo de perda só fica gravado quando o negócio está perdido
+          lostReason: targetStage.isLost ? lostReason : null,
+          lostNote: targetStage.isLost ? dto.lostNote ?? null : null,
+          closedAt: (targetStage.isWon || targetStage.isLost) ? new Date() : null,
+          lastActivityAt: new Date(),
+        },
+      });
+      await tx.dealStageHistory.create({
+        data: { dealId, stageId: dto.stageId, userId, daysInStage: 0 },
+      });
+      return result;
     });
-
-    // Cria novo registro de histórico
-    await this.prisma.dealStageHistory.create({
-      data: { dealId, stageId: dto.stageId, userId, daysInStage: 0 },
-    });
-
-    // Placeholder para automação de vitória
-    if (targetStage.isWon) {
-      // TODO: Stage 4 - disparar automações de vitória
-      console.log(`Deal ${dealId} ganho - automações serão implementadas na Etapa 4`);
-    }
 
     await this.auditService.log({
       workspaceId,
@@ -302,6 +316,21 @@ export class DealsService {
       before: { stageId: deal.stageId },
       after: { stageId: dto.stageId },
     });
+
+    // Ganho → próximo passo é o contrato de venda, já preenchido a partir do
+    // negócio (sem redigitar nada). Se já existe contrato, aponta para ele.
+    if (targetStage.isWon) {
+      const contract = await this.prisma.contract.findFirst({
+        where: { workspaceId, dealId, deletedAt: null, status: { not: 'RESCINDED' } },
+        select: { id: true },
+      });
+      return {
+        ...updated,
+        nextStep: contract
+          ? { type: 'OPEN_CONTRACT', url: `/contracts/${contract.id}` }
+          : { type: 'CONTRACT_WIZARD', url: `/contracts/new?dealId=${dealId}` },
+      };
+    }
 
     return updated;
   }

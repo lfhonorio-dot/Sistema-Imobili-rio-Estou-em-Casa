@@ -50,6 +50,11 @@ export class CreateContractDto {
   @IsEnum(ContractType)
   type!: ContractType;
 
+  // Fase 3: negócio do funil que originou o contrato
+  @IsOptional()
+  @IsString()
+  dealId?: string;
+
   @IsString()
   propertyId!: string;
 

@@ -26,6 +26,7 @@ export class ActivitiesService {
       startDate,
       endDate,
       done,
+      mine,
     } = query;
 
     const skip = (page - 1) * limit;
@@ -36,8 +37,15 @@ export class ActivitiesService {
       ...(type && { type }),
       ...(contactId && { contactId }),
       ...(dealId && { dealId }),
-      ...(startDate && { dueAt: { gte: new Date(startDate) } }),
-      ...(endDate && { dueAt: { lte: new Date(endDate) } }),
+      // Período: início E fim juntos (antes o fim sobrescrevia o início)
+      ...((startDate || endDate) && {
+        dueAt: {
+          ...(startDate && { gte: new Date(startDate) }),
+          ...(endDate && { lte: new Date(endDate) }),
+        },
+      }),
+      // Fase 3: "minhas tarefas" = atividades do usuário logado
+      ...(mine === 'true' && { userId }),
       ...(done === 'true' && { doneAt: { not: null } }),
       ...(done === 'false' && { doneAt: null }),
     };

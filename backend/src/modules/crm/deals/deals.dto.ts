@@ -13,6 +13,12 @@ import {
 import { Type } from 'class-transformer';
 
 export class CreateDealDto {
+  // Fase 3: imóveis de interesse do negócio
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  propertyIds?: string[];
+
   @IsString()
   title!: string;
 
@@ -99,6 +105,11 @@ export class MoveStageDealDto {
 }
 
 export class DealQueryDto {
+  // Fase 3: "meus negócios" (atribuídos ao usuário logado)
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  mine?: 'true' | 'false';
+
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
