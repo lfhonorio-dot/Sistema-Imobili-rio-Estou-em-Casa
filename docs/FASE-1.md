@@ -8,20 +8,34 @@ Branch: `feat/fase-1-perfil-venda` · Base: `main` (2b509e8)
 - **Venda** (padrão): mostra só o que serve à venda.
 - **Venda e Locação**: mostra tudo.
 
-No perfil Venda ficam **ocultos**, sem apagar nada: Manutenção, Corretores Parceiros (split),
-Automações, Marketing e Integrações, além de contratos de locação, reajuste de aluguel, vistorias,
-Open Finance e Carnê-Leão. Quem digitar o endereço de uma dessas telas vê o aviso
+No perfil Venda ficam **ocultos**, sem apagar nada: Manutenção, Automações, Marketing e
+Integrações, além de contratos de locação, reajuste de aluguel, vistorias, Open Finance e
+Carnê-Leão. **Corretores Parceiros continua visível** (pedido do dono): o cálculo e o repasse da
+comissão aos parceiros fazem parte da venda. Quem digitar o endereço de uma dessas telas vê o aviso
 "Módulo não disponível neste perfil". O servidor também recusa essas funções com uma mensagem
 clara, então não dá para usá-las "por fora" da tela. O perfil é trocado em **Configurações → Workspace**.
 
 **Menu novo, em grupos.**
 - **Comercial:** Dashboard, Funil, Clientes, Imóveis, Visitas, Tarefas, Caixa de Entrada.
 - **Contratos:** Contratos, Assinaturas.
-- **Financeiro:** A Receber, A Pagar, Boletos e PIX, Fluxo de Caixa, Bancário, Comissões, Notas Fiscais.
+- **Financeiro:** A Receber, A Pagar, Boletos e PIX, Fluxo de Caixa, Bancário, Comissões, Corretores Parceiros, Notas Fiscais.
 - **Gestão:** Relatórios, Fiscal — DIMOB.
 - **Configurações:** Workspace, Usuários, Funis de venda, Modelos de e-mail, LGPD, Auditoria.
 
 "A Receber", "A Pagar", "Fluxo de Caixa", "Notas Fiscais" e "DIMOB" abrem direto na aba certa.
+
+**Cálculo da comissão dos corretores parceiros.** No detalhe do contrato (aba Comissões) aparece o
+quadro "Cálculo da comissão":
+- comissão total = valor da negociação × taxa de comissão;
+- cada parceiro recebe a **% da comissão** combinada (ou um valor fixo);
+- a imobiliária fica com o restante.
+
+Antes de a comissão ser recebida, os valores são os previstos. Depois, o repasse é calculado sobre o
+**valor efetivamente recebido**, a mesma regra usada para gerar os repasses na tela de Comissões.
+A conta é feita em centavos exatos, sem sobra nem falta de dinheiro. Exemplo: venda de
+R$ 500.000,00 a 6% dá R$ 30.000,00 de comissão; um parceiro com 30% recebe R$ 9.000,00 e a
+imobiliária fica com R$ 21.000,00 (70%). Também foi corrigido o rótulo da comissão recebida, que
+aparecia como "Pendente".
 
 **Dashboard de venda.** O cartão de desenvolvimento "Estágio 1 Concluído" e o aviso "Primeiro acesso"
 foram retirados. A saudação agora sai como "Bom dia/Boa tarde/Boa noite, Nome!" e não fica mais
@@ -81,14 +95,14 @@ Backend:
 - `common/decorators/operation-profile.decorator.ts` (novo)
 - `common/guards/workspace.guard.ts`
 - controllers de inspections, maintenance, automation, split, banking (Open Finance), contracts (reajuste)
-- `contracts.service.ts`
+- `contracts.service.ts` + `commission-breakdown.ts` (cálculo da comissão dos parceiros)
 - `billing.service.ts`
 - `fiscal.service.ts`
 - `reports.service.ts` + `reports.controller.ts` (`GET /reports/sales-dashboard`)
 - `auth.service.ts`
 - `workspace.dto.ts`
 - testes novos: `workspace.guard.spec.ts`, `reports.sales-dashboard.spec.ts`,
-  `fiscal.nfse-sem-provedor.spec.ts`, `contracts.perfil-venda.spec.ts`, `billing.sem-gateway.spec.ts`
+  `fiscal.nfse-sem-provedor.spec.ts`, `contracts.perfil-venda.spec.ts`, `billing.sem-gateway.spec.ts`, `commission-breakdown.spec.ts`
 
 Frontend:
 - `lib/navigation.ts` (novo), `lib/api-error.ts` (novo)
@@ -110,8 +124,8 @@ Raiz: `validar-fase-1.bat`, `.gitattributes` (mantém o `.bat` com quebra de lin
 
 ## 4. Resultado do build e dos testes
 
-- Backend: `npm run build` OK · `tsc --noEmit` OK · `jest`: **12 suítes, 63 testes, 63 passando**
-  (eram 43; 20 novos).
+- Backend: `npm run build` OK · `tsc --noEmit` OK · `jest`: **13 suítes, 68 testes, 68 passando**
+  (eram 43; 25 novos).
 - Frontend: `tsc --noEmit` OK · `npm run build` OK (44 rotas, incluindo `/visits`).
 - Teste no navegador (respostas do servidor simuladas): menu do perfil Venda sem os módulos
   ocultos; grupos corretos; dashboard sem "Estágio 1"/"Primeiro acesso"; saudação com nome;
@@ -132,14 +146,17 @@ Faça depois de o PR ser mesclado e o Railway terminar o deploy (uns 3 a 5 minut
    receber": abre a tela de Comissões.
 4. **Menu.** Olhe a barra da esquerda.
    → Grupos Comercial, Contratos, Financeiro, Gestão, Configurações. Embaixo do nome da imobiliária,
-   "Perfil: Venda". **Não** aparecem Manutenção, Automações, Marketing, Integrações nem Corretores
-   Parceiros.
+   "Perfil: Venda". **Não** aparecem Manutenção, Automações, Marketing nem Integrações.
+   "Corretores Parceiros" aparece no grupo Financeiro.
 5. **Atalhos do Financeiro.** Clique em "A Pagar".
    → Abre Financeiro já na aba "Contas a Pagar". Clique em "Fluxo de Caixa": abre a aba Fluxo de Caixa.
 6. **Rota oculta.** Digite na barra de endereço: `.../maintenance`.
    → Aparece "Módulo não disponível neste perfil", com botões para o Dashboard e Configurações.
 7. **Contrato.** Vá em Contratos → Novo contrato e abra o campo "Tipo".
-   → Só aparecem "Compra e Venda" e "Intermediação". Não aparece a seção "Corretores Parceiros".
+   → Só aparecem "Compra e Venda" e "Intermediação". A seção "Corretores Parceiros" continua lá.
+   Crie uma Intermediação de R$ 500.000,00 a 6% com um parceiro de 30% e abra o contrato → aba
+   **Comissões**: o quadro "Cálculo da comissão" mostra comissão R$ 30.000,00, parceiro
+   R$ 9.000,00 e imobiliária R$ 21.000,00 (70%).
 8. **Visitas.** Clique em Visitas → "Agendar visita", preencha título e data e salve.
    → A visita aparece em "A realizar". Clique em "Realizada": ela passa para "Realizadas recentemente".
    No Dashboard, "Visitas da semana" conta essa visita se a data for desta semana.

@@ -17,7 +17,7 @@ const OPTIONS: { value: OperationProfile; description: string }[] = [
   {
     value: 'VENDA',
     description:
-      'Só o fluxo de venda. Locação, vistorias, manutenção, corretores parceiros (split), Open Finance, automações, marketing e integrações ficam ocultos.',
+      'Só o fluxo de venda (inclui comissão de corretores parceiros). Locação, vistorias, manutenção, Open Finance, automações, marketing e integrações ficam ocultos.',
   },
   {
     value: 'VENDA_E_LOCACAO',

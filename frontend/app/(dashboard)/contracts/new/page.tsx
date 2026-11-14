@@ -17,7 +17,7 @@ import { useOperationProfile } from '@/hooks/use-operation-profile';
 import { getApiErrorMessage } from '@/lib/api-error';
 
 export default function NewContractPage() {
-  // No perfil VENDA, locação e repasse a parceiros (split) ficam ocultos.
+  // No perfil VENDA, os tipos de contrato de locação ficam ocultos.
   const fullProfile = useOperationProfile() === 'VENDA_E_LOCACAO';
   const router = useRouter();
   const createContract = useCreateContract();
@@ -424,8 +424,7 @@ export default function NewContractPage() {
             )}
           </div>
 
-          {/* Corretores parceiros (repasse da comissão) — oculto no perfil VENDA */}
-          {fullProfile && (
+          {/* Corretores parceiros (repasse da comissão) */}
           <div className="space-y-2 rounded-lg border p-3">
             <div className="flex items-center justify-between">
               <Label>Corretores Parceiros (repasse da comissão)</Label>
@@ -474,7 +473,6 @@ export default function NewContractPage() {
               </div>
             )}
           </div>
-          )}
 
           {/* Gerar parcelas automáticas (só para locação) */}
           {isRental && (

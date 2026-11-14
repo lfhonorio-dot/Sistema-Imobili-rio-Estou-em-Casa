@@ -15,6 +15,7 @@ import { AuditService } from '../../audit/audit.service';
 import { EmailService } from '../../hub/email/email.service';
 import { ContractTemplateService } from './contract-template.service';
 import { DimobService } from '../fiscal/dimob.service';
+import { calcCommissionBreakdown, CommissionBreakdown } from './commission-breakdown';
 import { BillingService } from '../billing/billing.service';
 import {
   CreateContractDto,
@@ -123,7 +124,36 @@ export class ContractsService {
     });
 
     if (!contract) throw new NotFoundException('Contrato não encontrado');
-    return contract;
+
+    // Cálculo da comissão e do repasse aos corretores parceiros (venda e
+    // intermediação), para a tela mostrar a conta completa.
+    let commissionBreakdown: CommissionBreakdown | null = null;
+    const baseValue = contract.saleValue != null ? Number(contract.saleValue) : null;
+    if (
+      (contract.type === 'SALE' || contract.type === 'BROKERAGE') &&
+      baseValue != null &&
+      contract.commissionRate != null
+    ) {
+      const rules = await this.prisma.splitRule.findMany({
+        where: { workspaceId, contractId: id, isActive: true },
+        include: { recipient: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'asc' },
+      });
+      const received = contract.commissions.find((c) => c.status === 'RECEIVED' && c.receivedValue != null);
+      commissionBreakdown = calcCommissionBreakdown({
+        baseValue,
+        commissionRate: Number(contract.commissionRate),
+        receivedValue: received ? Number(received.receivedValue) : null,
+        partners: rules.map((r) => ({
+          recipientId: r.recipientId,
+          name: r.recipient?.name ?? 'Parceiro',
+          type: r.type,
+          value: Number(r.value),
+        })),
+      });
+    }
+
+    return { ...contract, commissionBreakdown };
   }
 
   // Cria contrato validando entidades do workspace

@@ -10,13 +10,11 @@ import {
 } from './split.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
-import { RequiresFullProfile } from '../../../common/decorators/operation-profile.decorator';
 
 @ApiTags('split')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
-@RequiresFullProfile('Split de comissão (corretores parceiros)')
 @Controller('split')
 export class SplitController {
   constructor(private readonly service: SplitService) {}

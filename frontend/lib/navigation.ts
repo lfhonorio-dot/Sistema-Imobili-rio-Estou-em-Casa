@@ -1,7 +1,7 @@
 // Menu e rotas por perfil de operação (Fase 1).
 //
 // VENDA: só o fluxo de venda. Locação e módulos avançados (vistorias,
-// manutenção, split/corretores parceiros, Open Finance, automações,
+// manutenção, Open Finance, automações,
 // agentes de IA, marketing, integrações) ficam OCULTOS — nada é apagado.
 // VENDA_E_LOCACAO: mostra tudo.
 //
@@ -70,6 +70,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Fluxo de Caixa', href: '/financial?tab=cashflow', icon: LineChart },
       { label: 'Bancário', href: '/financial/banking', icon: Landmark },
       { label: 'Comissões', href: '/commissions', icon: Percent },
+      { label: 'Corretores Parceiros', href: '/partners', icon: Handshake },
       { label: 'Notas Fiscais', href: '/fiscal?tab=nfse', icon: Receipt },
     ],
   },
@@ -85,7 +86,6 @@ export const NAV_GROUPS: NavGroup[] = [
     fullProfileOnly: true,
     items: [
       { label: 'Manutenção', href: '/maintenance', icon: Wrench },
-      { label: 'Corretores Parceiros', href: '/partners', icon: Handshake },
       { label: 'Automações', href: '/automation', icon: Zap },
       { label: 'Marketing', href: '/marketing', icon: Megaphone },
       { label: 'Integrações', href: '/integrations', icon: Plug },
@@ -108,7 +108,6 @@ export const NAV_GROUPS: NavGroup[] = [
 /** Rotas que só existem no perfil VENDA_E_LOCACAO (prefixos). */
 export const FULL_PROFILE_ROUTES: { prefix: string; module: string }[] = [
   { prefix: '/maintenance', module: 'Manutenção' },
-  { prefix: '/partners', module: 'Corretores Parceiros (split de comissão)' },
   { prefix: '/automation', module: 'Automações' },
   { prefix: '/marketing', module: 'Marketing' },
   { prefix: '/integrations', module: 'Integrações' },
