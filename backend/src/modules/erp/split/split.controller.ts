@@ -10,6 +10,7 @@ import {
 } from './split.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
 import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('split')
@@ -62,13 +63,16 @@ export class SplitController {
     return this.service.deleteRecipient(workspaceId, id);
   }
 
+  // Fase 7: conferência MANUAL dos dados do parceiro (financeiro/dono)
+  @Access(...FINANCE_CONFIG)
   @Post('recipients/:id/kyc')
   @HttpCode(HttpStatus.OK)
   submitKyc(
     @Headers('x-workspace-id') workspaceId: string,
     @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.service.submitKyc(workspaceId, id);
+    return this.service.submitKyc(workspaceId, id, user?.sub);
   }
 
   // ── REGRAS DE SPLIT ───────────────────────────────────────

@@ -3,12 +3,13 @@
 import { Module } from '@nestjs/common';
 import { LgpdController } from './lgpd.controller';
 import { LgpdService } from './lgpd.service';
+import { LgpdContactService } from './lgpd-contact.service';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [AuditModule],
   controllers: [LgpdController],
-  providers: [LgpdService],
+  providers: [LgpdService, LgpdContactService],
   exports: [LgpdService],
 })
 export class LgpdModule {}

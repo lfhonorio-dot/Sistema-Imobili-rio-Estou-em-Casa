@@ -451,7 +451,7 @@ export class ContractsService {
     // request do frontend expiraria com o contrato já gravado — o usuário veria
     // erro e tentaria de novo, criando contrato duplicado.
     this.sendContractByEmail(workspaceId, contract).catch((e) => {
-      console.error('[ContractsService] Erro ao enviar contrato por email:', e);
+      console.error('[ContractsService] Erro ao enviar contrato por e-mail:', (e as Error).message);
     });
 
     // Gera o boleto dos lançamentos criados na transação acima (venda e
@@ -522,7 +522,7 @@ export class ContractsService {
         }
       }
     } catch (e) {
-      console.error('[ContractsService] Erro ao gerar boletos automaticamente:', e);
+      console.error('[ContractsService] Erro ao gerar boletos automaticamente:', (e as Error).message);
     }
   }
 
@@ -743,7 +743,7 @@ export class ContractsService {
         });
         emailSent = true;
       } catch (e) {
-        console.error(`[ContractsService] Erro ao enviar e-mail de assinatura para ${sig.email}:`, e);
+        console.error(`[ContractsService] Erro ao enviar e-mail de assinatura (signatário ${sig.id}):`, (e as Error).message);
       }
 
       // Atualiza status do signatário para SENT quando e-mail foi enviado

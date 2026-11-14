@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 type Db = PrismaService | Prisma.TransactionClient;
 import { computeDimobDeclarants, PartnerShareInput } from './dimob.calc';
 import { buildPgdFile, PgdRentalYear, PgdSaleEvent } from './dimob.pgd';
+import { validatePgdFile, validateSaleParties } from './dimob.validate';
 
 @Injectable()
 export class DimobService {
@@ -237,7 +238,7 @@ export class DimobService {
       year,
     };
 
-    // Vendas/intermediações: uma linha R02 por evento
+    // Vendas/intermediações: uma linha R04 por evento
     const sales: PgdSaleEvent[] = records
       .filter((r) => r.type === 'VENDA' || r.type === 'INTERMEDIACAO')
       .map((r) => ({
@@ -251,7 +252,7 @@ export class DimobService {
         propertyAddress: r.propertyAddress,
       }));
 
-    // Locações: agrupa por contrato em uma linha R03 com 12 meses
+    // Locações: agrupa por contrato em uma linha R02 com 12 meses
     const rentalMap = new Map<string, PgdRentalYear>();
     for (const r of records.filter((x) => x.type === 'LOCACAO')) {
       const key = r.contractId ?? `${r.locadorDoc}-${r.locatarioDoc}`;
@@ -277,7 +278,21 @@ export class DimobService {
 
     const content = buildPgdFile(declarant, sales, [...rentalMap.values()]);
     const filename = `DIMOB_${declarantDoc.replace(/\D/g, '')}_${year}.txt`;
-    return { filename, content, sales: sales.length, rentals: rentalMap.size };
+    // Fase 7: validação das partes e da estrutura do arquivo, sempre junto
+    const refs = records.filter((r) => r.type === 'VENDA' || r.type === 'INTERMEDIACAO').map((r) => r.contractId ?? '');
+    const codes = new Map((await this.prisma.contract.findMany({ where: { workspaceId, id: { in: refs.filter(Boolean) } }, select: { id: true, code: true } })).map((c) => [c.id, c.code]));
+    const issues = [
+      ...validateSaleParties(year, declarantDoc, sales.map((sv, i) => ({ ...sv, ref: refs[i] ? `Contrato ${codes.get(refs[i]) ?? refs[i].slice(0, 8)}` : `Venda ${i + 1}` }))),
+      ...validatePgdFile(content),
+    ];
+    const validation = { ok: !issues.some((x) => x.level === 'ERROR'), errors: issues.filter((x) => x.level === 'ERROR').length, warnings: issues.filter((x) => x.level === 'WARNING').length, issues };
+    return { filename, content, sales: sales.length, rentals: rentalMap.size, validation };
+  }
+
+  /** Fase 7: só a validação (sem baixar o arquivo). */
+  async validateDimob(workspaceId: string, year: number, declarantDoc: string) {
+    const r = await this.generatePgdFile(workspaceId, year, declarantDoc);
+    return { year, declarantDoc, sales: r.sales, rentals: r.rentals, ...r.validation };
   }
 
   private toCsv(declarantes: any[]): string {

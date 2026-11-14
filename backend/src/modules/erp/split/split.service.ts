@@ -2,6 +2,7 @@
 import {
   Injectable, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
+import { validDoc } from '../fiscal/dimob.validate';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AsaasClient } from '../billing/asaas.client';
 import {
@@ -76,19 +77,32 @@ export class SplitService {
     return { message: 'Recebedor removido com sucesso' };
   }
 
-  async submitKyc(workspaceId: string, id: string) {
+  /**
+   * Fase 7: "KYC" era uma aprovação automática só por ter campo preenchido.
+   * Agora é uma CONFERÊNCIA MANUAL feita por alguém do financeiro/dono
+   * (quem e quando ficam na auditoria): o sistema só aceita se o CPF/CNPJ
+   * for válido e houver chave PIX ou conta bancária. Não há verificação
+   * automática de identidade — a tela diz isso.
+   */
+  async submitKyc(workspaceId: string, id: string, userId?: string) {
     const recipient = await this.findOneRecipient(workspaceId, id);
 
     const missingFields: string[] = [];
-    if (!recipient.bankCode && !recipient.pixKey) missingFields.push('bankCode ou pixKey');
+    if (!recipient.name?.trim()) missingFields.push('nome');
+    if (!validDoc(recipient.document)) missingFields.push('CPF/CNPJ válido');
+    if (!recipient.bankCode && !recipient.pixKey) missingFields.push('chave PIX ou conta bancária');
     if (missingFields.length > 0) {
-      throw new BadRequestException(`Campos obrigatórios para KYC: ${missingFields.join(', ')}`);
+      throw new BadRequestException(`Para marcar os dados como conferidos, falta: ${missingFields.join(', ')}.`);
     }
 
-    return this.prisma.splitRecipient.update({
+    const updated = await this.prisma.splitRecipient.update({
       where: { id },
       data: { kycStatus: 'APPROVED', kycSubmittedAt: new Date() },
     });
+    await this.prisma.auditLog.create({
+      data: { workspaceId, userId: userId ?? null, action: 'SPLIT_RECIPIENT_VERIFIED_MANUALLY', entity: 'SplitRecipient', entityId: id, after: { verifiedAt: new Date().toISOString() } },
+    }).catch(() => undefined);
+    return updated;
   }
 
   // ── REGRAS DE SPLIT ───────────────────────────────────────

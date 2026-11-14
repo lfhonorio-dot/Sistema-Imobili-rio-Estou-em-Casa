@@ -46,6 +46,12 @@ export class FiscalController {
   }
 
   // Arquivo TXT de importação do PGD DIMOB (por declarante/ano)
+  // Fase 7: valida partes e estrutura do arquivo da DIMOB
+  @Get('dimob/validate')
+  validateDimob(@Headers('x-workspace-id') workspaceId: string, @Query('year') year: string, @Query('declarantDoc') declarantDoc: string) {
+    return this.dimob.validateDimob(workspaceId, Number(year), declarantDoc);
+  }
+
   @Get('dimob/pgd')
   generatePgdFile(
     @Headers('x-workspace-id') workspaceId: string,

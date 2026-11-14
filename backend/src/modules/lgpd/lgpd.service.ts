@@ -151,7 +151,7 @@ export class LgpdService {
     });
 
     this.logger.log(
-      `Nova requisição LGPD [${dto.type}] para ${dto.subjectEmail} no workspace ${workspaceId}`,
+      `Nova requisição LGPD [${dto.type}] no workspace ${workspaceId}`,
     );
 
     return request;
@@ -211,7 +211,7 @@ export class LgpdService {
   // Agrega todos os dados do titular no workspace
   // -----------------------------------------------
   async exportSubjectData(workspaceId: string, subjectEmail: string) {
-    this.logger.log(`Exportando dados de ${subjectEmail} para workspace ${workspaceId}`);
+    this.logger.log(`Exportando dados de um titular no workspace ${workspaceId}`);
 
     // Agrega dados do titular de todas as tabelas relevantes
     const [consents, requests] = await Promise.all([
@@ -253,7 +253,7 @@ export class LgpdService {
   // -----------------------------------------------
   async anonymizeSubjectData(workspaceId: string, subjectEmail: string, userId: string) {
     this.logger.warn(
-      `ANONIMIZAÇÃO: Iniciando para ${subjectEmail} no workspace ${workspaceId}`,
+      `ANONIMIZAÇÃO: iniciando no workspace ${workspaceId}`,
     );
 
     // Hash SHA-256 irreversível dos dados identificadores

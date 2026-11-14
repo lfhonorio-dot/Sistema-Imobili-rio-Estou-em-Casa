@@ -539,7 +539,7 @@ export class FinancialService {
     // externo e não pode segurar a resposta do recebimento. Se o envio falhar,
     // fica registrado no log e o recibo continua disponível para download.
     this.emailCommissionReceipt(workspaceId, id).catch((e) => {
-      console.error('[FinancialService] Erro ao enviar recibo de comissão por email:', e);
+      console.error('[FinancialService] Erro ao enviar recibo de comissão por e-mail:', (e as Error).message);
     });
 
     return result;

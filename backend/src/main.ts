@@ -21,6 +21,10 @@ async function bootstrap() {
     logger: WinstonModule.createLogger(createWinstonLogger()),
   });
 
+  // Fase 7: atrás do proxy do Railway, o IP real vem em X-Forwarded-For
+  // (sem isto todo mundo teria o mesmo IP e o limite por IP valeria para todos)
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   // Fase 7: contexto por requisição (papel do usuário para o escopo do Corretor)
   app.use(requestContextMiddleware);
 

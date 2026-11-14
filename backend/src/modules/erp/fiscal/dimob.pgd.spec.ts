@@ -1,4 +1,4 @@
-import { buildPgdFile, buildR01, buildR02, buildR03, money, text, digits, ddmmaaaa } from './dimob.pgd';
+import { buildPgdFile, buildR01, buildSaleRecord, buildRentalRecord, money, text, digits, ddmmaaaa } from './dimob.pgd';
 
 describe('PGD DIMOB file builder', () => {
   const declarant = { cnpj: '11.111.111/0001-99', name: 'Imobiliária Ção & Filhos', year: 2026 };
@@ -27,25 +27,27 @@ describe('PGD DIMOB file builder', () => {
     expect(r.startsWith('R0111111111000199' + '2026')).toBe(true);
   });
 
-  it('R02 embute valores em centavos e data de contratação', () => {
-    const r = buildR02(declarant, {
+  it('R04 (venda) embute valores em centavos e data de contratação', () => {
+    const r = buildSaleRecord(declarant, {
       sellerDoc: '123.456.789-01', sellerName: 'Vendedor',
       buyerDoc: '98765432100', buyerName: 'Comprador',
       saleValue: 500000, commissionValue: 25000,
       contractDate: new Date(2026, 4, 10), propertyAddress: 'Rua X, 1',
     });
+    expect(r.startsWith('R04')).toBe(true);
     expect(r).toContain('10052026');
     expect(r).toContain(money(500000));
     expect(r).toContain(money(25000));
   });
 
-  it('R03 tem 36 campos mensais (12x bruto+comissão+imposto)', () => {
+  it('R02 (locação) tem 36 campos mensais (12x bruto+comissão+imposto)', () => {
     const rental = {
       landlordDoc: '1', landlordName: 'L', tenantDoc: '2', tenantName: 'T',
       propertyAddress: 'Rua Y', monthlyGross: Array(12).fill(2500),
       monthlyCommission: Array(12).fill(250), monthlyTax: Array(12).fill(0),
     };
-    const r = buildR03(declarant, rental);
+    const r = buildRentalRecord(declarant, rental);
+    expect(r.startsWith('R02')).toBe(true);
     // 36 blocos monetários de 14 chars = 504 chars de valores
     const expectedLen = 3 + 14 + 4 + 14 + 60 + 14 + 60 + 36 * 14 + 120;
     expect(r.length).toBe(expectedLen);
@@ -60,7 +62,7 @@ describe('PGD DIMOB file builder', () => {
     const lines = file.trimEnd().split('\r\n');
     expect(lines[0]).toBe('DIMOB');
     expect(lines[1].startsWith('R01')).toBe(true);
-    expect(lines[2].startsWith('R02')).toBe(true);
-    expect(lines[3]).toBe('T9000000002'); // R01 + R02
+    expect(lines[2].startsWith('R04')).toBe(true);
+    expect(lines[3]).toBe('T9000000002'); // R01 + R04
   });
 });

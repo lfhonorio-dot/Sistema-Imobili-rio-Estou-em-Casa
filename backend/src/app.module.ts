@@ -4,7 +4,8 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { validateEnv } from './config/env.config';
@@ -49,6 +50,8 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   controllers: [AppController],
+  // Fase 7: limite de requisições por IP aplicado de verdade em todas as rotas
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
   imports: [
     // Configuração de variáveis de ambiente com validação Zod
     ConfigModule.forRoot({
@@ -57,12 +60,14 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
       cache: true,
     }),
 
-    // Rate limiting global (100 req/min) - auth tem limite próprio no controller
+    // Rate limiting por IP. Fase 7: o guard agora está REGISTRADO (APP_GUARD
+    // abaixo) — antes o módulo era importado mas nada era limitado. O nome
+    // "default" é o mesmo usado nos @Throttle do login/recuperação de senha.
     ThrottlerModule.forRoot([
       {
-        name: 'global',
+        name: 'default',
         ttl: 60000, // 1 minuto em ms
-        limit: 100,
+        limit: Number(process.env.RATE_LIMIT_PER_MINUTE) || 600,
       },
     ]),
 

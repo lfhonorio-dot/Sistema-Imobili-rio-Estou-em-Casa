@@ -45,10 +45,11 @@ export interface TokenPair {
 
 // Custo do bcrypt - 12 rounds para boa segurança
 const BCRYPT_ROUNDS = 12;
-// Máximo de tentativas antes de bloquear conta
-const MAX_FAILED_ATTEMPTS = 20;
+// Fase 7: bloqueio de conta por tentativas de senha (antes as constantes
+// existiam, mas o login nunca contava as tentativas)
+const MAX_FAILED_ATTEMPTS = 10;
 // Tempo de bloqueio em minutos
-const LOCK_DURATION_MINUTES = 5;
+const LOCK_DURATION_MINUTES = 15;
 
 @Injectable()
 export class AuthService {
@@ -180,7 +181,7 @@ export class AuthService {
     });
 
     this.logger.log(
-      `Novo workspace registrado: ${result.workspace.slug} (admin: ${result.user.email})`,
+      `Novo workspace registrado: ${result.workspace.slug} (admin: ${result.user.id})`,
     );
 
     // Envia e-mail de boas-vindas de forma assíncrona (não bloqueia o registro)
@@ -245,10 +246,17 @@ export class AuthService {
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
+    // Fase 7: conta bloqueada temporariamente por excesso de tentativas
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const min = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
+      throw new UnauthorizedException(`Muitas tentativas de senha. Por segurança, o acesso foi bloqueado por ${min} minuto(s). Tente de novo depois ou use "Esqueci minha senha".`);
+    }
+
     // Valida senha
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!isPasswordValid) {
+      await this.registerFailedLogin(user.id, user.failedLoginAttempts);
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
@@ -267,6 +275,7 @@ export class AuthService {
       });
 
       if (!isValid) {
+        await this.registerFailedLogin(user.id, user.failedLoginAttempts);
         throw new UnauthorizedException('Código 2FA inválido.');
       }
     }
@@ -446,7 +455,7 @@ export class AuthService {
 
     // Sempre retorna sucesso para não revelar se e-mail existe
     if (!user) {
-      this.logger.debug(`Recuperação de senha para e-mail não encontrado: ${dto.email}`);
+      this.logger.debug('Recuperação de senha pedida para e-mail não cadastrado.');
       return;
     }
 
@@ -759,7 +768,7 @@ export class AuthService {
         `,
       });
     } catch (error) {
-      this.logger.error(`Erro ao enviar e-mail de boas-vindas para ${email}:`, error);
+      this.logger.error(`Erro ao enviar e-mail de boas-vindas: ${(error as Error).message}`);
     }
   }
 
@@ -770,7 +779,7 @@ export class AuthService {
     resetUrl: string,
   ): Promise<void> {
     if (!this.mailTransporter) {
-      this.logger.debug(`SMTP não configurado. Link de reset: ${resetUrl}`);
+      this.logger.warn('SMTP não configurado: e-mail de redefinição de senha não enviado.');
       return;
     }
 
@@ -790,7 +799,7 @@ export class AuthService {
         `,
       });
     } catch (error) {
-      this.logger.error(`Erro ao enviar e-mail de reset para ${email}:`, error);
+      this.logger.error(`Erro ao enviar e-mail de redefinição de senha: ${(error as Error).message}`);
     }
   }
 
@@ -839,6 +848,20 @@ export class AuthService {
         roleKey: roleKeyOf(m.role, m.isOwner),
       })),
     };
+  }
+
+  /** Conta uma tentativa errada; na 10ª seguida bloqueia por 15 minutos. */
+  private async registerFailedLogin(userId: string, previous: number) {
+    const attempts = previous + 1;
+    const lock = attempts >= MAX_FAILED_ATTEMPTS;
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedLoginAttempts: lock ? 0 : attempts,
+        ...(lock && { lockedUntil: new Date(Date.now() + LOCK_DURATION_MINUTES * 60_000) }),
+      },
+    });
+    if (lock) this.logger.warn(`Conta ${userId} bloqueada por ${LOCK_DURATION_MINUTES} min após ${attempts} tentativas.`);
   }
 
   async unlockUser(email: string): Promise<void> {
