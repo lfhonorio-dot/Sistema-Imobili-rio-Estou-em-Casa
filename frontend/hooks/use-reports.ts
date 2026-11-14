@@ -126,9 +126,11 @@ export interface SalesDashboard {
   openProposals: { available: boolean; count: number | null };
   vgvInNegotiation: { amount: number; deals: number };
   salesThisMonth: { amount: number; count: number };
-  commissionsReceivable: { amount: number; count: number };
+  // Fase 7: null para o Corretor (só vê os números dele)
+  commissionsReceivable: { amount: number; count: number } | null;
+  scope?: 'ALL' | 'BROKER';
   commissionsPayable: { amount: number; count: number };
-  projectedBalance30d: {
+  projectedBalance30d: null | {
     amount: number;
     bankBalance: number;
     bankAccounts: number;

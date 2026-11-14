@@ -93,33 +93,46 @@ export default function DashboardPage() {
           tone: 'text-emerald-600 bg-emerald-50',
           href: '/contracts',
         },
-        {
-          title: 'Comissões a receber',
-          value: brl(data.commissionsReceivable.amount),
-          hint: plural(data.commissionsReceivable.count, 'comissão pendente', 'comissões pendentes'),
-          icon: ArrowDownCircle,
-          tone: 'text-teal-600 bg-teal-50',
-          href: '/commissions',
-        },
-        {
-          title: 'Comissões a pagar',
-          value: brl(data.commissionsPayable.amount),
-          hint: plural(data.commissionsPayable.count, 'pagamento pendente', 'pagamentos pendentes'),
-          icon: ArrowUpCircle,
-          tone: 'text-amber-600 bg-amber-50',
-          href: '/financial?tab=payable',
-        },
-        {
-          title: 'Saldo projetado (30 dias)',
-          value: brl(data.projectedBalance30d.amount),
-          hint:
-            data.projectedBalance30d.bankAccounts > 0
-              ? `Saldo em conta ${brl(data.projectedBalance30d.bankBalance)} + a receber ${brl(data.projectedBalance30d.receivable)} − a pagar ${brl(data.projectedBalance30d.payable)}`
-              : `Sem conta bancária cadastrada: a receber ${brl(data.projectedBalance30d.receivable)} − a pagar ${brl(data.projectedBalance30d.payable)}`,
-          icon: Wallet,
-          tone: data.projectedBalance30d.amount < 0 ? 'text-red-600 bg-red-50' : 'text-sky-600 bg-sky-50',
-          href: '/financial?tab=cashflow',
-        },
+        ...(data.scope === 'BROKER'
+          ? [{
+              title: 'Minhas comissões a receber',
+              value: brl(data.commissionsPayable.amount),
+              hint: plural(data.commissionsPayable.count, 'repasse pendente', 'repasses pendentes'),
+              icon: ArrowDownCircle,
+              tone: 'text-teal-600 bg-teal-50',
+              href: '/my-commissions',
+            }]
+          : []),
+        ...(data.commissionsReceivable
+          ? [{
+              title: 'Comissões a receber',
+              value: brl(data.commissionsReceivable.amount),
+              hint: plural(data.commissionsReceivable.count, 'comissão pendente', 'comissões pendentes'),
+              icon: ArrowDownCircle,
+              tone: 'text-teal-600 bg-teal-50',
+              href: '/commissions',
+            }, {
+              title: 'Comissões a pagar',
+              value: brl(data.commissionsPayable.amount),
+              hint: plural(data.commissionsPayable.count, 'pagamento pendente', 'pagamentos pendentes'),
+              icon: ArrowUpCircle,
+              tone: 'text-amber-600 bg-amber-50',
+              href: '/financial?tab=payable',
+            }]
+          : []),
+        ...(data.projectedBalance30d
+          ? [{
+              title: 'Saldo projetado (30 dias)',
+              value: brl(data.projectedBalance30d.amount),
+              hint:
+                data.projectedBalance30d.bankAccounts > 0
+                  ? `Saldo em conta ${brl(data.projectedBalance30d.bankBalance)} + a receber ${brl(data.projectedBalance30d.receivable)} − a pagar ${brl(data.projectedBalance30d.payable)}`
+                  : `Sem conta bancária cadastrada: a receber ${brl(data.projectedBalance30d.receivable)} − a pagar ${brl(data.projectedBalance30d.payable)}`,
+              icon: Wallet,
+              tone: data.projectedBalance30d.amount < 0 ? 'text-red-600 bg-red-50' : 'text-sky-600 bg-sky-50',
+              href: '/financial?tab=cashflow',
+            }]
+          : []),
       ]
     : [];
 

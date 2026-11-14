@@ -19,6 +19,9 @@ export interface WorkspaceMembership {
   id: string;
   workspaceId: string;
   isOwner: boolean;
+  // Fase 7: papel efetivo (definido pelo backend) e id do membro
+  roleKey?: 'ADMIN' | 'FINANCE' | 'MANAGER' | 'BROKER';
+  memberId?: string;
   workspace: {
     id: string;
     name: string;
