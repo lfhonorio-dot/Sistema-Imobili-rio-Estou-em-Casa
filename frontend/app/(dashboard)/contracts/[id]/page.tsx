@@ -1,6 +1,7 @@
 // Página de detalhe do contrato
 'use client';
 import { CommissionBreakdownCard } from '@/components/contracts/commission-breakdown-card';
+import { ActivateSaleDialog, PostSaleChecklist, RescindSaleDialog, SaleBanners } from '@/components/contracts/sale-panels';
 import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useState } from 'react';
@@ -73,6 +74,8 @@ export default function ContractDetailPage() {
   const [showInstallmentsDialog, setShowInstallmentsDialog] = useState(false);
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showActivate, setShowActivate] = useState(false);
+  const [showRescind, setShowRescind] = useState(false);
   const [signatureMessage, setSignatureMessage] = useState('');
   const [months, setMonths] = useState('12');
   const [loadingDoc, setLoadingDoc] = useState(false);
@@ -170,6 +173,7 @@ export default function ContractDetailPage() {
   if (!contract) return <div className="p-6">Contrato não encontrado</div>;
 
   const isRental = contract.type === 'RENTAL_RESIDENTIAL' || contract.type === 'RENTAL_COMMERCIAL';
+  const isSale = contract.type === 'SALE' || contract.type === 'BROKERAGE';
   const financialEntries = (contract as any).financialEntries ?? [];
   const commissions = (contract as any).commissions ?? [];
   const envelopes = (contract as any).signatureEnvelopes ?? [];
@@ -385,7 +389,18 @@ export default function ContractDetailPage() {
             </Dialog>
           )}
 
-          {/* Alterar Status */}
+          {/* Fase 4: venda tem ações próprias */}
+          {isSale && contract.status === 'DRAFT' && (
+            <Button size="sm" onClick={() => setShowActivate(true)}>Ativar venda</Button>
+          )}
+          {isSale && contract.status === 'ACTIVE' && (
+            <Button variant="outline" size="sm" className="text-destructive border-destructive" onClick={() => setShowRescind(true)}>
+              Rescindir venda
+            </Button>
+          )}
+
+          {/* Alterar Status (locação) */}
+          {!isSale && (
           <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">Alterar Status</Button>
@@ -409,6 +424,7 @@ export default function ContractDetailPage() {
               </div>
             </DialogContent>
           </Dialog>
+          )}
 
           {/* Excluir Contrato */}
           <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -439,11 +455,20 @@ export default function ContractDetailPage() {
         </div>
       </div>
 
+      {isSale && (
+        <>
+          <SaleBanners contract={contract as any} onActivate={() => setShowActivate(true)} />
+          <ActivateSaleDialog contract={contract as any} open={showActivate} onOpenChange={setShowActivate} />
+          <RescindSaleDialog contract={contract as any} open={showRescind} onOpenChange={setShowRescind} />
+        </>
+      )}
+
       <Tabs defaultValue="info">
         <TabsList>
           <TabsTrigger value="info">Informações</TabsTrigger>
           <TabsTrigger value="financial">Financeiro {financialEntries.length > 0 && `(${financialEntries.length})`}</TabsTrigger>
           <TabsTrigger value="commissions">Comissões</TabsTrigger>
+          {isSale && <TabsTrigger value="postsale">Pós-venda</TabsTrigger>}
           <TabsTrigger value="signatures">Assinaturas {envelopes.length > 0 && `(${envelopes.length})`}</TabsTrigger>
         </TabsList>
 
@@ -549,6 +574,12 @@ export default function ContractDetailPage() {
             </div>
           )}
         </TabsContent>
+
+        {isSale && (
+          <TabsContent value="postsale" className="mt-4">
+            <PostSaleChecklist contractId={id} active={contract.status === 'ACTIVE'} />
+          </TabsContent>
+        )}
 
         <TabsContent value="signatures" className="mt-4">
           {envelopes.length === 0 ? (

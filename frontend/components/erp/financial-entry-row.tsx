@@ -50,6 +50,7 @@ export function FinancialEntryRow({ entry, onPay, onGenerateBoleto, generatingBo
             {CATEGORY_LABELS[entry.category] ?? entry.category}
             {entry.supplier?.name ? ` · ${entry.supplier.name}` : ''}
           </p>
+          {entry.cancelReason && <p className="text-xs text-muted-foreground">Cancelado: {entry.cancelReason}</p>}
         </div>
       </td>
       <td className="py-3 px-4 text-sm text-muted-foreground">
