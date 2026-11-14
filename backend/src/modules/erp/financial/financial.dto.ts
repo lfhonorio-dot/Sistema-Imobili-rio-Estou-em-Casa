@@ -40,6 +40,11 @@ export class CreateFinancialEntryDto {
   @IsString()
   contactId?: string;
 
+  // Fase 2: fornecedor/favorecido (contas a pagar)
+  @IsOptional()
+  @IsString()
+  supplierId?: string;
+
   @IsOptional()
   @IsInt()
   installment?: number;

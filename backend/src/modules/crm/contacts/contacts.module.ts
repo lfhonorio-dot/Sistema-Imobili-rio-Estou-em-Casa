@@ -5,6 +5,7 @@ import { ContactsController } from './contacts.controller';
 import { ContactsService } from './contacts.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AuditModule } from '../../audit/audit.module';
+import { ContactInterestController, ContactInterestService } from './contact-interest';
 
 @Module({
   imports: [
@@ -12,8 +13,8 @@ import { AuditModule } from '../../audit/audit.module';
     AuditModule,
     MulterModule.register({ storage: require('multer').memoryStorage() }),
   ],
-  controllers: [ContactsController],
-  providers: [ContactsService],
+  controllers: [ContactInterestController, ContactsController],
+  providers: [ContactsService, ContactInterestService],
   exports: [ContactsService],
 })
 export class ContactsModule {}

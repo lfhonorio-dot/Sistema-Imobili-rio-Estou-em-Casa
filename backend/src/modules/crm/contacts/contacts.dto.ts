@@ -19,7 +19,12 @@ import { Type } from 'class-transformer';
 // Tipos válidos de contato
 const CONTACT_TYPES = ['PERSON', 'COMPANY'] as const;
 // Origens válidas de contato
-const ORIGINS = ['MANUAL', 'META_ADS', 'GOOGLE_ADS', 'PORTAL', 'WHATSAPP', 'SITE', 'REFERRAL'] as const;
+const ORIGINS = ['MANUAL', 'META_ADS', 'GOOGLE_ADS', 'PORTAL', 'WHATSAPP', 'SITE', 'REFERRAL', 'PLACA', 'OUTRO'] as const;
+
+export const MARITAL_STATUSES = ['SOLTEIRO', 'CASADO', 'UNIAO_ESTAVEL', 'DIVORCIADO', 'VIUVO', 'SEPARADO'];
+export const MARRIAGE_REGIMES = [
+  'COMUNHAO_PARCIAL', 'COMUNHAO_UNIVERSAL', 'SEPARACAO_TOTAL', 'SEPARACAO_OBRIGATORIA', 'PARTICIPACAO_FINAL',
+];
 
 export class CreateContactDto {
   @IsIn(CONTACT_TYPES)
@@ -95,6 +100,19 @@ export class CreateContactDto {
   @IsOptional()
   @IsBoolean()
   marketingConsent?: boolean;
+
+  // Fase 2: estado civil, regime de bens e cônjuge
+  @IsOptional()
+  @IsIn([...MARITAL_STATUSES, null])
+  maritalStatus?: string | null;
+
+  @IsOptional()
+  @IsIn([...MARRIAGE_REGIMES, null])
+  marriageRegime?: string | null;
+
+  @IsOptional()
+  @IsString()
+  spouseContactId?: string | null;
 
   @IsOptional()
   @IsIn(ORIGINS)
@@ -207,6 +225,19 @@ export class UpdateContactDto {
   @IsOptional()
   @IsBoolean()
   marketingConsent?: boolean;
+
+  // Fase 2: estado civil, regime de bens e cônjuge
+  @IsOptional()
+  @IsIn([...MARITAL_STATUSES, null])
+  maritalStatus?: string | null;
+
+  @IsOptional()
+  @IsIn([...MARRIAGE_REGIMES, null])
+  marriageRegime?: string | null;
+
+  @IsOptional()
+  @IsString()
+  spouseContactId?: string | null;
 
   @IsOptional()
   @IsIn(ORIGINS)
