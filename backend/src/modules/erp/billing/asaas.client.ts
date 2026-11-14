@@ -3,7 +3,7 @@
 // apiKey. Sem gateway, a emissão é recusada com mensagem clara (sem simulação).
 // Docs: https://docs.asaas.com — sandbox: https://api-sandbox.asaas.com
 
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { EncryptionService } from '../../../security/encryption.service';
 
@@ -64,15 +64,24 @@ export class AsaasClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const res = await fetch(`${this.baseUrl(creds.environment)}${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        access_token: creds.apiKey,
-        'User-Agent': 'EstouEmCasa/1.0',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl(creds.environment)}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          access_token: creds.apiKey,
+          'User-Agent': 'EstouEmCasa/1.0',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (err) {
+      // falha de rede/tempo: erro claro para o usuário (nada de "erro interno")
+      const cause = (err as { cause?: { code?: string } }).cause?.code ?? (err as Error).name;
+      this.logger.error(`Asaas ${method} ${path} sem resposta: ${cause}`);
+      throw new ServiceUnavailableException('Não foi possível falar com o Asaas agora (sem resposta do gateway). Nada foi alterado; tente de novo em alguns minutos.');
+    }
     const json = (await res.json().catch(() => ({}))) as any;
     if (!res.ok) {
       const msg =

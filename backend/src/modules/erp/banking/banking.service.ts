@@ -212,7 +212,7 @@ export class BankingService {
     const acc = await this.findOneAccount(workspaceId, accountId);
     const now = new Date();
     const from = q.from ? new Date(`${q.from.slice(0, 10)}T00:00:00Z`) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const to = q.to ? new Date(`${q.to.slice(0, 10)}T23:59:59Z`) : now;
+    const to = new Date(`${(q.to ?? now.toISOString()).slice(0, 10)}T23:59:59.999Z`); // até o fim do dia
     if (to < from) throw new BadRequestException('A data final é anterior à inicial.');
     const effFrom = acc.openingDate && acc.openingDate > from ? acc.openingDate : from;
     const opening = await this.computedBalance(acc, effFrom);
