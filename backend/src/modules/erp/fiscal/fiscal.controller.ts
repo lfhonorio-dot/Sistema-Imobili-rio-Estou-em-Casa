@@ -7,7 +7,7 @@ import { ApiTags, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { FiscalService } from './fiscal.service';
 import { DimobService } from './dimob.service';
 import {
-  SaveTaxConfigDto, EmitNfseDto, GenerateDimobDto, GenerateCarneLeaoDto,
+  SaveTaxConfigDto, GenerateDimobDto, GenerateCarneLeaoDto,
   DimobQueryDto, IrrfQueryDto, CarneLeaoQueryDto,
 } from './fiscal.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -70,40 +70,10 @@ export class FiscalController {
   }
 
   // ── NFS-e ─────────────────────────────────────────────────
-
-  @Get('nfse')
-  findNfse(
-    @Headers('x-workspace-id') workspaceId: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.service.findNfse(workspaceId, page, limit);
-  }
-
-  @Post('nfse')
-  emitNfse(
-    @Headers('x-workspace-id') workspaceId: string,
-    @Body() dto: EmitNfseDto,
-  ) {
-    return this.service.emitNfse(workspaceId, dto);
-  }
-
-  // Consulta/atualiza status da NFS-e na prefeitura (Focus NFe)
-  @Get('nfse/:id/status')
-  checkNfseStatus(
-    @Headers('x-workspace-id') workspaceId: string,
-    @Param('id') id: string,
-  ) {
-    return this.service.checkNfseStatus(workspaceId, id);
-  }
-
-  @Delete('nfse/:id')
-  cancelNfse(
-    @Headers('x-workspace-id') workspaceId: string,
-    @Param('id') id: string,
-  ) {
-    return this.service.cancelNfse(workspaceId, id);
-  }
+  // Fase 6: emissão, consulta e cancelamento foram para o módulo NFS-e
+  // (/nfse), com o provedor SIL Tecnologia (Franca). As rotas antigas daqui
+  // (Focus NFe e um "cancelar" que só mudava o status sem ir à prefeitura)
+  // foram removidas.
 
   // ── IRRF ──────────────────────────────────────────────────
 

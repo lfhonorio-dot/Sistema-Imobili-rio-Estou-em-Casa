@@ -1339,6 +1339,36 @@ model TaxConfig {
   nfseLogin           String?
   nfsePassword        String?  // criptografada
   nfseEnvironment     String   @default("HOMOLOG")
+  // Fase 6 — NFS-e (SIL Tecnologia / ABRASF 2.04, Franca-SP)
+  codigoMunicipioIbge      String   @default("3516200") // Franca
+  itemListaServico         String?  // LC 116 (ex.: 10.05)
+  codigoTributacaoMunicipio String?
+  cnae                     String?
+  exigibilidadeIss         Int      @default(1)        // 1 = exigível
+  regimeEspecialTributacao Int?
+  optanteSimples           Boolean  @default(false)
+  incentivoFiscal          Boolean  @default(false)
+  razaoSocial              String?
+  rpsSerie                 String   @default("1")
+  rpsNextNumber            Int      @default(1)
+  retentionsEnabled        Boolean  @default(true)     // retenções quando o tomador é PJ
+  retIrPct                 Decimal  @default(1.5)  @db.Decimal(7, 4)
+  retPisPct                Decimal  @default(0.65) @db.Decimal(7, 4)
+  retCofinsPct             Decimal  @default(3)    @db.Decimal(7, 4)
+  retCsllPct               Decimal  @default(1)    @db.Decimal(7, 4)
+  retMinAmount             Decimal  @default(10)   @db.Decimal(15, 2) // abaixo disso não retém
+  retainIssWhenPj          Boolean  @default(false)
+  autoIssueOnReceipt       Boolean  @default(false)
+  autoIssueSince           DateTime?
+  nfseWsUrlHomolog         String?
+  nfseWsUrlProd            String?
+  nfseSoapNamespace        String   @default("http://nfse.abrasf.org.br")
+  certPfxEnc               String?  @db.Text // certificado A1 (.pfx) criptografado
+  certPasswordEnc          String?
+  certSubject              String?
+  certValidUntil           DateTime?
+  productionAuthorizedAt   DateTime? // dono autorizou notas reais
+  productionAuthorizedById String?
   updatedAt           DateTime @updatedAt
   workspace           Workspace @relation(fields: [workspaceId], references: [id])
 
@@ -1369,11 +1399,42 @@ model NfseRecord {
   pdfUrl          String?
   gatewayResponse Json     @default("{}")
   retryCount      Int      @default(0)
+  // Fase 6
+  provider         String?   // SIL_ABRASF24
+  environment      String?   // HOMOLOG, PRODUCTION
+  rpsSerie         String?
+  rpsNumber        Int?
+  takerType        String?   // PF, PJ
+  takerEmail       String?
+  takerContactId   String?
+  competence       DateTime?
+  baseAmount       Decimal?  @db.Decimal(15, 2)
+  issDue           Decimal?  @db.Decimal(15, 2)
+  irRetained       Decimal   @default(0) @db.Decimal(15, 2)
+  pisRetained      Decimal   @default(0) @db.Decimal(15, 2)
+  cofinsRetained   Decimal   @default(0) @db.Decimal(15, 2)
+  csllRetained     Decimal   @default(0) @db.Decimal(15, 2)
+  issRetainedAmount Decimal  @default(0) @db.Decimal(15, 2)
+  totalRetained    Decimal   @default(0) @db.Decimal(15, 2)
+  netAmount        Decimal?  @db.Decimal(15, 2)
+  rejectionReason  String?   @db.Text
+  nextAttemptAt    DateTime?
+  lastAttemptAt    DateTime?
+  xmlFileId        String?
+  pdfFileId        String?
+  autoIssued       Boolean   @default(false)
+  retentionPaymentId String?
+  retentionWarning String?
+  emailedAt        DateTime?
+  cancelCode       String?
+  createdById      String?
   deletedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   workspace       Workspace @relation(fields: [workspaceId], references: [id])
 
+  @@unique([workspaceId, rpsSerie, rpsNumber])
+  @@index([status, nextAttemptAt])
   @@map("nfse_records")
 }
 

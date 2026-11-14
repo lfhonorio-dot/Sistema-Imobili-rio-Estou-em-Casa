@@ -109,7 +109,7 @@ export class EmailService {
     // Falha de SMTP é propagada para o chamador decidir (não engolir silenciosamente).
     // Sem isso, status de envio (ex.: assinatura SENT) ficava sempre verde sem entrega real.
     try {
-      await this.transporter.sendMail({ from, to: dto.to, subject, html: body });
+      await this.transporter.sendMail({ from, to: dto.to, subject, html: body, ...(dto.attachments?.length && { attachments: dto.attachments }) });
     } catch (err) {
       console.error('Falha ao enviar email (SMTP):', (err as Error).message);
       throw new ServiceUnavailableException(

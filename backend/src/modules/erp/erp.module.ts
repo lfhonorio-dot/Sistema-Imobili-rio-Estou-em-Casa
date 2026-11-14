@@ -13,6 +13,7 @@ import { BillingModule } from './billing/billing.module';
 import { SplitModule } from './split/split.module';
 import { BankingModule } from './banking/banking.module';
 import { FiscalModule } from './fiscal/fiscal.module';
+import { NfseModule } from './nfse/nfse.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { FiscalModule } from './fiscal/fiscal.module';
     SplitModule,
     BankingModule,
     FiscalModule,
+    NfseModule,
   ],
   exports: [
     PropertiesModule,
@@ -40,6 +42,7 @@ import { FiscalModule } from './fiscal/fiscal.module';
     SplitModule,
     BankingModule,
     FiscalModule,
+    NfseModule,
   ],
 })
 export class ErpModule {}
