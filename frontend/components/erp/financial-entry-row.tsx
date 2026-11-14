@@ -46,7 +46,10 @@ export function FinancialEntryRow({ entry, onPay, onGenerateBoleto, generatingBo
       <td className="py-3 px-4 text-sm">
         <div>
           <p className="font-medium">{entry.description}</p>
-          <p className="text-xs text-muted-foreground">{CATEGORY_LABELS[entry.category] ?? entry.category}</p>
+          <p className="text-xs text-muted-foreground">
+            {CATEGORY_LABELS[entry.category] ?? entry.category}
+            {entry.supplier?.name ? ` · ${entry.supplier.name}` : ''}
+          </p>
         </div>
       </td>
       <td className="py-3 px-4 text-sm text-muted-foreground">

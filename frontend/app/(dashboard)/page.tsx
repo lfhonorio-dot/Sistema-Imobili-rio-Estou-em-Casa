@@ -15,6 +15,7 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/common/error-state';
+import { ExpiringAuthorizationsAlert } from '@/components/properties/expiring-authorizations-alert';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSalesDashboard } from '@/hooks/use-reports';
 
@@ -132,6 +133,10 @@ export default function DashboardPage() {
           {currentWorkspace?.workspace.name && (
             <p className="text-sm text-muted-foreground mt-1">{currentWorkspace.workspace.name}</p>
           )}
+        </div>
+
+        <div className="mb-4">
+          <ExpiringAuthorizationsAlert compact />
         </div>
 
         {isError ? (

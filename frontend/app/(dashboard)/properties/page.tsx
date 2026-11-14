@@ -4,6 +4,7 @@ import { ErrorState } from '@/components/common/error-state';
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { ExpiringAuthorizationsAlert } from '@/components/properties/expiring-authorizations-alert';
 import { Plus, Search, LayoutGrid, List } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -122,6 +123,8 @@ export default function PropertiesPage() {
           </button>
         </div>
       </div>
+
+      <ExpiringAuthorizationsAlert />
 
       {/* Conteúdo */}
       {isLoading ? (

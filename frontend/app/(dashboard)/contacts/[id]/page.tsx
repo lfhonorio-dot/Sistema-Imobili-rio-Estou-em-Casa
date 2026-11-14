@@ -15,6 +15,17 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { InterestProfilePanel, MatchingPropertiesPanel } from '@/components/contacts/interest-profile-panel';
+
+const MARITAL_LABELS: Record<string, string> = {
+  SOLTEIRO: 'Solteiro(a)', CASADO: 'Casado(a)', UNIAO_ESTAVEL: 'União estável',
+  DIVORCIADO: 'Divorciado(a)', VIUVO: 'Viúvo(a)', SEPARADO: 'Separado(a)',
+};
+const REGIME_LABELS: Record<string, string> = {
+  COMUNHAO_PARCIAL: 'comunhão parcial', COMUNHAO_UNIVERSAL: 'comunhão universal',
+  SEPARACAO_TOTAL: 'separação total', SEPARACAO_OBRIGATORIA: 'separação obrigatória',
+  PARTICIPACAO_FINAL: 'participação final nos aquestos',
+};
 import { ActivityFeed } from '@/components/crm/activity-feed';
 import { TaskForm } from '@/components/crm/task-form';
 import { ContactForm } from '@/components/crm/contact-form';
@@ -143,6 +154,29 @@ export default function ContactDetailPage() {
                   <span>{contact.city}{contact.state ? `, ${contact.state}` : ''}</span>
                 </div>
               )}
+              {contact.maritalStatus && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Estado civil: </span>
+                  {MARITAL_LABELS[contact.maritalStatus] ?? contact.maritalStatus}
+                  {contact.marriageRegime && ` — ${REGIME_LABELS[contact.marriageRegime] ?? contact.marriageRegime}`}
+                </div>
+              )}
+              {(contact.maritalStatus === 'CASADO' || contact.maritalStatus === 'UNIAO_ESTAVEL') && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Cônjuge: </span>
+                  {contact.spouse ? (
+                    <Link href={`/contacts/${contact.spouse.id}`} className="hover:underline">{contact.spouse.name}</Link>
+                  ) : (
+                    <span className="text-amber-700">não cadastrado</span>
+                  )}
+                </div>
+              )}
+              <div className="text-xs text-muted-foreground">
+                Consentimento de marketing (LGPD):{' '}
+                {contact.marketingConsent
+                  ? `sim${contact.marketingConsentAt ? `, desde ${new Date(contact.marketingConsentAt).toLocaleDateString('pt-BR')}` : ''}`
+                  : 'não'}
+              </div>
               {contact.companyName && (
                 <div className="flex items-center gap-2 text-sm">
                   <Building className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -211,7 +245,8 @@ export default function ContactDetailPage() {
           <Tabs defaultValue="timeline">
             <TabsList>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              <TabsTrigger value="documents">Documentos</TabsTrigger>
+              <TabsTrigger value="interest">Perfil de interesse</TabsTrigger>
+              <TabsTrigger value="matching">Imóveis compatíveis</TabsTrigger>
             </TabsList>
             <TabsContent value="timeline" className="mt-4">
               <ActivityFeed
@@ -219,10 +254,11 @@ export default function ContactDetailPage() {
                 contactId={id}
               />
             </TabsContent>
-            <TabsContent value="documents" className="mt-4">
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                Funcionalidade de documentos em desenvolvimento
-              </div>
+            <TabsContent value="interest" className="mt-4">
+              <InterestProfilePanel contactId={id} />
+            </TabsContent>
+            <TabsContent value="matching" className="mt-4">
+              <MatchingPropertiesPanel contactId={id} />
             </TabsContent>
           </Tabs>
         </div>
