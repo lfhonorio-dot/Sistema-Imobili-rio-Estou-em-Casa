@@ -747,6 +747,18 @@ model Contract {
   splitRules       SplitRule[]
   // Fase 3: negócio (funil) que originou o contrato
   dealId           String?
+  // Fase 4: ativação da venda (comissão, pagamento em espécie) e rescisão
+  activatedAt      DateTime?
+  commissionAmount Decimal?  @db.Decimal(15, 2) // comissão total da imobiliária combinada
+  commissionPayerId String?  // Contact id de quem paga a comissão
+  cashInvolved     Boolean   @default(false)   // operação com pagamento em espécie
+  cashAmount       Decimal?  @db.Decimal(15, 2)
+  cashReviewStatus String?   // PENDING_REVIEW, REVIEWED
+  cashReviewNote   String?
+  cashReviewedById String?
+  cashReviewedAt   DateTime?
+  rescindedAt      DateTime?
+  rescissionReason String?
 
   @@unique([workspaceId, code])
   @@map("contracts")
@@ -777,6 +789,11 @@ model FinancialEntry {
   contract          Contract?  @relation(fields: [contractId], references: [id])
   boleto            Boleto?
   supplierId        String?   // Fase 2: fornecedor/favorecido (contas a pagar)
+  // Fase 4
+  beneficiaryUserId String?   // WorkspaceUser id do corretor que recebe (comissão a pagar)
+  sourceEntryId     String?   // lançamento de origem (parcela da comissão / estorno)
+  cancelledAt       DateTime?
+  cancelReason      String?
 
   @@map("financial_entries")
 }
@@ -1393,6 +1410,7 @@ model DimobRecord {
   exportedAt   DateTime?
   exportHash   String?
   createdAt    DateTime @default(now())
+  deletedAt    DateTime? // Fase 4: rescisão marca como removido (não apaga)
   updatedAt    DateTime @updatedAt
   workspace    Workspace @relation(fields: [workspaceId], references: [id])
 
@@ -1893,4 +1911,31 @@ model Proposal {
 
   @@index([workspaceId, dealId])
   @@map("proposals")
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FASE 4 — Pós-venda (tabela nova)
+// ══════════════════════════════════════════════════════════════════
+
+// Checklist de pós-venda por contrato (documentos, crédito, ITBI, escritura,
+// registro, chaves), com responsável e prazo.
+model ContractChecklistItem {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  contractId    String
+  key           String    // DOCS_PARTIES, CREDIT_APPROVAL, BANK_APPRAISAL, ITBI, DEED, REGISTRY, KEYS, CUSTOM
+  title         String
+  order         Int       @default(0)
+  responsibleId String?   // WorkspaceUser id
+  dueDate       DateTime?
+  status        String    @default("PENDING") // PENDING, DONE, NOT_APPLICABLE, CANCELLED
+  doneAt        DateTime?
+  doneById      String?
+  notes         String?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workspaceId, contractId])
+  @@map("contract_checklist_items")
 }

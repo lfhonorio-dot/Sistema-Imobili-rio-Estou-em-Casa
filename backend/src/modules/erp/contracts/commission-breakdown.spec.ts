@@ -65,3 +65,17 @@ describe('calcCommissionBreakdown', () => {
     expect(r.agencyPercentage).toBe(100);
   });
 });
+
+describe('calcCommissionBreakdown com comissão combinada (Fase 4)', () => {
+  it('usa a comissão combinada na ativação em vez de valor × taxa', () => {
+    const r = calcCommissionBreakdown({
+      baseValue: 400000,
+      commissionRate: 6,
+      commissionTotalOverride: 20000,
+      partners: [{ recipientId: 'r1', name: 'A', type: 'PERCENTAGE', value: 25 }],
+    });
+    expect(r.commissionTotal).toBe(20000);
+    expect(r.partners[0].amount).toBe(5000);
+    expect(r.agencyAmount).toBe(15000);
+  });
+});

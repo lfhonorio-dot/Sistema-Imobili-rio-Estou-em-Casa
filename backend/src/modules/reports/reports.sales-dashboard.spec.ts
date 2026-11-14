@@ -20,6 +20,7 @@ function makePrisma() {
     commission: { aggregate: jest.fn().mockResolvedValue(agg({ amount: new DecimalStub('25200.00') }, 2)) },
     splitTransaction: { aggregate: jest.fn().mockResolvedValue(agg({ amount: new DecimalStub('1000.00') }, 1)) },
     bankAccount: { aggregate: jest.fn().mockResolvedValue(agg({ balance: new DecimalStub('10000.50') }, 2)) },
+    proposal: { count: jest.fn().mockResolvedValue(2) },
     financialEntry: {
       aggregate: jest
         .fn()
@@ -28,7 +29,9 @@ function makePrisma() {
         // 2ª: a receber em 30 dias
         .mockResolvedValueOnce(agg({ amount: new DecimalStub('8000.25') }))
         // 3ª: a pagar em 30 dias
-        .mockResolvedValueOnce(agg({ amount: new DecimalStub('5000.00') })),
+        .mockResolvedValueOnce(agg({ amount: new DecimalStub('5000.00') }))
+        // 4ª: comissão a receber em parcelas (Fase 4)
+        .mockResolvedValueOnce(agg({ amount: new DecimalStub('11700.00') }, 1)),
     },
   };
 }
@@ -47,17 +50,31 @@ describe('ReportsService.getSalesDashboard', () => {
     expect(r.visitsThisWeek).toEqual({ total: 5, done: 2 });
     expect(r.vgvInNegotiation).toEqual({ amount: 950000, deals: 3 });
     expect(r.salesThisMonth).toEqual({ amount: 420000, count: 1 });
-    expect(r.commissionsReceivable).toEqual({ amount: 25200, count: 2 });
+    // comissão a receber = modelo antigo (sem parcelas) + parcelas lançadas na ativação
+    expect(r.commissionsReceivable).toEqual({ amount: 36900, count: 3 });
     // comissão a pagar = lançamentos PAYABLE de comissão + repasses a parceiros pendentes
     expect(r.commissionsPayable).toEqual({ amount: 4000, count: 3 });
     // saldo projetado = saldo bancário + a receber 30d - a pagar 30d
     expect(r.projectedBalance30d.amount).toBe(13000.75);
   });
 
-  it('não inventa propostas: o indicador volta marcado como indisponível', async () => {
-    const service = new ReportsService(makePrisma() as any);
+  it('propostas em aberto: conta só as abertas e dentro da validade (Fase 3)', async () => {
+    const prisma = makePrisma();
+    const service = new ReportsService(prisma as any);
     const r = await service.getSalesDashboard('ws-1', now);
-    expect(r.openProposals).toEqual({ available: false, count: null });
+    expect(r.openProposals).toEqual({ available: true, count: 2 });
+    const where = prisma.proposal.count.mock.calls[0][0].where;
+    expect(where).toMatchObject({ workspaceId: 'ws-1', status: 'OPEN', deletedAt: null });
+    expect(where.validUntil.gte).toBeInstanceOf(Date);
+  });
+
+  it('vendas do mês contam pela data de ativação (Fase 4)', async () => {
+    const prisma = makePrisma();
+    const service = new ReportsService(prisma as any);
+    await service.getSalesDashboard('ws-1', now);
+    const where = prisma.contract.aggregate.mock.calls[0][0].where;
+    expect(where.OR[0].activatedAt.gte).toBeInstanceOf(Date);
+    expect(where.OR[1]).toMatchObject({ activatedAt: null });
   });
 
   it('a semana vai de segunda 00:00 a domingo 23:59', async () => {
@@ -87,8 +104,9 @@ describe('ReportsService.getSalesDashboard', () => {
       ...prisma.splitTransaction.aggregate.mock.calls,
       ...prisma.bankAccount.aggregate.mock.calls,
       ...prisma.financialEntry.aggregate.mock.calls,
+      ...prisma.proposal.count.mock.calls,
     ];
-    expect(calls.length).toBe(11);
+    expect(calls.length).toBe(13);
     for (const [args] of calls) {
       expect(args.where.workspaceId).toBe('ws-1');
     }

@@ -1,6 +1,9 @@
 // Serviço de registro de eventos DIMOB por declarante (rateio PJ/PF) e exportação.
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+
+type Db = PrismaService | Prisma.TransactionClient;
 import { computeDimobDeclarants, PartnerShareInput } from './dimob.calc';
 import { buildPgdFile, PgdRentalYear, PgdSaleEvent } from './dimob.pgd';
 
@@ -10,8 +13,8 @@ export class DimobService {
 
   constructor(private prisma: PrismaService) {}
 
-  private async loadContext(workspaceId: string, contractId: string) {
-    const contract = await this.prisma.contract.findFirst({
+  private async loadContext(workspaceId: string, contractId: string, db: Db = this.prisma) {
+    const contract = await db.contract.findFirst({
       where: { id: contractId, workspaceId, deletedAt: null },
       include: {
         property: { select: { street: true, number: true, city: true, state: true } },
@@ -25,7 +28,7 @@ export class DimobService {
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
 
-    const workspace = await this.prisma.workspace.findUnique({
+    const workspace = await db.workspace.findUnique({
       where: { id: workspaceId },
       select: { name: true, cnpj: true },
     });
@@ -43,26 +46,36 @@ export class DimobService {
   // Remove os registros DIMOB de um contrato — usado quando o contrato de
   // venda/intermediação é cancelado ou rescindido. Sem isso, uma venda
   // desfeita continuava aparecendo pra sempre na declaração anual.
-  async removeContractEvents(workspaceId: string, contractId: string) {
-    const result = await this.prisma.dimobRecord.deleteMany({ where: { workspaceId, contractId } });
+  // Fase 4: não apaga mais — marca como removido (deletedAt), e pode rodar
+  // dentro da transação da rescisão.
+  async removeContractEvents(workspaceId: string, contractId: string, db: Db = this.prisma) {
+    const result = await db.dimobRecord.updateMany({
+      where: { workspaceId, contractId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
     this.logger.log(`DIMOB removido: contrato=${contractId} registros=${result.count}`);
     return { removed: result.count };
   }
 
   // Registra os eventos DIMOB de um contrato de VENDA ou INTERMEDIAÇÃO
   // (data do evento = contratação/assinatura, não o recebimento).
-  async registerSaleEvents(workspaceId: string, contractId: string) {
-    const { contract, workspace, partners } = await this.loadContext(workspaceId, contractId);
+  // Fase 4: aceita a transação da ativação, a comissão combinada e a data do evento.
+  async registerSaleEvents(
+    workspaceId: string,
+    contractId: string,
+    opts: { db?: Db; commissionTotal?: number; eventDate?: Date } = {},
+  ) {
+    const db = opts.db ?? this.prisma;
+    const { contract, workspace, partners } = await this.loadContext(workspaceId, contractId, db);
     if (contract.type !== 'SALE' && contract.type !== 'BROKERAGE') {
       return { created: 0, reason: 'not a sale/brokerage contract' };
     }
     const dimobType = contract.type === 'BROKERAGE' ? 'INTERMEDIACAO' : 'VENDA';
 
     const saleValue = Number(contract.saleValue ?? 0);
-    const commissionTotal = contract.commissionRate
-      ? (saleValue * Number(contract.commissionRate)) / 100
-      : 0;
-    const eventDate = contract.startDate ?? contract.createdAt;
+    const commissionTotal = opts.commissionTotal ??
+      (contract.commissionRate ? (saleValue * Number(contract.commissionRate)) / 100 : 0);
+    const eventDate = opts.eventDate ?? contract.startDate ?? contract.createdAt;
     const year = new Date(eventDate).getFullYear();
 
     const declarants = computeDimobDeclarants(
@@ -76,12 +89,12 @@ export class DimobService {
     const seller = contract.owner as any;
     const buyer = contract.tenant as any;
 
-    // Idempotência: remove registros anteriores deste contrato antes de recriar
-    await this.prisma.dimobRecord.deleteMany({ where: { workspaceId, contractId } });
+    // Idempotência: marca os registros anteriores deste contrato como removidos
+    await db.dimobRecord.updateMany({ where: { workspaceId, contractId, deletedAt: null }, data: { deletedAt: new Date() } });
 
     let created = 0;
     for (const d of declarants) {
-      await this.prisma.dimobRecord.create({
+      await db.dimobRecord.create({
         data: {
           workspaceId,
           year,
@@ -128,7 +141,10 @@ export class DimobService {
     const locatario = contract.tenant as any;
 
     // Idempotência por contrato+mês+ano
-    await this.prisma.dimobRecord.deleteMany({ where: { workspaceId, contractId, year, referenceMonth: month } });
+    await this.prisma.dimobRecord.updateMany({
+      where: { workspaceId, contractId, year, referenceMonth: month, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
 
     let created = 0;
     for (const d of declarants) {
@@ -162,7 +178,7 @@ export class DimobService {
   // Agrega os eventos por declarante (CNPJ) e ano-calendário para exportação DIMOB.
   async exportDimob(workspaceId: string, year: number, declarantDoc?: string) {
     const records = await this.prisma.dimobRecord.findMany({
-      where: { workspaceId, year, ...(declarantDoc && { declarantDoc }) },
+      where: { workspaceId, year, deletedAt: null, ...(declarantDoc && { declarantDoc }) },
       orderBy: [{ declarantDoc: 'asc' }, { referenceMonth: 'asc' }],
     });
 
@@ -206,7 +222,7 @@ export class DimobService {
   // Gera o arquivo TXT de importação do PGD DIMOB para um declarante/ano.
   async generatePgdFile(workspaceId: string, year: number, declarantDoc: string) {
     const records = await this.prisma.dimobRecord.findMany({
-      where: { workspaceId, year, declarantDoc },
+      where: { workspaceId, year, declarantDoc, deletedAt: null },
       orderBy: [{ contractId: 'asc' }, { referenceMonth: 'asc' }],
     });
     if (records.length === 0) {

@@ -144,6 +144,7 @@ export class ContractsService {
         baseValue,
         commissionRate: Number(contract.commissionRate),
         receivedValue: received ? Number(received.receivedValue) : null,
+        commissionTotalOverride: contract.commissionAmount != null ? Number(contract.commissionAmount) : null,
         partners: rules.map((r) => ({
           recipientId: r.recipientId,
           name: r.recipient?.name ?? 'Parceiro',
@@ -344,45 +345,14 @@ export class ContractsService {
           },
         });
 
-        // Lançamento financeiro para contratos de venda (atômico)
-        if (created.type === 'SALE' && created.saleValue) {
-          await tx.financialEntry.create({
-            data: {
-              workspaceId,
-              type: 'RECEIVABLE',
-              category: 'SALE',
-              description: `Compra e venda — ${(created.property as any)?.code ?? created.propertyId}`,
-              amount: created.saleValue,
-              dueDate: created.startDate ?? new Date(),
-              status: 'PENDING',
-              contractId: created.id,
-              contactId: created.tenantId ?? undefined,
-            },
-          });
-        }
+        // Fase 4: contrato de VENDA/INTERMEDIAÇÃO nasce rascunho e SEM
+        // lançamentos. Antes, "Compra e Venda" lançava a receber o valor
+        // inteiro do imóvel (dinheiro que não passa pela imobiliária). Agora
+        // tudo (comissão a receber, comissões a pagar, imóvel vendido, DIMOB)
+        // acontece de uma vez na ativação da venda — SaleLifecycleService.
 
-        // Intermediação: contas a receber da COMISSÃO TOTAL (o valor da
-        // negociação não transita pela imobiliária, apenas a comissão)
-        if (created.type === 'BROKERAGE' && created.saleValue && created.commissionRate) {
-          const brokerageCommission =
-            (Number(created.saleValue) * Number(created.commissionRate)) / 100;
-          await tx.financialEntry.create({
-            data: {
-              workspaceId,
-              type: 'RECEIVABLE',
-              category: 'COMMISSION',
-              description: `Comissão de intermediação — ${(created.property as any)?.code ?? created.propertyId}`,
-              amount: brokerageCommission,
-              dueDate: created.startDate ?? new Date(),
-              status: 'PENDING',
-              contractId: created.id,
-              contactId: created.ownerId ?? undefined,
-            },
-          });
-        }
-
-        // Comissão se taxa definida (atômico)
-        if (created.commissionRate) {
+        // Comissão (só locação; na venda o plano de comissão é feito na ativação)
+        if (created.commissionRate && !isSaleType) {
           const baseValue = created.saleValue ?? created.rentalValue;
           if (baseValue) {
             const commissionAmount = (Number(baseValue) * Number(created.commissionRate)) / 100;
@@ -486,14 +456,8 @@ export class ContractsService {
     // timeout que gerava contrato duplicado.
     void this.autoGenerateBoletos(workspaceId, contract.id);
 
-    // Registra os eventos DIMOB (venda/intermediação: na data de assinatura) — não bloqueia
-    if (contract.type === 'SALE' || contract.type === 'BROKERAGE') {
-      try {
-        await this.dimobService.registerSaleEvents(workspaceId, contract.id);
-      } catch (e) {
-        console.error('[ContractsService] Erro ao registrar eventos DIMOB:', e);
-      }
-    }
+    // Fase 4: a DIMOB da venda é registrada na ativação, dentro da mesma
+    // transação (antes era aqui, fora de transação, e um erro só ia para o log).
 
     await this.auditService.log({
       workspaceId,
@@ -889,6 +853,15 @@ export class ContractsService {
     const isRentalType = existing.type === 'RENTAL_RESIDENTIAL' || existing.type === 'RENTAL_COMMERCIAL';
     const becomingActive = dto.status === 'ACTIVE' && existing.status !== 'ACTIVE';
     const leavingActive = existing.status === 'ACTIVE' && (dto.status === 'TERMINATED' || dto.status === 'RESCINDED');
+
+    // Fase 4: venda tem fluxo próprio — ativar gera comissões e marca o
+    // imóvel vendido de uma vez; rescindir estorna tudo de forma rastreável.
+    if (isSaleType && becomingActive) {
+      throw new BadRequestException('Para ativar um contrato de venda, use o botão "Ativar venda" no contrato.');
+    }
+    if (isSaleType && leavingActive) {
+      throw new BadRequestException('Para desfazer uma venda ativa, use o botão "Rescindir venda" no contrato (o motivo é obrigatório).');
+    }
 
     // Ao ativar um contrato de venda para um imóvel já vendido (ou de locação
     // para um já alugado), bloqueia — mesma checagem de create(), necessária
