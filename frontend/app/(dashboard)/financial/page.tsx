@@ -1,7 +1,9 @@
 // Dashboard Financeiro - DRE, lançamentos, comissões
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { TrendingUp, TrendingDown, AlertTriangle, DollarSign, Copy, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,11 +47,28 @@ function openHtmlInNewTab(html: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+const FINANCIAL_TABS = ['receivable', 'payable', 'overdue', 'commissions', 'cashflow'];
+
+// A aba ativa vem do endereço (?tab=), para o menu abrir direto em
+// "A Receber", "A Pagar" ou "Fluxo de Caixa".
 export default function FinancialPage() {
+  return (
+    <Suspense fallback={null}>
+      <FinancialPageContent />
+    </Suspense>
+  );
+}
+
+function FinancialPageContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [receivablePage, setReceivablePage] = useState(1);
   const [payablePage, setPayablePage] = useState(1);
   const [commissionStatus, setCommissionStatus] = useState('ALL');
-  const [tab, setTab] = useState('receivable');
+  const tabParam = searchParams.get('tab');
+  const tab = tabParam && FINANCIAL_TABS.includes(tabParam) ? tabParam : 'receivable';
+  const setTab = (t: string) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
   // Guarda o tipo pré-selecionado do lançamento manual (null = modal fechado)
   const [newEntryType, setNewEntryType] = useState<'RECEIVABLE' | 'PAYABLE' | null>(null);
 
@@ -78,8 +97,8 @@ export default function FinancialPage() {
     setReceiptId(id);
     try {
       openHtmlInNewTab(await fetchCommissionReceiptHtml(id));
-    } catch {
-      toast.error('Erro ao gerar o recibo.');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao gerar o recibo.'));
     } finally {
       setReceiptId(null);
     }
@@ -503,7 +522,7 @@ export default function FinancialPage() {
               )}
 
               <p className="text-center text-xs text-gray-400">
-                Boleto em modo simulado. Configure um gateway (EFÍ/ASAAS) no Railway para emissão bancária real.
+                Boleto registrado no Asaas. Envie a linha digitável ou o PIX ao pagador.
               </p>
             </div>
           </div>

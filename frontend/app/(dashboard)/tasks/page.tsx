@@ -1,5 +1,6 @@
 // Página de Tarefas e Calendário
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useState } from 'react';
 import { CheckSquare, Calendar, Plus } from 'lucide-react';
@@ -55,8 +56,8 @@ export default function TasksPage() {
     try {
       await markDone.mutateAsync(id);
       toast.success('Tarefa concluída');
-    } catch {
-      toast.error('Erro ao marcar tarefa');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao marcar tarefa'));
     }
   };
 

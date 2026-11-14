@@ -1,5 +1,6 @@
 // Tela de Comissões — listagem, resumo e marcação de recebimento
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useMemo, useState } from 'react';
 import { Percent, TrendingUp, Clock, X } from 'lucide-react';
@@ -45,8 +46,8 @@ export default function CommissionsPage() {
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch {
-      toast.error('Erro ao gerar o recibo da comissão.');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao gerar o recibo da comissão.'));
     } finally {
       setReceiptId(null);
     }

@@ -67,8 +67,23 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      // Atualiza dados do usuário
-      setUser: (user) => set({ user }),
+      // Atualiza dados do usuário (vindo do /auth/me) e recalcula o workspace
+      // atual — o currentWorkspace não é persistido, então depois de recarregar
+      // a página ele só existe se for reconstruído aqui.
+      setUser: (user) => {
+        const { currentWorkspaceId } = get();
+        const memberships = user.workspaces ?? [];
+        const current =
+          memberships.find((w) => w.workspaceId === currentWorkspaceId) ?? memberships[0] ?? null;
+        if (current && current.workspaceId !== currentWorkspaceId) {
+          storeWorkspaceId(current.workspaceId);
+        }
+        set({
+          user,
+          currentWorkspaceId: current?.workspaceId ?? currentWorkspaceId,
+          currentWorkspace: current,
+        });
+      },
 
       // Troca o workspace ativo
       setCurrentWorkspace: (workspaceId) => {

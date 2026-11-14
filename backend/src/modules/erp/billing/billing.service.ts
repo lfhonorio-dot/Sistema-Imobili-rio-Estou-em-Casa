@@ -10,6 +10,10 @@ import {
   UploadCnabDto, GenerateCnabRemessaDto,
 } from './billing.dto';
 
+export const BOLETO_UNAVAILABLE_MESSAGE =
+  'Emissão de boleto não disponível: nenhum gateway de pagamento Asaas ativo está configurado. ' +
+  'Cadastre o Asaas em Boletos e PIX → Gateways, ou registre o recebimento manualmente.';
+
 @Injectable()
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
@@ -99,6 +103,12 @@ export class BillingService {
       : await this.prisma.paymentGatewayConfig.findFirst({
           where: { workspaceId, isDefault: true, deletedAt: null },
         });
+
+    // Só o Asaas tem emissão real implementada. Sem ele, recusa logo de cara
+    // com mensagem clara (antes caía num boleto simulado com dados falsos).
+    if (!gateway || gateway.provider !== 'ASAAS' || !gateway.isActive) {
+      throw new BadRequestException(BOLETO_UNAVAILABLE_MESSAGE);
+    }
 
     // Deriva amount/dueDate/contato do lançamento financeiro quando não informados
     let amount = dto.amount;
@@ -221,50 +231,29 @@ export class BillingService {
       return boleto;
     }
 
-    // Gerar dados simulados de boleto (em produção: chamar API do gateway)
-    const nossoNumero = this.generateNossoNumero();
-    const linhaDigitavel = this.generateLinhaDigitavel(nossoNumero, amount, dueDateOnly);
-    const codigoBarras = this.generateCodigoBarras(nossoNumero, amount, dueDateOnly);
-    const pixQrCode = this.generatePixQrCode(nossoNumero, amount);
+    // Regra 5 (nada de sucesso fabricado): sem gateway Asaas ativo não há
+    // emissão. Antes, o sistema gravava um boleto "simulado" com linha
+    // digitável, código de barras e PIX inventados, que o cliente não
+    // conseguiria pagar.
+    throw new BadRequestException(BOLETO_UNAVAILABLE_MESSAGE);
+  }
 
-    const boleto = await this.prisma.boleto.create({
-      data: {
-        workspaceId,
-        gatewayId: gateway?.id,
-        financialEntryId: dto.financialEntryId,
-        contractId,
-        contactId,
-        amount,
-        dueDate: new Date(dueDate),
-        description,
-        nossoNumero,
-        linhaDigitavel,
-        codigoBarras,
-        pixQrCode,
-        pixCopiaECola: `00020126360014BR.GOV.BCB.PIX0114${nossoNumero}5204000053039865802BR5925IMOBILIARIA HOMOLOG6009SAO PAULO62070503***6304${nossoNumero.slice(-4)}`,
-        fine: dto.fine ?? 2.0,
-        interest: dto.interest ?? 0.033,
-        discount: dto.discount ?? 0.0,
-        instructions: dto.instructions,
-        status: gateway ? 'REGISTERED' : 'PENDING',
-        registeredAt: gateway ? new Date() : null,
-      },
+  /** true quando existe gateway Asaas ativo — o único com emissão real. */
+  async hasActiveBoletoGateway(workspaceId: string): Promise<boolean> {
+    const gw = await this.prisma.paymentGatewayConfig.findFirst({
+      where: { workspaceId, provider: 'ASAAS', isActive: true, deletedAt: null },
+      select: { id: true },
     });
-
-    if (dto.financialEntryId) {
-      await this.prisma.financialEntry.update({
-        where: { id: dto.financialEntryId },
-        data: { status: 'PENDING' },
-      });
-    }
-
-    this.logger.log(`Boleto gerado: ${boleto.id} venc=${dueDate} R$${amount}`);
-    return boleto;
+    return !!gw;
   }
 
   async reissueBoleto(workspaceId: string, id: string, newDueDate: string) {
     const boleto = await this.findOneBoleto(workspaceId, id);
     if (boleto.status === 'PAID') throw new BadRequestException('Boleto já está pago');
+    // Sem gateway não há como emitir o novo: não cancela o atual à toa.
+    if (!(await this.hasActiveBoletoGateway(workspaceId))) {
+      throw new BadRequestException(BOLETO_UNAVAILABLE_MESSAGE);
+    }
 
     // Cancelar boleto anterior
     await this.prisma.boleto.update({

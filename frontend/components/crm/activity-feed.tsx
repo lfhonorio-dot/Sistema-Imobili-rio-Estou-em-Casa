@@ -1,5 +1,6 @@
 // Componente de feed/timeline de atividades
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
@@ -35,8 +36,8 @@ export function ActivityFeed({ activities, contactId, dealId, isLoading }: Activ
       setNoteContent('');
       setShowNoteInput(false);
       toast.success('Nota adicionada');
-    } catch {
-      toast.error('Erro ao adicionar nota');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao adicionar nota'));
     }
   };
 

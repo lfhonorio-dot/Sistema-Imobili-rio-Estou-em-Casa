@@ -1,5 +1,6 @@
 // Página de listagem de contratos
 'use client';
+import { ErrorState } from '@/components/common/error-state';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -37,7 +38,7 @@ export default function ContractsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useContracts({
+  const { data, isLoading, isError, error, refetch } = useContracts({
     search: search || undefined,
     type: typeFilter || undefined,
     status: statusFilter || undefined,
@@ -105,6 +106,8 @@ export default function ContractsPage() {
       {/* Tabela */}
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">Carregando...</div>
+      ) : isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
       ) : contracts.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">Nenhum contrato encontrado</div>
       ) : (

@@ -468,9 +468,13 @@ export class ContractsService {
   // Gera o boleto de cada lançamento a receber em aberto do contrato que ainda
   // não tenha um. Nunca lança: uma falha aqui não pode derrubar a criação do
   // contrato nem a geração de parcelas. Sem gateway ativo configurado, o
-  // BillingService emite um boleto simulado com status PENDING.
+  // BillingService recusa a emissão (não existe mais boleto simulado).
   private async autoGenerateBoletos(workspaceId: string, contractId: string) {
     try {
+      // Sem gateway Asaas ativo não há emissão real: não tenta (antes gerava
+      // boletos simulados com linha digitável falsa). O usuário pode emitir
+      // depois, em cada conta a receber, quando o gateway estiver configurado.
+      if (!(await this.billingService.hasActiveBoletoGateway(workspaceId))) return;
       const entries = await this.prisma.financialEntry.findMany({
         where: {
           workspaceId,

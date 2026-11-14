@@ -23,6 +23,7 @@ export interface WorkspaceMembership {
     id: string;
     name: string;
     slug: string;
+    operationProfile?: 'VENDA' | 'VENDA_E_LOCACAO';
   };
   role: {
     id: string;
@@ -53,6 +54,7 @@ export interface Workspace {
   twoFactorRequired: boolean;
   dpoName?: string;
   dpoEmail?: string;
+  operationProfile?: 'VENDA' | 'VENDA_E_LOCACAO';
   createdAt: string;
   roles: Role[];
   _count: { users: number };

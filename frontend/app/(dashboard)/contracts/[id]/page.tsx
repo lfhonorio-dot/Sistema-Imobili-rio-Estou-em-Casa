@@ -1,5 +1,6 @@
 // Página de detalhe do contrato
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -132,8 +133,8 @@ export default function ContractDetailPage() {
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch {
-      toast.error('Erro ao gerar o contrato.');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao gerar o contrato.'));
     } finally {
       setLoadingDoc(false);
     }

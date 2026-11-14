@@ -1,5 +1,6 @@
 // Formulário de criação de tarefa/atividade
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -55,8 +56,8 @@ export function TaskForm({ contactId, dealId, defaultType = 'TASK', onSuccess, o
       });
       toast.success('Atividade criada');
       onSuccess?.();
-    } catch {
-      toast.error('Erro ao criar atividade');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao criar atividade'));
     }
   };
 
