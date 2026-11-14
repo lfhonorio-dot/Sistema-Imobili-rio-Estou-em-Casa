@@ -387,6 +387,33 @@ export class FinancialService {
   }
 
   // Lista comissões com filtros
+  /**
+   * Fase 7 — comissões do PRÓPRIO usuário (todas as funções; é a única parte
+   * do financeiro que o Corretor vê): repasses a receber da imobiliária e as
+   * comissões do modelo antigo em nome dele.
+   */
+  async myCommissions(workspaceId: string, memberId: string) {
+    const [entries, legacy] = await Promise.all([
+      this.prisma.financialEntry.findMany({
+        where: { workspaceId, deletedAt: null, type: 'PAYABLE', category: 'COMMISSION', beneficiaryUserId: memberId },
+        orderBy: { dueDate: 'asc' },
+        select: {
+          id: true, description: true, amount: true, paidAmount: true, dueDate: true, paidAt: true, status: true, cancelReason: true,
+          contractId: true, installment: true, totalInstallments: true, contract: { select: { code: true, property: { select: { code: true, street: true } } } },
+        },
+      }),
+      this.prisma.commission.findMany({
+        where: { workspaceId, userId: memberId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, amount: true, rate: true, status: true, paidAt: true, contract: { select: { code: true, property: { select: { code: true } } } } },
+      }),
+    ]);
+    const open = entries.filter((e) => OPEN_STATUSES.includes(e.status));
+    const toReceive = Math.round(open.reduce((s, e) => s + Number(e.amount) - Number(e.paidAmount ?? 0), 0) * 100) / 100;
+    const received = Math.round(entries.reduce((s, e) => s + Number(e.paidAmount ?? 0), 0) * 100) / 100;
+    return { entries, legacy, totals: { toReceive, received, openCount: open.length } };
+  }
+
   async findAllCommissions(workspaceId: string, query: CommissionQueryDto) {
     const { page = 1, limit = 20, userId, status, dateFrom, dateTo } = query;
     const skip = (page - 1) * limit;

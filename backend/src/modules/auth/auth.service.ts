@@ -1,6 +1,7 @@
 // Serviço de autenticação - implementação completa
 // Gerencia: registro, login, logout, refresh, 2FA, reset de senha
 
+import { roleKeyOf } from '../../common/access/access';
 import {
   Injectable,
   ConflictException,
@@ -123,6 +124,7 @@ export class AuthService {
           workspaceId: workspace.id,
           name: 'Administrador',
           isSystem: true,
+          systemKey: 'ADMIN',
           permissions: {
             'users:read': true,
             'users:write': true,
@@ -138,18 +140,22 @@ export class AuthService {
         },
       });
 
-      // Cria papel de Corretor com permissões básicas
-      await tx.role.create({
-        data: {
-          workspaceId: workspace.id,
-          name: 'Corretor',
-          isSystem: true,
-          permissions: {
-            'users:read': true,
-            'workspace:read': true,
+      // Fase 7: papéis Corretor, Financeiro e Gerente (acesso definido por systemKey)
+      for (const r of [
+        { name: 'Corretor', systemKey: 'BROKER' },
+        { name: 'Financeiro', systemKey: 'FINANCE' },
+        { name: 'Gerente', systemKey: 'MANAGER' },
+      ]) {
+        await tx.role.create({
+          data: {
+            workspaceId: workspace.id,
+            name: r.name,
+            isSystem: true,
+            systemKey: r.systemKey,
+            permissions: { 'users:read': true, 'workspace:read': true },
           },
-        },
-      });
+        });
+      }
 
       // Cria o usuário administrador
       const user = await tx.user.create({
@@ -803,7 +809,7 @@ export class AuthService {
               select: { id: true, name: true, slug: true, operationProfile: true },
             },
             role: {
-              select: { id: true, name: true, permissions: true },
+              select: { id: true, name: true, permissions: true, systemKey: true },
             },
           },
         },
@@ -823,11 +829,14 @@ export class AuthService {
     return {
       ...user,
       isPlatformAdmin,
-      workspaces: user.workspaces.map((m: { workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string; operationProfile: string }; role: { id: string; name: string; permissions: unknown } }) => ({
+      workspaces: user.workspaces.map((m: { id: string; workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string; operationProfile: string }; role: { id: string; name: string; permissions: unknown; systemKey: string | null } }) => ({
         workspaceId: m.workspaceId,
+        memberId: m.id,
         isOwner: m.isOwner,
         workspace: m.workspace,
         role: m.role,
+        // Fase 7: papel efetivo usado pelo backend (menu e telas se ajustam a ele)
+        roleKey: roleKeyOf(m.role, m.isOwner),
       })),
     };
   }

@@ -5,9 +5,11 @@ import { AdminService } from './admin.service';
 import { SetPlatformConfigDto, SetFeatureFlagDto, SetWorkspacePlanDto, CompleteOnboardingStepDto } from './admin.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../common/guards/workspace.guard';
+import { Access, ALL } from '../../common/access/access';
 import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard';
 import { Public } from '../../common/decorators/public.decorator';
 
+@Access(...ALL)
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}

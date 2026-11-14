@@ -18,11 +18,13 @@ import { TagsService } from './tags.service';
 import { CreateTagDto, UpdateTagDto, TagQueryDto } from './tags.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('tags')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('tags')
 export class TagsController {
   constructor(private readonly tagsService: TagsService) {}

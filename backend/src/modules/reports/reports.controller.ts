@@ -3,13 +3,16 @@ import { ReportsService } from './reports.service';
 import { ReportFilterDto } from './reports.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../common/guards/workspace.guard';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../common/access/access';
 
+@Access(...STAFF)
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly service: ReportsService) {}
 
   // Painel do perfil de venda (Fase 1)
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Access(...ALL)
   @Get('sales-dashboard')
   getSalesDashboard(@Headers('x-workspace-id') workspaceId: string) {
     return this.service.getSalesDashboard(workspaceId);

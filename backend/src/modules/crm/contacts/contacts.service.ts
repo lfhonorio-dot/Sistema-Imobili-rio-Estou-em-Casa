@@ -15,6 +15,7 @@ import {
   UpdateContactDto,
   ContactQueryDto,
 } from './contacts.dto';
+import { brokerMemberId, contactScope } from '../../../common/access/access';
 
 @Injectable()
 export class ContactsService {
@@ -87,7 +88,7 @@ export class ContactsService {
   // Busca contato por ID com todas as relações
   async findOne(workspaceId: string, id: string) {
     const contact = await this.prisma.contact.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [contactScope()] },
       include: {
         tags: { include: { tag: true } },
         deals: {
@@ -124,6 +125,15 @@ export class ContactsService {
   }
 
   // Cria novo contato com verificação de duplicatas
+  /** Fase 7: responsável precisa ser membro desta imobiliária. */
+  private async validAssignee(workspaceId: string, assigneeId?: string | null): Promise<string | null | undefined> {
+    if (assigneeId === undefined) return undefined;
+    if (!assigneeId) return null;
+    const m = await this.prisma.workspaceUser.findFirst({ where: { id: assigneeId, workspaceId }, select: { id: true } });
+    if (!m) throw new BadRequestException('Corretor responsável não pertence a esta imobiliária.');
+    return m.id;
+  }
+
   async create(workspaceId: string, userId: string, dto: CreateContactDto) {
     // Normaliza campos vazios para NULL: string vazia ("") conta como valor no
     // índice único e faria dois contatos "sem CNPJ" colidirem. NULL permite vários.
@@ -144,7 +154,9 @@ export class ContactsService {
       if (existingDoc) {
         const doc = dto.cpf ? 'CPF' : 'CNPJ';
         throw new ConflictException(
-          `Já existe um contato com este ${doc} neste workspace: ${existingDoc.name}.`,
+          brokerMemberId()
+            ? `Já existe um contato com este ${doc} na imobiliária (atendido por outro corretor). Fale com o gerente.`
+            : `Já existe um contato com este ${doc} neste workspace: ${existingDoc.name}.`,
         );
       }
     }
@@ -160,7 +172,8 @@ export class ContactsService {
         throw new ConflictException({
           message: 'Já existe um contato com este e-mail ou telefone',
           code: 'DUPLICATE_CONTACT',
-          duplicates: duplicateCheck,
+          // Fase 7: Corretor não vê dados de contatos de outros corretores
+          duplicates: brokerMemberId() ? [] : duplicateCheck,
         });
       }
     }
@@ -172,6 +185,8 @@ export class ContactsService {
       contact = await this.prisma.contact.create({
         data: {
           workspaceId,
+          // Fase 7: lead criado por Corretor fica com ele
+          assigneeId: brokerMemberId() ?? (await this.validAssignee(workspaceId, dto.assigneeId)),
           type: dto.type,
           name: dto.name,
           email: dto.email,
@@ -250,7 +265,7 @@ export class ContactsService {
 
   async update(workspaceId: string, userId: string, id: string, dto: UpdateContactDto) {
     const existing = await this.prisma.contact.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [contactScope()] },
     });
 
     if (!existing) {
@@ -263,6 +278,7 @@ export class ContactsService {
     const updated = await this.prisma.contact.update({
       where: { id },
       data: {
+        ...(dto.assigneeId !== undefined && !brokerMemberId() && { assigneeId: await this.validAssignee(workspaceId, dto.assigneeId) }),
         ...(dto.type && { type: dto.type }),
         ...(dto.name && { name: dto.name }),
         ...(dto.email !== undefined && { email: dto.email }),
@@ -312,7 +328,7 @@ export class ContactsService {
   // Soft delete de contato
   async remove(workspaceId: string, userId: string, id: string) {
     const contact = await this.prisma.contact.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [contactScope()] },
     });
 
     if (!contact) {
@@ -451,7 +467,7 @@ export class ContactsService {
   // Retorna timeline de atividades do contato
   async getTimeline(workspaceId: string, id: string) {
     const contact = await this.prisma.contact.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [contactScope()] },
     });
 
     if (!contact) {
@@ -556,7 +572,7 @@ export class ContactsService {
   // Adiciona tag a um contato
   async addTag(workspaceId: string, contactId: string, tagId: string) {
     const contact = await this.prisma.contact.findFirst({
-      where: { id: contactId, workspaceId, deletedAt: null },
+      where: { id: contactId, workspaceId, deletedAt: null, AND: [contactScope()] },
     });
 
     if (!contact) throw new NotFoundException('Contato não encontrado');
@@ -580,7 +596,7 @@ export class ContactsService {
   // Remove tag de um contato
   async removeTag(workspaceId: string, contactId: string, tagId: string) {
     const contact = await this.prisma.contact.findFirst({
-      where: { id: contactId, workspaceId, deletedAt: null },
+      where: { id: contactId, workspaceId, deletedAt: null, AND: [contactScope()] },
     });
 
     if (!contact) throw new NotFoundException('Contato não encontrado');

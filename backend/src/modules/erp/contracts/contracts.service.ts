@@ -9,6 +9,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { contractScope } from './contract-scope';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
@@ -25,6 +26,7 @@ import {
   GenerateInstallmentsDto,
   RequestSignatureDto,
 } from './contracts.dto';
+import { dealScope } from '../../../common/access/access';
 
 @Injectable()
 export class ContractsService {
@@ -43,6 +45,8 @@ export class ContractsService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.ContractWhereInput = {
+      // Fase 7: Corretor só vê contratos dos negócios dele
+      AND: [await contractScope(this.prisma, workspaceId)],
       workspaceId,
       deletedAt: null,
       ...(type && { type }),
@@ -94,7 +98,7 @@ export class ContractsService {
   // Detalhe completo do contrato
   async findOne(workspaceId: string, id: string) {
     const contract = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] },
       include: {
         property: true,
         owner: { select: { id: true, name: true, phone: true, email: true } },
@@ -257,7 +261,7 @@ export class ContractsService {
     // um contrato vigente (evita contrato em duplicidade pelo "Ganho").
     if (dto.dealId) {
       const deal = await this.prisma.deal.findFirst({
-        where: { id: dto.dealId, workspaceId, deletedAt: null },
+        where: { id: dto.dealId, workspaceId, deletedAt: null, ...dealScope() },
         select: { id: true },
       });
       if (!deal) throw new BadRequestException('Negócio de origem não encontrado neste workspace.');
@@ -598,7 +602,7 @@ export class ContractsService {
   // Solicita assinatura eletrônica para o contrato
   async requestSignature(workspaceId: string, id: string, dto: RequestSignatureDto, userId: string) {
     const contract = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] },
       include: {
         owner: { select: { id: true, name: true, email: true, phone: true, cpf: true } },
         tenant: { select: { id: true, name: true, email: true, phone: true, cpf: true } },
@@ -777,7 +781,7 @@ export class ContractsService {
     userId: string,
   ) {
     const existing = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] },
     });
     if (!existing) throw new NotFoundException('Contrato não encontrado');
 
@@ -815,7 +819,7 @@ export class ContractsService {
   // Soft delete do contrato
   async remove(workspaceId: string, id: string, userId: string) {
     const existing = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] },
     });
     if (!existing) throw new NotFoundException('Contrato não encontrado');
 
@@ -845,7 +849,7 @@ export class ContractsService {
     userId: string,
   ) {
     const existing = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] },
     });
     if (!existing) throw new NotFoundException('Contrato não encontrado');
 
@@ -974,7 +978,7 @@ export class ContractsService {
     dto: GenerateInstallmentsDto,
   ) {
     const contract = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] },
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
 
@@ -1029,7 +1033,7 @@ export class ContractsService {
 
   async getOwnerPortalUrl(workspaceId: string, id: string) {
     const contract = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null }, select: { id: true },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] }, select: { id: true },
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
     const base = process.env.APP_URL || '';
@@ -1071,7 +1075,7 @@ export class ContractsService {
   // Extrato de repasse do proprietário
   async getStatement(workspaceId: string, id: string) {
     const contract = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] },
       include: {
         financialEntries: { where: { deletedAt: null } },
         commissions: true,

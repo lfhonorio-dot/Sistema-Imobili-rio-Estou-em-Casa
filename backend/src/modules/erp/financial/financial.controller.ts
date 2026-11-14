@@ -28,11 +28,13 @@ import {
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('financial')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...FINANCE_AREA)
 @Controller('financial')
 export class FinancialController {
   constructor(
@@ -80,6 +82,13 @@ export class FinancialController {
   @Get('overdue')
   getOverdue(@Headers('x-workspace-id') workspaceId: string) {
     return this.financialService.getOverdue(workspaceId);
+  }
+
+  // Fase 7: GET /financial/my-commissions — comissões do próprio usuário (inclusive Corretor)
+  @Access(...ALL)
+  @Get('my-commissions')
+  myCommissions(@Headers('x-workspace-id') workspaceId: string, @CurrentUser() user: JwtPayload) {
+    return this.financialService.myCommissions(workspaceId, user.memberId!);
   }
 
   // GET /financial/commissions - lista comissões

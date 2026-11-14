@@ -9,6 +9,7 @@ import { AuditService } from '../../audit/audit.service';
 import { advanceDealToStage } from '../pipelines/funnel-stages';
 import { proposalSituation, validatePaymentTerms } from './funnel-rules';
 import { CreateProposalDto, DecideProposalDto, ProposalTermsDto } from './funnel.dto';
+import { dealScope, proposalScope } from '../../../common/access/access';
 
 export const PAYMENT_LABEL: Record<string, string> = {
   CASH: 'À vista', FINANCING: 'Financiamento bancário', FGTS: 'Com uso de FGTS', PERMUTA: 'Permuta', MIXED: 'Misto',
@@ -57,13 +58,13 @@ export class ProposalsService {
   }
 
   private async findOrThrow(workspaceId: string, id: string) {
-    const p = await this.prisma.proposal.findFirst({ where: { id, workspaceId, deletedAt: null } });
+    const p = await this.prisma.proposal.findFirst({ where: { id, workspaceId, deletedAt: null, AND: [proposalScope()] } });
     if (!p) throw new NotFoundException('Proposta não encontrada.');
     return p;
   }
 
   async listByDeal(workspaceId: string, dealId: string) {
-    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, workspaceId, deletedAt: null }, select: { id: true } });
+    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, workspaceId, deletedAt: null, ...dealScope() }, select: { id: true } });
     if (!deal) throw new NotFoundException('Negócio não encontrado.');
     const items = await this.prisma.proposal.findMany({
       where: { workspaceId, dealId, deletedAt: null },
@@ -75,7 +76,7 @@ export class ProposalsService {
 
   async create(workspaceId: string, userId: string, dto: CreateProposalDto) {
     const deal = await this.prisma.deal.findFirst({
-      where: { id: dto.dealId, workspaceId, deletedAt: null },
+      where: { id: dto.dealId, workspaceId, deletedAt: null, ...dealScope() },
       include: { stage: true, properties: { select: { propertyId: true } } },
     });
     if (!deal) throw new BadRequestException('Negócio não encontrado neste workspace.');

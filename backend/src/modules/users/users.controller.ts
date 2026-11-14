@@ -32,10 +32,12 @@ import { WorkspaceGuard } from '../../common/guards/workspace.guard';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../common/access/access';
 
 @ApiTags('users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Access(...ALL)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -74,6 +76,7 @@ export class UsersController {
   }
 
   // POST /users/workspace/invite
+  @Access(...ADMIN_ONLY)
   @Post('workspace/invite')
   @UseGuards(WorkspaceGuard, RolesGuard)
   @RequirePermissions('users:write')
@@ -88,6 +91,7 @@ export class UsersController {
   }
 
   // PUT /users/workspace/members/:userId/role
+  @Access(...ADMIN_ONLY)
   @Put('workspace/members/:userId/role')
   @UseGuards(WorkspaceGuard, RolesGuard)
   @RequirePermissions('users:write')
@@ -103,6 +107,7 @@ export class UsersController {
   }
 
   // DELETE /users/workspace/members/:userId
+  @Access(...ADMIN_ONLY)
   @Delete('workspace/members/:userId')
   @HttpCode(HttpStatus.OK)
   @UseGuards(WorkspaceGuard, RolesGuard)

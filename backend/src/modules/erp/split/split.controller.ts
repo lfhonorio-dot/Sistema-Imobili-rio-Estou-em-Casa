@@ -10,17 +10,20 @@ import {
 } from './split.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('split')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...FINANCE_AREA)
 @Controller('split')
 export class SplitController {
   constructor(private readonly service: SplitService) {}
 
   // ── RECEBEDORES ───────────────────────────────────────────
 
+  @Access(...ALL)
   @Get('recipients')
   findRecipients(@Headers('x-workspace-id') workspaceId: string) {
     return this.service.findRecipients(workspaceId);

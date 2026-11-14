@@ -17,6 +17,7 @@
 
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { contractScope } from './contract-scope';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { DimobService } from '../fiscal/dimob.service';
@@ -43,7 +44,7 @@ export class SaleLifecycleService {
 
   private async loadSaleContract(workspaceId: string, id: string) {
     const c = await this.prisma.contract.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [await contractScope(this.prisma, workspaceId)] },
       include: {
         property: { select: { id: true, code: true, status: true } },
         splitRules: { where: { isActive: true }, include: { recipient: { select: { name: true, contactId: true } } } },

@@ -6,7 +6,9 @@ import { UpdateNotificationPreferenceDto, CreateInAppNotificationDto } from './n
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../common/guards/workspace.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../common/access/access';
 
+@Access(...ALL)
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly service: NotificationsService) {}

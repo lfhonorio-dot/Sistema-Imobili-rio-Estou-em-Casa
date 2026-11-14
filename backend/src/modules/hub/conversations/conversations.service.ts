@@ -9,6 +9,7 @@ import {
   CreateConversationDto, UpdateConversationDto, ConversationQueryDto,
   ChangeStatusDto, AssignDto, SendMessageDto,
 } from './conversations.dto';
+import { conversationScope } from '../../../common/access/access';
 
 @Injectable()
 export class ConversationsService {
@@ -37,6 +38,8 @@ export class ConversationsService {
           { messages: { some: { body: { contains: search, mode: 'insensitive' } } } },
         ],
       }),
+      // Fase 7: Corretor só vê conversas dos leads dele
+      AND: [conversationScope()],
     };
 
     const [items, total] = await Promise.all([
@@ -59,7 +62,7 @@ export class ConversationsService {
 
   async findOne(workspaceId: string, id: string) {
     const conv = await this.prisma.conversation.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [conversationScope()] },
       include: {
         contact: true,
         messages: { orderBy: { createdAt: 'asc' } },
@@ -92,7 +95,7 @@ export class ConversationsService {
 
   async update(workspaceId: string, id: string, dto: UpdateConversationDto) {
     const existing = await this.prisma.conversation.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [conversationScope()] },
     });
     if (!existing) throw new NotFoundException('Conversa não encontrada');
 
@@ -107,7 +110,7 @@ export class ConversationsService {
 
   async changeStatus(workspaceId: string, userId: string, id: string, dto: ChangeStatusDto) {
     const existing = await this.prisma.conversation.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [conversationScope()] },
     });
     if (!existing) throw new NotFoundException('Conversa não encontrada');
 
@@ -119,7 +122,7 @@ export class ConversationsService {
 
   async assign(workspaceId: string, id: string, dto: AssignDto) {
     const existing = await this.prisma.conversation.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, AND: [conversationScope()] },
     });
     if (!existing) throw new NotFoundException('Conversa não encontrada');
 
@@ -131,7 +134,7 @@ export class ConversationsService {
 
   async getMessages(workspaceId: string, conversationId: string, page = 1, limit = 50) {
     const conv = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, workspaceId, deletedAt: null },
+      where: { id: conversationId, workspaceId, deletedAt: null, AND: [conversationScope()] },
     });
     if (!conv) throw new NotFoundException('Conversa não encontrada');
 
@@ -156,7 +159,7 @@ export class ConversationsService {
   // propaga como erro visível em vez de fingir sucesso.
   async sendMessage(workspaceId: string, userId: string, conversationId: string, dto: SendMessageDto) {
     const conv = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, workspaceId, deletedAt: null },
+      where: { id: conversationId, workspaceId, deletedAt: null, AND: [conversationScope()] },
       include: { contact: true },
     });
     if (!conv) throw new NotFoundException('Conversa não encontrada');
@@ -228,7 +231,7 @@ export class ConversationsService {
 
   async getUnreadCount(workspaceId: string) {
     const count = await this.prisma.conversation.count({
-      where: { workspaceId, deletedAt: null, status: 'OPEN' },
+      where: { workspaceId, deletedAt: null, status: 'OPEN', AND: [conversationScope()] },
     });
     return { count };
   }

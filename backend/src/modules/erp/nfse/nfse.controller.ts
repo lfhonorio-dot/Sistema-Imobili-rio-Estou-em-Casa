@@ -15,11 +15,13 @@ import { NfseConfigService } from './nfse-config.service';
 import {
   AuthorizeProductionDto, CancelNfseDto, CertificateDto, NfseConfigDto, NfseQueryDto, ReportQueryDto, RequestNfseDto, SendNfseEmailDto,
 } from './nfse.dto';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('nfse')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...FINANCE_AREA)
 @Controller('nfse')
 export class NfseController {
   constructor(private readonly nfse: NfseService, private readonly config: NfseConfigService) {}
@@ -27,24 +29,29 @@ export class NfseController {
   @Get('config')
   getConfig(@Headers('x-workspace-id') ws: string) { return this.config.get(ws); }
 
+  @Access(...FINANCE_CONFIG)
   @Patch('config')
   saveConfig(@Headers('x-workspace-id') ws: string, @Body() dto: NfseConfigDto) { return this.config.save(ws, dto); }
 
+  @Access(...FINANCE_CONFIG)
   @Post('config/certificate')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 60_000, files: 1 } }))
   uploadCertificate(@Headers('x-workspace-id') ws: string, @UploadedFile() file: UploadedFileInput, @Body() dto: CertificateDto) {
     return this.config.uploadCertificate(ws, file?.buffer, dto.password);
   }
 
+  @Access(...FINANCE_CONFIG)
   @Delete('config/certificate')
   removeCertificate(@Headers('x-workspace-id') ws: string) { return this.config.removeCertificate(ws); }
 
+  @Access(...ADMIN_ONLY)
   @Post('config/authorize-production')
   @HttpCode(HttpStatus.OK)
   authorizeProduction(@Headers('x-workspace-id') ws: string, @CurrentUser() u: JwtPayload, @Body() dto: AuthorizeProductionDto) {
     return this.config.authorizeProduction(ws, u.sub, dto.confirm);
   }
 
+  @Access(...FINANCE_CONFIG)
   @Post('config/back-to-homolog')
   @HttpCode(HttpStatus.OK)
   backToHomolog(@Headers('x-workspace-id') ws: string) { return this.config.backToHomolog(ws); }

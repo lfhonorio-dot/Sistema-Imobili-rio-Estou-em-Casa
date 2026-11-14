@@ -12,8 +12,10 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('esignature')
+@Access(...ALL)
 @Controller('esignature')
 export class EsignatureController {
   constructor(private readonly service: EsignatureService) {}

@@ -1,6 +1,7 @@
 // Serviço de gerenciamento de usuários
 // Perfil, convites, papéis e administração de membros do workspace
 
+import { roleKeyOf } from '../../common/access/access';
 import {
   Injectable,
   NotFoundException,
@@ -109,7 +110,7 @@ export class UsersService {
 
   // Lista membros do workspace
   async listWorkspaceMembers(workspaceId: string) {
-    return this.prisma.workspaceUser.findMany({
+    const members = await this.prisma.workspaceUser.findMany({
       where: { workspaceId },
       include: {
         user: {
@@ -123,10 +124,12 @@ export class UsersService {
             deletedAt: true,
           },
         },
-        role: { select: { id: true, name: true } },
+        role: { select: { id: true, name: true, systemKey: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
+    // Fase 7: papel efetivo (Dono/Admin, Financeiro, Gerente, Corretor)
+    return members.map((m) => ({ ...m, roleKey: roleKeyOf(m.role, m.isOwner) }));
   }
 
   // Convida usuário ao workspace por e-mail

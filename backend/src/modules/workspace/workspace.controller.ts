@@ -22,11 +22,13 @@ import { WorkspaceGuard } from '../../common/guards/workspace.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/roles.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../common/access/access';
 
 @ApiTags('workspace')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('workspace')
 export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
@@ -39,6 +41,7 @@ export class WorkspaceController {
   }
 
   // PUT /workspace
+  @Access(...ADMIN_ONLY)
   @Put()
   @UseGuards(RolesGuard)
   @RequirePermissions('workspace:write')
@@ -61,6 +64,7 @@ export class WorkspaceController {
   }
 
   // POST /workspace/roles
+  @Access(...ADMIN_ONLY)
   @Post('roles')
   @UseGuards(RolesGuard)
   @RequirePermissions('roles:write')
@@ -74,6 +78,7 @@ export class WorkspaceController {
   }
 
   // PUT /workspace/roles/:roleId
+  @Access(...ADMIN_ONLY)
   @Put('roles/:roleId')
   @UseGuards(RolesGuard)
   @RequirePermissions('roles:write')
@@ -88,6 +93,7 @@ export class WorkspaceController {
   }
 
   // DELETE /workspace/roles/:roleId
+  @Access(...ADMIN_ONLY)
   @Delete('roles/:roleId')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)

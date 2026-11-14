@@ -27,6 +27,10 @@ export const MARRIAGE_REGIMES = [
 ];
 
 export class CreateContactDto {
+  // Fase 7: corretor responsável (WorkspaceUser id). Ignorado quando quem envia é Corretor.
+  @IsOptional()
+  @IsString()
+  assigneeId?: string;
   @IsIn(CONTACT_TYPES)
   type!: string;
 
@@ -150,6 +154,10 @@ export class CreateContactDto {
 }
 
 export class UpdateContactDto {
+  // Fase 7: corretor responsável (WorkspaceUser id). Ignorado quando quem envia é Corretor.
+  @IsOptional()
+  @IsString()
+  assigneeId?: string;
   @IsOptional()
   @IsIn(CONTACT_TYPES)
   type?: string;

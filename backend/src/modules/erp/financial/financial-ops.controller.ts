@@ -23,6 +23,7 @@ import {
   CashFlowQueryDto, CategoryDto, CostCenterDto, DreQueryDto, FinancialSettingsDto, ReasonDto, RecurringDto,
   RegisterPaymentDto, UpdateCategoryDto, UpdateCostCenterDto, UpdateRecurringDto,
 } from './financial.dto';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 const uploadInterceptor = FileInterceptor('file', {
   limits: { fileSize: MAX_DOCUMENT_BYTES + 1024 * 1024, files: 1 },
@@ -33,6 +34,7 @@ const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...FINANCE_AREA)
 @Controller('financial')
 export class FinancialOpsController {
   constructor(
@@ -107,16 +109,19 @@ export class FinancialOpsController {
     return this.config.listCategories(ws, type, all === 'true');
   }
 
+  @Access(...FINANCE_CONFIG)
   @Post('categories')
   createCategory(@Headers('x-workspace-id') ws: string, @Body() dto: CategoryDto) {
     return this.config.createCategory(ws, dto);
   }
 
+  @Access(...FINANCE_CONFIG)
   @Patch('categories/:id')
   updateCategory(@Headers('x-workspace-id') ws: string, @Param('id') id: string, @Body() dto: UpdateCategoryDto) {
     return this.config.updateCategory(ws, id, dto);
   }
 
+  @Access(...FINANCE_CONFIG)
   @Delete('categories/:id')
   removeCategory(@Headers('x-workspace-id') ws: string, @Param('id') id: string) {
     return this.config.removeCategory(ws, id);
@@ -129,16 +134,19 @@ export class FinancialOpsController {
     return this.config.listCostCenters(ws, all === 'true');
   }
 
+  @Access(...FINANCE_CONFIG)
   @Post('cost-centers')
   createCostCenter(@Headers('x-workspace-id') ws: string, @Body() dto: CostCenterDto) {
     return this.config.createCostCenter(ws, dto);
   }
 
+  @Access(...FINANCE_CONFIG)
   @Patch('cost-centers/:id')
   updateCostCenter(@Headers('x-workspace-id') ws: string, @Param('id') id: string, @Body() dto: UpdateCostCenterDto) {
     return this.config.updateCostCenter(ws, id, dto);
   }
 
+  @Access(...FINANCE_CONFIG)
   @Delete('cost-centers/:id')
   removeCostCenter(@Headers('x-workspace-id') ws: string, @Param('id') id: string) {
     return this.config.removeCostCenter(ws, id);
@@ -151,6 +159,7 @@ export class FinancialOpsController {
     return this.config.getSettings(ws);
   }
 
+  @Access(...FINANCE_CONFIG)
   @Patch('settings')
   updateSettings(@Headers('x-workspace-id') ws: string, @Body() dto: FinancialSettingsDto) {
     return this.config.updateSettings(ws, dto);

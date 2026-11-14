@@ -5,7 +5,9 @@ import { IntegrationsService } from './integrations.service';
 import { CreateApiKeyDto, CreateWebhookDto, UpdateWebhookDto } from './integrations.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../common/guards/workspace.guard';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../common/access/access';
 
+@Access(...ADMIN_ONLY)
 @Controller('integrations')
 export class IntegrationsController {
   constructor(private readonly service: IntegrationsService) {}

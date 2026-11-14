@@ -16,6 +16,7 @@ import { PropertyRegistryService } from './property-registry.service';
 import {
   AddOwnerDto, CancelAuthorizationDto, CreateAuthorizationDto, KeyMovementDto, UploadDocumentDto, UploadPhotoDto,
 } from './property-registry.dto';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 // Limite do multer um pouco acima do maior limite aceito; a mensagem
 // amigável de "arquivo muito grande" vem do FilesService.
@@ -28,6 +29,7 @@ const uploadInterceptor = FileInterceptor('file', {
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('properties')
 export class PropertyRegistryController {
   constructor(private readonly service: PropertyRegistryService) {}

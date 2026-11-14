@@ -15,6 +15,7 @@ import {
   REQUIRES_FULL_PROFILE_KEY,
   profileBlockedMessage,
 } from '../decorators/operation-profile.decorator';
+import { ACCESS_KEY, accessDeniedMessage, requestContext, roleKeyOf, type RoleKey } from '../access/access';
 
 @Injectable()
 export class WorkspaceGuard implements CanActivate {
@@ -93,13 +94,26 @@ export class WorkspaceGuard implements CanActivate {
       throw new ForbiddenException(profileBlockedMessage(blockedModule));
     }
 
+    // Fase 7: papel (Dono/Admin, Financeiro, Gerente, Corretor) e área permitida
+    const roleKey = roleKeyOf(workspaceUser.role, workspaceUser.isOwner);
+    const allowed = this.reflector.getAllAndOverride<RoleKey[]>(ACCESS_KEY, [context.getHandler(), context.getClass()]);
+    if (allowed && !allowed.includes(roleKey)) {
+      throw new ForbiddenException(accessDeniedMessage(roleKey));
+    }
+
     // Injeta informações do workspace na requisição
     request.workspaceId = workspaceId;
     request.user = {
       ...request.user,
       permissions: workspaceUser.role.permissions as Record<string, boolean>,
       isOwner: workspaceUser.isOwner,
-    };
+      roleKey,
+      memberId: workspaceUser.id,
+    } as typeof request.user;
+
+    // contexto da requisição, usado pelos serviços para o escopo do Corretor
+    const store = requestContext.getStore();
+    if (store) store.member = { workspaceId, memberId: workspaceUser.id, userId, roleKey };
 
     return true;
   }

@@ -10,6 +10,7 @@ import {
   ActivityQueryDto,
   CalendarQueryDto,
 } from './activities.dto';
+import { activityScope, dealScope } from '../../../common/access/access';
 
 @Injectable()
 export class ActivitiesService {
@@ -46,6 +47,8 @@ export class ActivitiesService {
       }),
       // Fase 3: "minhas tarefas" = atividades do usuário logado
       ...(mine === 'true' && { userId }),
+      // Fase 7: Corretor só vê as tarefas dele
+      ...activityScope(),
       ...(done === 'true' && { doneAt: { not: null } }),
       ...(done === 'false' && { doneAt: null }),
     };
@@ -70,7 +73,7 @@ export class ActivitiesService {
   // Busca atividade por ID
   async findOne(workspaceId: string, id: string) {
     const activity = await this.prisma.activity.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, ...activityScope() },
       include: {
         contact: { select: { id: true, name: true } },
         deal: { select: { id: true, title: true } },
@@ -93,7 +96,7 @@ export class ActivitiesService {
     }
     if (dto.dealId) {
       const deal = await this.prisma.deal.findFirst({
-        where: { id: dto.dealId, workspaceId, deletedAt: null },
+        where: { id: dto.dealId, workspaceId, deletedAt: null, ...dealScope() },
       });
       if (!deal) throw new NotFoundException('Negócio não encontrado');
     }
@@ -128,7 +131,7 @@ export class ActivitiesService {
   // Atualiza atividade
   async update(workspaceId: string, id: string, dto: UpdateActivityDto) {
     const existing = await this.prisma.activity.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, ...activityScope() },
     });
 
     if (!existing) throw new NotFoundException('Atividade não encontrada');
@@ -150,7 +153,7 @@ export class ActivitiesService {
   // Soft delete de atividade
   async remove(workspaceId: string, id: string) {
     const activity = await this.prisma.activity.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, ...activityScope() },
     });
 
     if (!activity) throw new NotFoundException('Atividade não encontrada');
@@ -166,7 +169,7 @@ export class ActivitiesService {
   // Marca atividade como concluída
   async markDone(workspaceId: string, id: string) {
     const activity = await this.prisma.activity.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, ...activityScope() },
     });
 
     if (!activity) throw new NotFoundException('Atividade não encontrada');
@@ -190,7 +193,7 @@ export class ActivitiesService {
 
     const activities = await this.prisma.activity.findMany({
       where: {
-        workspaceId,
+        workspaceId, ...activityScope(),
         deletedAt: null,
         type: { in: ['TASK', 'CALL', 'VISIT', 'MEETING'] },
         dueAt: { gte: startDate, lte: endDate },
@@ -223,7 +226,7 @@ export class ActivitiesService {
 
     const activities = await this.prisma.activity.findMany({
       where: {
-        workspaceId,
+        workspaceId, ...activityScope(),
         deletedAt: null,
         doneAt: null,
         dueAt: { gte: startOfDay, lte: endOfDay },

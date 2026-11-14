@@ -24,11 +24,13 @@ import {
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('pipelines')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('pipelines')
 export class PipelinesController {
   constructor(private readonly pipelinesService: PipelinesService) {}
@@ -38,6 +40,7 @@ export class PipelinesController {
     return this.pipelinesService.findAll(workspaceId);
   }
 
+  @Access(...MANAGEMENT)
   @Post()
   create(
     @Headers('x-workspace-id') workspaceId: string,
@@ -55,6 +58,7 @@ export class PipelinesController {
     return this.pipelinesService.findOne(workspaceId, id);
   }
 
+  @Access(...MANAGEMENT)
   @Patch(':id')
   update(
     @Headers('x-workspace-id') workspaceId: string,
@@ -65,6 +69,7 @@ export class PipelinesController {
     return this.pipelinesService.update(workspaceId, user.sub, id, dto);
   }
 
+  @Access(...MANAGEMENT)
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   remove(
@@ -75,6 +80,7 @@ export class PipelinesController {
     return this.pipelinesService.remove(workspaceId, user.sub, id);
   }
 
+  @Access(...MANAGEMENT)
   @Post(':id/stages')
   addStage(
     @Headers('x-workspace-id') workspaceId: string,
@@ -84,6 +90,7 @@ export class PipelinesController {
     return this.pipelinesService.addStage(workspaceId, id, dto);
   }
 
+  @Access(...MANAGEMENT)
   @Patch(':id/stages/reorder')
   reorderStages(
     @Headers('x-workspace-id') workspaceId: string,
@@ -93,6 +100,7 @@ export class PipelinesController {
     return this.pipelinesService.reorderStages(workspaceId, id, dto);
   }
 
+  @Access(...MANAGEMENT)
   @Patch(':id/stages/:stageId')
   updateStage(
     @Headers('x-workspace-id') workspaceId: string,
@@ -103,6 +111,7 @@ export class PipelinesController {
     return this.pipelinesService.updateStage(workspaceId, id, stageId, dto);
   }
 
+  @Access(...MANAGEMENT)
   @Delete(':id/stages/:stageId')
   @HttpCode(HttpStatus.OK)
   deleteStage(
