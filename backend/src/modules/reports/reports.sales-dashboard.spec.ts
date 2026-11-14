@@ -19,7 +19,14 @@ function makePrisma() {
     contract: { aggregate: jest.fn().mockResolvedValue(agg({ saleValue: new DecimalStub('420000.00') }, 1)) },
     commission: { aggregate: jest.fn().mockResolvedValue(agg({ amount: new DecimalStub('25200.00') }, 2)) },
     splitTransaction: { aggregate: jest.fn().mockResolvedValue(agg({ amount: new DecimalStub('1000.00') }, 1)) },
-    bankAccount: { aggregate: jest.fn().mockResolvedValue(agg({ balance: new DecimalStub('10000.50') }, 2)) },
+    // Fase 5: saldo = saldo inicial + extrato (duas contas: 4000 + 6000,50)
+    bankAccount: { findMany: jest.fn().mockResolvedValue([
+      { id: 'a1', openingBalance: new DecimalStub('3000.00'), openingDate: null },
+      { id: 'a2', openingBalance: new DecimalStub('6000.50'), openingDate: new Date('2026-01-01') },
+    ]) },
+    bankTransaction: { aggregate: jest.fn()
+      .mockResolvedValueOnce(agg({ amount: new DecimalStub('1000.00') }))
+      .mockResolvedValueOnce(agg({ amount: null })) },
     proposal: { count: jest.fn().mockResolvedValue(2) },
     financialEntry: {
       aggregate: jest
@@ -30,8 +37,8 @@ function makePrisma() {
         .mockResolvedValueOnce(agg({ amount: new DecimalStub('8000.25') }))
         // 3ª: a pagar em 30 dias
         .mockResolvedValueOnce(agg({ amount: new DecimalStub('5000.00') }))
-        // 4ª: comissão a receber em parcelas (Fase 4)
-        .mockResolvedValueOnce(agg({ amount: new DecimalStub('11700.00') }, 1)),
+        // 4ª: comissão a receber em parcelas (Fase 4), 1.000 já baixados (Fase 5)
+        .mockResolvedValueOnce(agg({ amount: new DecimalStub('12700.00'), paidAmount: new DecimalStub('1000.00') }, 1)),
     },
   };
 }
@@ -102,7 +109,7 @@ describe('ReportsService.getSalesDashboard', () => {
       ...prisma.contract.aggregate.mock.calls,
       ...prisma.commission.aggregate.mock.calls,
       ...prisma.splitTransaction.aggregate.mock.calls,
-      ...prisma.bankAccount.aggregate.mock.calls,
+      ...prisma.bankAccount.findMany.mock.calls,
       ...prisma.financialEntry.aggregate.mock.calls,
       ...prisma.proposal.count.mock.calls,
     ];

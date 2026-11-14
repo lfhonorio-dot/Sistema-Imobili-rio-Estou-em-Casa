@@ -20,6 +20,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { DimobService } from '../fiscal/dimob.service';
+import { BillingService } from '../billing/billing.service';
 import {
   BeneficiaryInput, buildSettlement, CASH_ATTENTION_THRESHOLD, DEFAULT_CHECKLIST, equalInstallments, InstallmentInput,
   SettlementPlan,
@@ -37,6 +38,7 @@ export class SaleLifecycleService {
     private prisma: PrismaService,
     private audit: AuditService,
     private dimob: DimobService,
+    private billing: BillingService,
   ) {}
 
   private async loadSaleContract(workspaceId: string, id: string) {
@@ -181,38 +183,8 @@ export class SaleLifecycleService {
         data: { propertyId: c.propertyId, status: 'SOLD', userId, note: `Automático — venda ${code} ativada` },
       });
 
-      // 3. comissão a receber (parcelas)
-      const receivableIds: string[] = [];
-      for (const r of plan.receivables) {
-        const e = await tx.financialEntry.create({
-          data: {
-            workspaceId, type: 'RECEIVABLE', category: 'COMMISSION',
-            description: `Comissão de venda — ${code}${r.totalInstallments > 1 ? ` (parcela ${r.installment}/${r.totalInstallments})` : ''}`,
-            amount: r.amount, dueDate: r.dueDate, status: 'PENDING',
-            contractId: c.id, propertyId: c.propertyId, contactId: payer.id,
-            installment: r.installment, totalInstallments: r.totalInstallments,
-          },
-          select: { id: true },
-        });
-        receivableIds.push(e.id);
-      }
-
-      // 4. comissões a pagar (vinculadas à parcela de origem)
-      for (const p of plan.payables) {
-        await tx.financialEntry.create({
-          data: {
-            workspaceId, type: 'PAYABLE', category: 'COMMISSION',
-            description: `Comissão do ${p.label} — ${code}${p.totalInstallments > 1 ? ` (parcela ${p.installment}/${p.totalInstallments})` : ''}`,
-            amount: p.amount, dueDate: p.dueDate, status: 'PENDING',
-            contractId: c.id, propertyId: c.propertyId,
-            contactId: p.contactId ?? undefined,
-            beneficiaryUserId: p.userId ?? undefined,
-            sourceEntryId: receivableIds[p.installment - 1],
-            installment: p.installment, totalInstallments: p.totalInstallments,
-            notes: 'Pagar depois do recebimento da parcela de comissão correspondente.',
-          },
-        });
-      }
+      // 3 e 4. comissão a receber (parcelas) e comissões a pagar
+      const receivableIds = await this.createCommissionEntries(tx, workspaceId, c, code, payer.id, plan);
 
       // 5. DIMOB da venda (na mesma transação)
       await this.dimob.registerSaleEvents(workspaceId, c.id, { db: tx, commissionTotal: plan.commissionTotal, eventDate });
@@ -238,6 +210,126 @@ export class SaleLifecycleService {
       after: { commission: plan.commissionTotal, installments: plan.receivables.length, cashInvolved },
     });
     return { activated: true, ...result, commissionTotal: plan.commissionTotal, agencyNet: plan.agencyNet, warnings };
+  }
+
+  /** Contas a receber (parcelas da comissão) e a pagar (corretores/parceiros), na transação. */
+  private async createCommissionEntries(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    c: { id: string; propertyId: string },
+    code: string,
+    payerId: string,
+    plan: SettlementPlan,
+  ): Promise<string[]> {
+    const receivableIds: string[] = [];
+    for (const r of plan.receivables) {
+      const e = await tx.financialEntry.create({
+        data: {
+          workspaceId, type: 'RECEIVABLE', category: 'COMMISSION',
+          description: `Comissão de venda — ${code}${r.totalInstallments > 1 ? ` (parcela ${r.installment}/${r.totalInstallments})` : ''}`,
+          amount: r.amount, dueDate: r.dueDate, status: 'PENDING',
+          contractId: c.id, propertyId: c.propertyId, contactId: payerId,
+          installment: r.installment, totalInstallments: r.totalInstallments,
+        },
+        select: { id: true },
+      });
+      receivableIds.push(e.id);
+    }
+    for (const p of plan.payables) {
+      await tx.financialEntry.create({
+        data: {
+          workspaceId, type: 'PAYABLE', category: 'COMMISSION',
+          description: `Comissão do ${p.label} — ${code}${p.totalInstallments > 1 ? ` (parcela ${p.installment}/${p.totalInstallments})` : ''}`,
+          amount: p.amount, dueDate: p.dueDate, status: 'PENDING',
+          contractId: c.id, propertyId: c.propertyId,
+          contactId: p.contactId ?? undefined,
+          beneficiaryUserId: p.userId ?? undefined,
+          sourceEntryId: receivableIds[p.installment - 1],
+          installment: p.installment, totalInstallments: p.totalInstallments,
+          notes: 'Pagar depois do recebimento da parcela de comissão correspondente.',
+        },
+      });
+    }
+    return receivableIds;
+  }
+
+  // ── Fase 5: vendas antigas (ativadas antes da Fase 4) ─────────────
+
+  /**
+   * Diagnóstico das vendas ATIVAS criadas pelo sistema antigo: não têm data
+   * de ativação nem plano de comissão no financeiro. A migration da Fase 5 já
+   * cancelou (com motivo) o "a receber" com o valor do imóvel; aqui o dono vê
+   * o que falta lançar.
+   */
+  async legacyDiagnostic(workspaceId: string) {
+    const contracts = await this.prisma.contract.findMany({
+      where: { workspaceId, deletedAt: null, type: { in: SALE_TYPES }, status: 'ACTIVE', activatedAt: null },
+      select: {
+        id: true, code: true, type: true, saleValue: true, commissionRate: true, commissionAmount: true, createdAt: true, ownerId: true,
+        property: { select: { code: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const out = [];
+    for (const c of contracts) {
+      const [commissionEntries, legacyCommissions, fixedSaleEntries] = await Promise.all([
+        this.prisma.financialEntry.count({
+          where: { workspaceId, contractId: c.id, deletedAt: null, type: 'RECEIVABLE', category: 'COMMISSION', status: { not: 'CANCELLED' } },
+        }),
+        this.prisma.commission.findMany({ where: { workspaceId, contractId: c.id }, select: { status: true, amount: true } }),
+        this.prisma.financialEntry.count({
+          where: { workspaceId, contractId: c.id, cancelReason: { startsWith: 'Correção automática (Fase 5)' } },
+        }),
+      ]);
+      const suggested = c.saleValue != null && c.commissionRate != null ? Math.round(Number(c.saleValue) * Number(c.commissionRate)) / 100 : null;
+      out.push({
+        id: c.id, code: c.code, type: c.type, propertyCode: c.property?.code ?? null, createdAt: c.createdAt,
+        saleValue: c.saleValue != null ? Number(c.saleValue) : null,
+        suggestedCommission: suggested,
+        commissionEntries,
+        legacyCommissions: legacyCommissions.map((l) => ({ status: l.status, amount: Number(l.amount) })),
+        cancelledPropertyValueEntries: fixedSaleEntries,
+        needsRegularization: commissionEntries === 0 && c.commissionAmount == null,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Lança o plano de comissão (a receber + a pagar) de uma venda antiga já
+   * ativa, numa transação. Não mexe no imóvel, na DIMOB nem na data da venda.
+   * Comissões pendentes do modelo antigo são canceladas (substituídas).
+   */
+  async regularizeLegacy(workspaceId: string, userId: string, id: string, dto: ActivateSaleDto) {
+    const { contract: c, payer, plan, warnings } = await this.buildPlan(workspaceId, id, dto);
+    if (c.status !== 'ACTIVE' || c.activatedAt) {
+      throw new BadRequestException('A regularização é só para vendas antigas (ativas antes do novo fluxo).');
+    }
+    const existing = await this.prisma.financialEntry.count({
+      where: { workspaceId, contractId: id, deletedAt: null, type: 'RECEIVABLE', category: 'COMMISSION', status: { not: 'CANCELLED' } },
+    });
+    if (existing > 0) throw new ConflictException('Esta venda já tem comissão lançada no financeiro.');
+    const code = c.code ?? c.id;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const flip = await tx.contract.updateMany({
+        where: { id, workspaceId, status: 'ACTIVE', activatedAt: null, commissionAmount: null, deletedAt: null },
+        data: { commissionAmount: plan.commissionTotal, commissionPayerId: payer.id, ...(dto.paymentMethod && { paymentMethod: dto.paymentMethod }) },
+      });
+      if (flip.count !== 1) throw new ConflictException('Esta venda já foi regularizada.');
+      const receivableIds = await this.createCommissionEntries(tx, workspaceId, c, code, payer.id, plan);
+      const replaced = await tx.commission.updateMany({
+        where: { workspaceId, contractId: id, status: 'PENDING' },
+        data: { status: 'CANCELLED', notes: 'Substituída pelo plano de comissão lançado no financeiro (Fase 5).' },
+      });
+      return { receivables: receivableIds.length, payables: plan.payables.length, legacyCommissionsReplaced: replaced.count };
+    });
+
+    await this.audit.log({
+      workspaceId, userId, action: 'SALE_LEGACY_REGULARIZED', entity: 'Contract', entityId: id,
+      after: { commission: plan.commissionTotal, installments: plan.receivables.length },
+    });
+    return { regularized: true, ...result, commissionTotal: plan.commissionTotal, warnings };
   }
 
   async rescind(workspaceId: string, userId: string, id: string, dto: RescindSaleDto) {
@@ -273,13 +365,16 @@ export class SaleLifecycleService {
       let cancelled = 0;
       let reversals = 0;
       for (const e of entries) {
+        const partial = (e.status === 'PENDING' || e.status === 'OVERDUE') && Number(e.paidAmount ?? 0) > 0;
         if (e.status === 'PENDING' || e.status === 'OVERDUE') {
           await tx.financialEntry.update({
             where: { id: e.id },
             data: { status: 'CANCELLED', cancelledAt: now, cancelReason: `Rescisão da venda ${code}: ${reason}` },
           });
           cancelled++;
-        } else if (e.status === 'PAID' && !e.description.startsWith('Estorno')) {
+        }
+        // pago (total ou parcial, Fase 5) → estorno do que já foi baixado
+        if ((e.status === 'PAID' || partial) && !e.description.startsWith('Estorno')) {
           await tx.financialEntry.create({
             data: {
               workspaceId,
@@ -311,16 +406,25 @@ export class SaleLifecycleService {
       return { cancelled, reversals };
     });
 
-    // boletos emitidos não são cancelados automaticamente no banco: avisa
-    const boletos = await this.prisma.boleto.count({
-      where: { workspaceId, contractId: id, deletedAt: null, status: { in: ['PENDING', 'REGISTERED', 'OVERDUE'] } },
+    // Fase 5: boletos/PIX em aberto são cancelados também no Asaas.
+    // Se o banco recusar, a rescisão continua válida e o aviso diz o que falta.
+    const charges = await this.prisma.boleto.findMany({
+      where: { workspaceId, contractId: id, deletedAt: null, status: { in: ['PENDING', 'REGISTERED', 'SENT', 'OVERDUE'] } },
+      select: { id: true, kind: true },
     });
-    const warnings = boletos
-      ? [`Há ${boletos} boleto(s) emitido(s) para este contrato. O cancelamento no banco ainda é manual: cancele no Asaas para o pagador não pagar.`]
-      : [];
+    const warnings: string[] = [];
+    let chargesCancelled = 0;
+    for (const ch of charges) {
+      try {
+        await this.billing.cancelCharge(workspaceId, ch.id, `Rescisão da venda ${code}: ${reason}`, userId);
+        chargesCancelled++;
+      } catch (err) {
+        warnings.push(`Não foi possível cancelar ${ch.kind === 'PIX' ? 'a cobrança PIX' : 'o boleto'} no Asaas (${(err as Error).message}). Cancele manualmente para o pagador não pagar.`);
+      }
+    }
 
     await this.audit.log({ workspaceId, userId, action: 'SALE_RESCINDED', entity: 'Contract', entityId: id, after: { reason, ...result } });
-    return { rescinded: true, ...result, warnings };
+    return { rescinded: true, ...result, chargesCancelled, warnings };
   }
 
   async reviewCash(workspaceId: string, userId: string, id: string, dto: CashReviewDto) {

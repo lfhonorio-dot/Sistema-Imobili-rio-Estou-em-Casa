@@ -94,7 +94,7 @@ export class ReportsService {
           workspaceId, deletedAt: null, type: 'PAYABLE', category: 'COMMISSION',
           status: { in: openStatuses },
         },
-        _sum: { amount: true },
+        _sum: { amount: true, paidAmount: true },
         _count: true,
       }),
       this.prisma.splitTransaction.aggregate({
@@ -102,29 +102,29 @@ export class ReportsService {
         _sum: { amount: true },
         _count: true,
       }),
-      this.prisma.bankAccount.aggregate({
+      // Fase 5: saldo = saldo inicial + extrato a partir da data do saldo inicial
+      this.prisma.bankAccount.findMany({
         where: { workspaceId, deletedAt: null, isActive: true },
-        _sum: { balance: true },
-        _count: true,
+        select: { id: true, openingBalance: true, openingDate: true },
       }),
       this.prisma.financialEntry.aggregate({
         where: {
           workspaceId, deletedAt: null, type: 'RECEIVABLE',
           status: { in: openStatuses }, dueDate: { lte: in30Days },
         },
-        _sum: { amount: true },
+        _sum: { amount: true, paidAmount: true },
       }),
       this.prisma.financialEntry.aggregate({
         where: {
           workspaceId, deletedAt: null, type: 'PAYABLE',
           status: { in: openStatuses }, dueDate: { lte: in30Days },
         },
-        _sum: { amount: true },
+        _sum: { amount: true, paidAmount: true },
       }),
       // Fase 4: comissão a receber lançada em parcelas na ativação da venda
       this.prisma.financialEntry.aggregate({
         where: { workspaceId, deletedAt: null, type: 'RECEIVABLE', category: 'COMMISSION', status: { in: openStatuses } },
-        _sum: { amount: true },
+        _sum: { amount: true, paidAmount: true },
         _count: true,
       }),
       // Propostas em aberto e dentro da validade (Fase 3)
@@ -134,9 +134,19 @@ export class ReportsService {
     ]);
 
     const n = (v: unknown) => Number(v ?? 0);
-    const balance = n(bankBalance._sum.balance);
-    const in30 = n(receivable30._sum.amount);
-    const out30 = n(payable30._sum.amount);
+    // saldo em aberto = valor − o que já foi baixado (baixas parciais, Fase 5)
+    const open = (a: { _sum: { amount?: unknown; paidAmount?: unknown } }) => n(a._sum.amount) - n(a._sum.paidAmount);
+    let balance = 0;
+    for (const acc of bankBalance) {
+      const mov = await this.prisma.bankTransaction.aggregate({
+        where: { bankAccountId: acc.id, ...(acc.openingDate && { date: { gte: acc.openingDate } }) },
+        _sum: { amount: true },
+      });
+      balance += n(acc.openingBalance) + n(mov._sum.amount);
+    }
+    balance = Math.round(balance * 100) / 100;
+    const in30 = open(receivable30);
+    const out30 = open(payable30);
 
     return {
       newLeads7d: newLeads,
@@ -145,17 +155,17 @@ export class ReportsService {
       vgvInNegotiation: { amount: n(openDeals._sum.value), deals: openDeals._count },
       salesThisMonth: { amount: n(salesMonth._sum.saleValue), count: salesMonth._count },
       commissionsReceivable: {
-        amount: n(commissionsReceivable._sum.amount) + n(commissionReceivableEntries._sum.amount),
+        amount: n(commissionsReceivable._sum.amount) + open(commissionReceivableEntries),
         count: commissionsReceivable._count + commissionReceivableEntries._count,
       },
       commissionsPayable: {
-        amount: n(commissionPayableEntries._sum.amount) + n(partnerPayouts._sum.amount),
+        amount: open(commissionPayableEntries) + n(partnerPayouts._sum.amount),
         count: commissionPayableEntries._count + partnerPayouts._count,
       },
       projectedBalance30d: {
         amount: Math.round((balance + in30 - out30) * 100) / 100,
         bankBalance: balance,
-        bankAccounts: bankBalance._count,
+        bankAccounts: bankBalance.length,
         receivable: in30,
         payable: out30,
       },

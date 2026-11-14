@@ -7,8 +7,9 @@ import { ApiTags, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { BillingService } from './billing.service';
 import {
   CreateGatewayConfigDto, GenerateBoletoDto, BoletoQueryDto,
-  UploadCnabDto, GenerateCnabRemessaDto,
+  UploadCnabDto, GenerateCnabRemessaDto, CancelChargeDto, ReissueChargeDto, SendChargeDto,
 } from './billing.dto';
+import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 import { Public } from '../../../common/decorators/public.decorator';
@@ -62,6 +63,24 @@ export class BillingController {
     return this.service.deleteGateway(workspaceId, id);
   }
 
+  @ApiBearerAuth()
+  @ApiHeader({ name: 'X-Workspace-Id', required: true })
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Post('gateways/:id/webhook-token')
+  @HttpCode(HttpStatus.OK)
+  rotateWebhookToken(@Headers('x-workspace-id') workspaceId: string, @Param('id') id: string) {
+    return this.service.rotateWebhookToken(workspaceId, id);
+  }
+
+  @ApiBearerAuth()
+  @ApiHeader({ name: 'X-Workspace-Id', required: true })
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Post('gateways/:id/test')
+  @HttpCode(HttpStatus.OK)
+  testGateway(@Headers('x-workspace-id') workspaceId: string, @Param('id') id: string) {
+    return this.service.testGateway(workspaceId, id);
+  }
+
   // ── BOLETOS ───────────────────────────────────────────────
 
   @ApiBearerAuth()
@@ -94,7 +113,7 @@ export class BillingController {
     @Headers('x-workspace-id') workspaceId: string,
     @Body() dto: GenerateBoletoDto,
   ) {
-    return this.service.generateBoleto(workspaceId, dto);
+    return this.service.generateCharge(workspaceId, dto);
   }
 
   @ApiBearerAuth()
@@ -105,9 +124,40 @@ export class BillingController {
   reissueBoleto(
     @Headers('x-workspace-id') workspaceId: string,
     @Param('id') id: string,
-    @Body('newDueDate') newDueDate: string,
+    @Body() dto: ReissueChargeDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.service.reissueBoleto(workspaceId, id, newDueDate);
+    return this.service.reissueBoleto(workspaceId, id, dto.newDueDate, dto.kind, user?.sub);
+  }
+
+  // Fase 5: cancela no Asaas e aqui (com motivo)
+  @ApiBearerAuth()
+  @ApiHeader({ name: 'X-Workspace-Id', required: true })
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Post('boletos/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  cancelCharge(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+    @Body() dto: CancelChargeDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.cancelCharge(workspaceId, id, dto.reason, user?.sub);
+  }
+
+  // Fase 5: envia ao pagador por e-mail e/ou WhatsApp
+  @ApiBearerAuth()
+  @ApiHeader({ name: 'X-Workspace-Id', required: true })
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Post('boletos/:id/send')
+  @HttpCode(HttpStatus.OK)
+  sendCharge(
+    @Headers('x-workspace-id') workspaceId: string,
+    @Param('id') id: string,
+    @Body() dto: SendChargeDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.sendCharge(workspaceId, id, dto.channels, user.sub);
   }
 
   @ApiBearerAuth()

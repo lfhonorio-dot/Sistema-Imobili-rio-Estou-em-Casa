@@ -8,58 +8,50 @@ import { FinancialService } from './financial.service';
 
 function makePrismaMock() {
   return {
-    financialEntry: {
-      findFirst: jest.fn(),
-      update: jest.fn((args: any) => Promise.resolve({ id: args.where.id, ...args.data })),
-    },
+    financialEntry: { findFirst: jest.fn() },
+    boleto: { findFirst: jest.fn().mockResolvedValue(null) },
   };
 }
 
+// Fase 5: a baixa passa pelo motor de baixas (PaymentsService), que grava a
+// baixa e recalcula a situação do lançamento numa transação.
 describe('FinancialService.payEntry', () => {
   let prisma: ReturnType<typeof makePrismaMock>;
+  let payments: { register: jest.Mock };
   let service: FinancialService;
 
   beforeEach(() => {
     prisma = makePrismaMock();
-    service = new FinancialService(prisma as any, {} as any, {} as any);
+    payments = { register: jest.fn().mockResolvedValue({ entry: { status: 'PAID' } }) };
+    service = new FinancialService(prisma as any, {} as any, {} as any, payments as any, {} as any, {} as any);
   });
 
-  it('registra pagamento de um lançamento do tipo PAYABLE (contas a pagar)', async () => {
-    prisma.financialEntry.findFirst.mockResolvedValue({
-      id: 'entry-1', type: 'PAYABLE', amount: 500, status: 'PENDING',
-    });
-
-    const result = await service.payEntry('ws-1', 'entry-1', {} as any);
-
-    expect(result.status).toBe('PAID');
-    expect(prisma.financialEntry.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'entry-1' },
-        data: expect.objectContaining({ status: 'PAID', paidAmount: 500 }),
-      }),
-    );
+  it('registra pagamento de um lançamento do tipo PAYABLE (contas a pagar) quitando o saldo', async () => {
+    prisma.financialEntry.findFirst.mockResolvedValue({ id: 'entry-1', type: 'PAYABLE', amount: 500, paidAmount: null, status: 'PENDING' });
+    await service.payEntry('ws-1', 'entry-1', {} as any, 'u-1');
+    expect(payments.register).toHaveBeenCalledWith('ws-1', 'entry-1', expect.objectContaining({ principal: 500, interest: 0, source: 'MANUAL' }), 'u-1');
   });
 
   it('registra pagamento de um lançamento do tipo RECEIVABLE (contas a receber)', async () => {
-    prisma.financialEntry.findFirst.mockResolvedValue({
-      id: 'entry-2', type: 'RECEIVABLE', amount: 800, status: 'PENDING',
-    });
-
-    const result = await service.payEntry('ws-1', 'entry-2', {} as any);
-
-    expect(result.status).toBe('PAID');
+    prisma.financialEntry.findFirst.mockResolvedValue({ id: 'entry-2', type: 'RECEIVABLE', amount: 800, paidAmount: 300, status: 'PENDING' });
+    await service.payEntry('ws-1', 'entry-2', {} as any);
+    // quita só o saldo em aberto (800 − 300)
+    expect(payments.register).toHaveBeenCalledWith('ws-1', 'entry-2', expect.objectContaining({ principal: 500 }), undefined);
   });
 
-  it('usa o paidAmount informado em vez do valor original, quando enviado', async () => {
-    prisma.financialEntry.findFirst.mockResolvedValue({
-      id: 'entry-3', type: 'PAYABLE', amount: 500, status: 'PENDING',
-    });
-
+  it('paidAmount menor que o saldo vira baixa parcial; maior vira juros', async () => {
+    prisma.financialEntry.findFirst.mockResolvedValue({ id: 'entry-3', type: 'PAYABLE', amount: 500, paidAmount: null, status: 'PENDING' });
     await service.payEntry('ws-1', 'entry-3', { paidAmount: 480 } as any);
+    expect(payments.register).toHaveBeenLastCalledWith('ws-1', 'entry-3', expect.objectContaining({ principal: 480, interest: 0 }), undefined);
+    await service.payEntry('ws-1', 'entry-3', { paidAmount: 510.5 } as any);
+    expect(payments.register).toHaveBeenLastCalledWith('ws-1', 'entry-3', expect.objectContaining({ principal: 500, interest: 10.5 }), undefined);
+  });
 
-    expect(prisma.financialEntry.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ paidAmount: 480 }) }),
-    );
+  it('recusa baixa manual quando há boleto/PIX ativo (evita pagamento em dobro)', async () => {
+    prisma.financialEntry.findFirst.mockResolvedValue({ id: 'entry-4', type: 'RECEIVABLE', amount: 100, paidAmount: null, status: 'PENDING' });
+    prisma.boleto.findFirst.mockResolvedValue({ kind: 'PIX' });
+    await expect(service.payEntry('ws-1', 'entry-4', {} as any)).rejects.toThrow(/cobrança PIX/);
+    expect(payments.register).not.toHaveBeenCalled();
   });
 
   it('lança NotFoundException para lançamento inexistente ou de outro workspace', async () => {
@@ -97,7 +89,8 @@ describe('FinancialService.createEntry', () => {
 
   beforeEach(() => {
     prisma = makeCreatePrismaMock();
-    service = new FinancialService(prisma as any, {} as any, {} as any);
+    const config = { assertCategory: jest.fn(), assertCostCenter: jest.fn() };
+    service = new FinancialService(prisma as any, {} as any, {} as any, {} as any, config as any, {} as any);
   });
 
   it('cria conta a pagar sem vínculos e sem consultar contrato/imóvel/contato', async () => {

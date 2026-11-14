@@ -1,7 +1,7 @@
 // DTOs do Módulo de Cobranças (Boletos, CNAB, Gateways)
 import {
   IsString, IsOptional, IsEnum, IsNumber, IsBoolean,
-  IsDateString, IsInt, Min, Max, IsPositive,
+  IsDateString, IsInt, Min, Max, IsPositive, IsArray,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -17,6 +17,9 @@ export class CreateGatewayConfigDto {
   @IsOptional() @IsString() conta?: string;
   @IsOptional() @IsString() convenio?: string;
   @IsOptional() @IsBoolean() isDefault?: boolean;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  // Fase 5: conta bancária onde o Asaas deposita (para o fluxo de caixa por conta)
+  @IsOptional() @IsString() settlementBankAccountId?: string;
 }
 
 export class GenerateBoletoDto {
@@ -33,6 +36,8 @@ export class GenerateBoletoDto {
   @IsOptional() @IsNumber() interest?: number;
   @IsOptional() @IsNumber() discount?: number;
   @IsOptional() @IsString() instructions?: string;
+  // Fase 5: BOLETO (padrão) ou PIX
+  @IsOptional() @IsEnum(['BOLETO', 'PIX']) kind?: 'BOLETO' | 'PIX';
 }
 
 export class BoletoQueryDto {
@@ -40,6 +45,8 @@ export class BoletoQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) limit?: number = 20;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() contractId?: string;
+  @IsOptional() @IsString() entryId?: string;
+  @IsOptional() @IsEnum(['BOLETO', 'PIX']) kind?: string;
 }
 
 export class UploadCnabDto {
@@ -53,4 +60,18 @@ export class GenerateCnabRemessaDto {
   @IsOptional() @IsString() gatewayId?: string;
   @IsEnum(['CNAB240','CNAB400']) format!: string;
   @IsOptional() @IsString() period?: string; // YYYY-MM
+}
+
+// ── Fase 5 ───────────────────────────────────────────────
+export class CancelChargeDto {
+  @IsString() reason!: string;
+}
+
+export class ReissueChargeDto {
+  @IsDateString() newDueDate!: string;
+  @IsOptional() @IsEnum(['BOLETO', 'PIX']) kind?: 'BOLETO' | 'PIX';
+}
+
+export class SendChargeDto {
+  @IsArray() @IsEnum(['EMAIL', 'WHATSAPP'], { each: true }) channels!: string[];
 }

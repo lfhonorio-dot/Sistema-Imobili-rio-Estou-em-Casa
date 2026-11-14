@@ -27,6 +27,7 @@ import {
 } from './financial.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
 
 @ApiTags('financial')
 @ApiBearerAuth()
@@ -165,7 +166,8 @@ export class FinancialController {
     @Headers('x-workspace-id') workspaceId: string,
     @Param('id') id: string,
     @Body() dto: PayEntryDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.financialService.payEntry(workspaceId, id, dto);
+    return this.financialService.payEntry(workspaceId, id, dto, user?.sub);
   }
 }
