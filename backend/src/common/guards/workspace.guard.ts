@@ -103,6 +103,11 @@ export class WorkspaceGuard implements CanActivate {
 
     // Injeta informações do workspace na requisição
     request.workspaceId = workspaceId;
+    // SEGURANÇA: os controllers leem a imobiliária de @Headers('x-workspace-id').
+    // Quando o cabeçalho não vinha, o guard resolvia a imobiliária do usuário mas o
+    // controller recebia "undefined" — e o Prisma, com workspaceId undefined, NÃO filtra,
+    // devolvendo dados de TODAS as imobiliárias. Gravamos aqui o valor já validado.
+    request.headers['x-workspace-id'] = workspaceId as string;
     request.user = {
       ...request.user,
       permissions: workspaceUser.role.permissions as Record<string, boolean>,
