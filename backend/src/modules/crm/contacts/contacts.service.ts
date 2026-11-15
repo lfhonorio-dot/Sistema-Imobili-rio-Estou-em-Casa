@@ -4,6 +4,7 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
   ConflictException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -108,7 +109,18 @@ export class ContactsService {
       throw new NotFoundException('Contato não encontrado');
     }
 
-    return contact;
+    // Fase 2: dados do cônjuge e perfil de interesse junto com o contato
+    const [spouse, interestProfile] = await Promise.all([
+      contact.spouseContactId
+        ? this.prisma.contact.findFirst({
+            where: { id: contact.spouseContactId, workspaceId, deletedAt: null },
+            select: { id: true, name: true, cpf: true },
+          })
+        : null,
+      this.prisma.contactInterestProfile.findFirst({ where: { workspaceId, contactId: id } }),
+    ]);
+
+    return { ...contact, spouse, interestProfile };
   }
 
   // Cria novo contato com verificação de duplicatas
@@ -153,6 +165,8 @@ export class ContactsService {
       }
     }
 
+    const spouseId = await this.resolveSpouse(workspaceId, dto.spouseContactId);
+
     let contact;
     try {
       contact = await this.prisma.contact.create({
@@ -177,6 +191,10 @@ export class ContactsService {
           city: dto.city,
           state: dto.state,
           marketingConsent: dto.marketingConsent ?? false,
+          marketingConsentAt: dto.marketingConsent ? new Date() : null,
+          maritalStatus: dto.maritalStatus ?? null,
+          marriageRegime: dto.marriageRegime ?? null,
+          spouseContactId: spouseId,
           origin: dto.origin ?? 'MANUAL',
           utmSource: dto.utmSource,
           utmCampaign: dto.utmCampaign,
@@ -215,6 +233,21 @@ export class ContactsService {
   }
 
   // Atualiza contato com log de auditoria
+  // Fase 2: o cônjuge precisa ser um contato do mesmo workspace e não pode
+  // ser o próprio contato. Vazio limpa o vínculo.
+  private async resolveSpouse(workspaceId: string, spouseContactId?: string | null, selfId?: string) {
+    if (!spouseContactId) return null;
+    if (selfId && spouseContactId === selfId) {
+      throw new BadRequestException('O cônjuge não pode ser o próprio contato.');
+    }
+    const spouse = await this.prisma.contact.findFirst({
+      where: { id: spouseContactId, workspaceId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!spouse) throw new BadRequestException('Cônjuge não encontrado neste workspace.');
+    return spouse.id;
+  }
+
   async update(workspaceId: string, userId: string, id: string, dto: UpdateContactDto) {
     const existing = await this.prisma.contact.findFirst({
       where: { id, workspaceId, deletedAt: null },
@@ -223,6 +256,9 @@ export class ContactsService {
     if (!existing) {
       throw new NotFoundException('Contato não encontrado');
     }
+
+    const spouseId =
+      dto.spouseContactId !== undefined ? await this.resolveSpouse(workspaceId, dto.spouseContactId, id) : undefined;
 
     const updated = await this.prisma.contact.update({
       where: { id },
@@ -245,7 +281,16 @@ export class ContactsService {
         ...(dto.neighborhood !== undefined && { neighborhood: dto.neighborhood }),
         ...(dto.city !== undefined && { city: dto.city }),
         ...(dto.state !== undefined && { state: dto.state }),
-        ...(dto.marketingConsent !== undefined && { marketingConsent: dto.marketingConsent }),
+        ...(dto.marketingConsent !== undefined && {
+          marketingConsent: dto.marketingConsent,
+          // registra quando o consentimento foi dado (ou retirado)
+          ...(dto.marketingConsent !== existing.marketingConsent && {
+            marketingConsentAt: dto.marketingConsent ? new Date() : null,
+          }),
+        }),
+        ...(dto.maritalStatus !== undefined && { maritalStatus: dto.maritalStatus }),
+        ...(dto.marriageRegime !== undefined && { marriageRegime: dto.marriageRegime }),
+        ...(dto.spouseContactId !== undefined && { spouseContactId: spouseId }),
         ...(dto.origin !== undefined && { origin: dto.origin }),
         ...(dto.customFields !== undefined && { customFields: dto.customFields as Prisma.JsonObject }),
       },

@@ -27,6 +27,11 @@ export interface Contact {
   city?: string | null;
   state?: string | null;
   marketingConsent: boolean;
+  marketingConsentAt?: string | null;
+  maritalStatus?: string | null;
+  marriageRegime?: string | null;
+  spouseContactId?: string | null;
+  spouse?: { id: string; name: string } | null;
   origin?: string | null;
   utmSource?: string | null;
   utmCampaign?: string | null;

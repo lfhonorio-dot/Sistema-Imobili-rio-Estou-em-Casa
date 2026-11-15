@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
+import { FilesService } from '../../files/files.service';
 import {
   CreatePropertyDto,
   UpdatePropertyDto,
@@ -25,7 +26,14 @@ export class PropertiesService {
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
+    private files: FilesService,
   ) {}
+
+  // Fase 2: fotos enviadas ficam como "file:<id>"; troca pela URL assinada.
+  private withPhotoUrls<T extends { photos?: Array<{ url: string }> }>(p: T): T {
+    if (!p.photos) return p;
+    return { ...p, photos: p.photos.map((ph) => ({ ...ph, url: this.files.resolveUrl(ph.url) ?? ph.url })) };
+  }
 
   // Lista imóveis com paginação e filtros
   async findAll(workspaceId: string, query: PropertyQueryDto) {
@@ -106,7 +114,7 @@ export class PropertiesService {
     ]);
 
     return {
-      items: properties,
+      items: properties.map((p) => this.withPhotoUrls(p)),
       meta: { page, limit, total, pages: Math.ceil(total / limit) },
     };
   }
@@ -219,7 +227,10 @@ export class PropertiesService {
       throw new NotFoundException('Imóvel não encontrado');
     }
 
-    return property;
+    return {
+      ...this.withPhotoUrls(property),
+      documents: property.documents.map((d) => ({ ...d, url: this.files.resolveUrl(d.url) ?? d.url })),
+    };
   }
 
   // Cria novo imóvel gerando código automático
@@ -248,14 +259,24 @@ export class PropertiesService {
     }
     const code = `P-${year}-${String(sequence).padStart(4, '0')}`;
 
-    const property = await this.prisma.property.create({
-      data: {
-        workspaceId,
-        code,
-        ...dto,
-        customFields: (dto.customFields as Prisma.InputJsonValue) ?? {},
-      },
-      include: { photos: true, owner: { select: { id: true, name: true } } },
+    // Imóvel + proprietário principal (tabela de proprietários, Fase 2) numa
+    // única transação.
+    const property = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.property.create({
+        data: {
+          workspaceId,
+          code,
+          ...dto,
+          customFields: (dto.customFields as Prisma.InputJsonValue) ?? {},
+        },
+        include: { photos: true, owner: { select: { id: true, name: true } } },
+      });
+      if (dto.ownerId) {
+        await tx.propertyOwner.create({
+          data: { workspaceId, propertyId: created.id, contactId: dto.ownerId, isPrimary: true },
+        });
+      }
+      return created;
     });
 
     await this.auditService.log({
@@ -289,15 +310,43 @@ export class PropertiesService {
       if (!owner) throw new BadRequestException('Proprietário não encontrado');
     }
 
-    const updated = await this.prisma.property.update({
-      where: { id },
-      data: {
-        ...dto,
-        customFields: dto.customFields
-          ? (dto.customFields as Prisma.InputJsonValue)
-          : undefined,
-      },
-      include: { photos: true, owner: { select: { id: true, name: true } } },
+    // Atualização + histórico de preço (Fase 2) + proprietário principal,
+    // tudo na mesma transação.
+    const priceChanges = priceHistoryChanges(existing, dto);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.property.update({
+        where: { id },
+        data: {
+          ...dto,
+          customFields: dto.customFields
+            ? (dto.customFields as Prisma.InputJsonValue)
+            : undefined,
+        },
+        include: { photos: true, owner: { select: { id: true, name: true } } },
+      });
+      if (priceChanges.length) {
+        await tx.propertyPriceHistory.createMany({
+          data: priceChanges.map((c) => ({ workspaceId, propertyId: id, userId, ...c })),
+        });
+      }
+      if (dto.ownerId && dto.ownerId !== existing.ownerId) {
+        await tx.propertyOwner.updateMany({
+          where: { workspaceId, propertyId: id, deletedAt: null },
+          data: { isPrimary: false },
+        });
+        const link = await tx.propertyOwner.findFirst({
+          where: { workspaceId, propertyId: id, contactId: dto.ownerId, deletedAt: null },
+          select: { id: true },
+        });
+        if (link) {
+          await tx.propertyOwner.update({ where: { id: link.id }, data: { isPrimary: true } });
+        } else {
+          await tx.propertyOwner.create({
+            data: { workspaceId, propertyId: id, contactId: dto.ownerId, isPrimary: true },
+          });
+        }
+      }
+      return result;
     });
 
     await this.auditService.log({
@@ -529,4 +578,28 @@ export class PropertiesService {
     const dataUrl = await QRCode.toDataURL(url);
     return { dataUrl, url };
   }
+}
+
+// Fase 2 — compara preço antigo × novo e devolve as linhas do histórico.
+// Só registra quando o campo veio na atualização e o valor realmente mudou.
+export function priceHistoryChanges(
+  existing: { salePrice?: unknown; rentalPrice?: unknown },
+  dto: { salePrice?: number | null; rentalPrice?: number | null },
+): Array<{ field: 'SALE_PRICE' | 'RENTAL_PRICE'; oldValue: number | null; newValue: number | null }> {
+  const toNum = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v));
+  const changes: Array<{ field: 'SALE_PRICE' | 'RENTAL_PRICE'; oldValue: number | null; newValue: number | null }> = [];
+  const pairs: Array<['SALE_PRICE' | 'RENTAL_PRICE', unknown, number | null | undefined]> = [
+    ['SALE_PRICE', existing.salePrice, dto.salePrice],
+    ['RENTAL_PRICE', existing.rentalPrice, dto.rentalPrice],
+  ];
+  for (const [field, oldRaw, newRaw] of pairs) {
+    if (newRaw === undefined) continue;
+    const oldValue = toNum(oldRaw);
+    const newValue = toNum(newRaw);
+    const same =
+      oldValue === newValue ||
+      (oldValue != null && newValue != null && Math.round(oldValue * 100) === Math.round(newValue * 100));
+    if (!same) changes.push({ field, oldValue, newValue });
+  }
+  return changes;
 }

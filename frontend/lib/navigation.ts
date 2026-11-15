@@ -14,7 +14,7 @@ import {
   MessageSquare, FileText, PenSquare, ArrowDownCircle, ArrowUpCircle, Banknote,
   LineChart, Landmark, Percent, Receipt, BarChart2, FileSpreadsheet, Building2,
   Users, Shield, ClipboardList, Mail, Wrench, Zap, Megaphone, Handshake, Plug,
-  ShieldCheck,
+  ShieldCheck, Truck,
 } from 'lucide-react';
 
 export type OperationProfile = 'VENDA' | 'VENDA_E_LOCACAO';
@@ -71,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Bancário', href: '/financial/banking', icon: Landmark },
       { label: 'Comissões', href: '/commissions', icon: Percent },
       { label: 'Corretores Parceiros', href: '/partners', icon: Handshake },
+      { label: 'Fornecedores', href: '/suppliers', icon: Truck },
       { label: 'Notas Fiscais', href: '/fiscal?tab=nfse', icon: Receipt },
     ],
   },

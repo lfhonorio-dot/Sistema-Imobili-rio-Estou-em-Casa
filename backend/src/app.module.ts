@@ -41,6 +41,8 @@ import { ReportsModule } from './modules/reports/reports.module';
 
 // Módulo Etapa 8 — Integrações e API Pública
 import { AdminModule } from './modules/admin/admin.module';
+import { FilesModule } from './modules/files/files.module';
+import { SuppliersModule } from './modules/erp/suppliers/suppliers.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 // Módulo Etapa 9 — Super Admin e Configurações Avançadas
@@ -103,6 +105,10 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 
     // Super Admin
     AdminModule,
+
+    // Fase 2: arquivos (fotos/documentos) e fornecedores
+    FilesModule,
+    SuppliersModule,
 
     // Super Admin e Configurações Avançadas
   ],

@@ -9,7 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useCreateContact, useUpdateContact } from '@/hooks/use-contacts';
+import { useState } from 'react';
+import { useContacts, useCreateContact, useUpdateContact } from '@/hooks/use-contacts';
+import { getApiErrorMessage } from '@/lib/api-error';
 import type { Contact } from '@/hooks/use-contacts';
 import { toast } from 'sonner';
 
@@ -32,6 +34,9 @@ const contactSchema = z.object({
   state: z.string().optional(),
   marketingConsent: z.boolean().optional(),
   origin: z.string().optional(),
+  maritalStatus: z.string().optional(),
+  marriageRegime: z.string().optional(),
+  spouseContactId: z.string().optional(),
 });
 
 type ContactFormValues = z.infer<typeof contactSchema>;
@@ -42,11 +47,33 @@ interface ContactFormProps {
   onCancel?: () => void;
 }
 
-// Placeholder para busca de CEP
-async function fetchCepData(cep: string): Promise<void> {
-  // TODO: Funcionalidade de busca de CEP via ViaCEP será implementada em breve
-  console.info('Busca de CEP para:', cep, '- funcionalidade em desenvolvimento');
+// Busca de endereço pelo CEP no ViaCEP (serviço público e gratuito).
+// Só o CEP sai do navegador; nenhum dado pessoal é enviado.
+async function fetchCepData(cep: string): Promise<{ street: string; neighborhood: string; city: string; state: string }> {
+  const digits = cep.replace(/\D/g, '');
+  if (digits.length !== 8) throw new Error('Informe um CEP com 8 dígitos.');
+  let res: Response;
+  try {
+    res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+  } catch {
+    throw new Error('Sem conexão com o serviço de CEP. Preencha o endereço manualmente.');
+  }
+  const data = (await res.json().catch(() => null)) as { erro?: boolean; logradouro?: string; bairro?: string; localidade?: string; uf?: string } | null;
+  if (!res.ok || !data || data.erro) throw new Error('CEP não encontrado. Confira o número ou preencha manualmente.');
+  return { street: data.logradouro ?? '', neighborhood: data.bairro ?? '', city: data.localidade ?? '', state: data.uf ?? '' };
 }
+
+const MARITAL_LABELS: Record<string, string> = {
+  SOLTEIRO: 'Solteiro(a)', CASADO: 'Casado(a)', UNIAO_ESTAVEL: 'União estável',
+  DIVORCIADO: 'Divorciado(a)', VIUVO: 'Viúvo(a)', SEPARADO: 'Separado(a)',
+};
+const REGIME_LABELS: Record<string, string> = {
+  COMUNHAO_PARCIAL: 'Comunhão parcial de bens', COMUNHAO_UNIVERSAL: 'Comunhão universal de bens',
+  SEPARACAO_TOTAL: 'Separação total (convencional)', SEPARACAO_OBRIGATORIA: 'Separação obrigatória',
+  PARTICIPACAO_FINAL: 'Participação final nos aquestos',
+};
+const nativeSelect =
+  'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring';
 
 export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) {
   const createContact = useCreateContact();
@@ -80,14 +107,29 @@ export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) 
       state: contact?.state ?? '',
       marketingConsent: contact?.marketingConsent ?? false,
       origin: contact?.origin ?? 'MANUAL',
+      maritalStatus: contact?.maritalStatus ?? '',
+      marriageRegime: contact?.marriageRegime ?? '',
+      spouseContactId: contact?.spouseContactId ?? '',
     },
   });
 
   const type = watch('type');
   const marketingConsent = watch('marketingConsent');
+  const maritalStatus = watch('maritalStatus');
+  const married = maritalStatus === 'CASADO' || maritalStatus === 'UNIAO_ESTAVEL';
+  const [cepLoading, setCepLoading] = useState(false);
+  const spouseContacts = useContacts({ limit: 500, type: 'PERSON' });
+  const spouseOptions = ((spouseContacts.data?.items ?? []) as Array<{ id: string; name: string }>).filter((c) => c.id !== contact?.id);
 
   // force=true reenvia confirmando a criação apesar do e-mail/telefone repetido
-  const onSubmit = async (data: ContactFormValues, force = false) => {
+  const onSubmit = async (raw: ContactFormValues, force = false) => {
+    // campos de seleção vazios viram null (o backend aceita null para limpar)
+    const data = {
+      ...raw,
+      maritalStatus: raw.maritalStatus || null,
+      marriageRegime: raw.maritalStatus === 'CASADO' || raw.maritalStatus === 'UNIAO_ESTAVEL' ? raw.marriageRegime || null : null,
+      spouseContactId: raw.maritalStatus === 'CASADO' || raw.maritalStatus === 'UNIAO_ESTAVEL' ? raw.spouseContactId || null : null,
+    };
     try {
       if (isEditing && contact) {
         await updateContact.mutateAsync({ id: contact.id, ...data });
@@ -120,7 +162,7 @@ export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) 
         const confirmed = window.confirm(
           `Já existe um contato com este e-mail ou telefone: ${dupLabel}.\n\nDeseja cadastrar assim mesmo?`,
         );
-        if (confirmed) await onSubmit(data, true);
+        if (confirmed) await onSubmit(raw, true);
         return;
       }
 
@@ -201,6 +243,43 @@ export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) 
         </>
       )}
 
+      {/* Estado civil e cônjuge (Fase 2) — a venda exige anuência do cônjuge */}
+      {type === 'PERSON' && (
+        <div className="space-y-3 rounded-md border p-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="maritalStatus">Estado civil</Label>
+              <select id="maritalStatus" className={nativeSelect} {...register('maritalStatus')}>
+                <option value="">Não informado</option>
+                {Object.entries(MARITAL_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            {married && (
+              <div className="space-y-1">
+                <Label htmlFor="marriageRegime">Regime de bens</Label>
+                <select id="marriageRegime" className={nativeSelect} {...register('marriageRegime')}>
+                  <option value="">Não informado</option>
+                  {Object.entries(REGIME_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+          {married && (
+            <div className="space-y-1">
+              <Label htmlFor="spouseContactId">Cônjuge / companheiro(a)</Label>
+              <select id="spouseContactId" className={nativeSelect} {...register('spouseContactId')}>
+                <option value="">Selecione o contato do cônjuge…</option>
+                {spouseOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Cadastre o cônjuge como contato antes. Ele precisa assinar a venda junto.
+              </p>
+              {spouseContacts.isError && <p className="text-xs text-red-600">{getApiErrorMessage(spouseContacts.error)}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Endereço */}
       <div className="space-y-1">
         <Label htmlFor="zipCode">CEP</Label>
@@ -215,12 +294,26 @@ export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) 
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => void fetchCepData(watch('zipCode') ?? '')}
+            disabled={cepLoading}
+            onClick={async () => {
+              setCepLoading(true);
+              try {
+                const addr = await fetchCepData(watch('zipCode') ?? '');
+                setValue('street', addr.street);
+                setValue('neighborhood', addr.neighborhood);
+                setValue('city', addr.city);
+                setValue('state', addr.state);
+                toast.success('Endereço preenchido pelo CEP');
+              } catch (e) {
+                toast.error((e as Error).message);
+              } finally {
+                setCepLoading(false);
+              }
+            }}
           >
-            Buscar
+            {cepLoading ? 'Buscando…' : 'Buscar'}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Busca automática de CEP em breve</p>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -263,6 +356,8 @@ export function ContactForm({ contact, onSuccess, onCancel }: ContactFormProps) 
             <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
             <SelectItem value="SITE">Site</SelectItem>
             <SelectItem value="REFERRAL">Indicação</SelectItem>
+            <SelectItem value="PLACA">Placa no imóvel</SelectItem>
+            <SelectItem value="OUTRO">Outro</SelectItem>
           </SelectContent>
         </Select>
       </div>

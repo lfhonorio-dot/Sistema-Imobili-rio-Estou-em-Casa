@@ -334,6 +334,11 @@ model Contact {
   state         String?
   // LGPD
   marketingConsent Boolean @default(false)
+  marketingConsentAt DateTime? // Fase 2: quando o consentimento foi dado
+  // Fase 2: estado civil e cônjuge (venda exige anuência do cônjuge)
+  maritalStatus   String?   // SOLTEIRO, CASADO, UNIAO_ESTAVEL, DIVORCIADO, VIUVO, SEPARADO
+  marriageRegime  String?   // COMUNHAO_PARCIAL, COMUNHAO_UNIVERSAL, SEPARACAO_TOTAL, SEPARACAO_OBRIGATORIA, PARTICIPACAO_FINAL
+  spouseContactId String?   // Contact id do cônjuge ou companheiro(a)
   // Metadados
   customFields  Json      @default("{}")
   origin        String?   // MANUAL, META_ADS, GOOGLE_ADS, PORTAL, WHATSAPP, SITE, REFERRAL
@@ -358,6 +363,9 @@ model Contact {
   contractsAsTenant Contract[] @relation("ContractTenant")
   // Hub: conversas
   conversations     Conversation[]
+  // Fase 2
+  propertyShares    PropertyOwner[] @relation("PropertyCoOwner")
+  interestProfile   ContactInterestProfile?
 
   @@map("contacts")
 }
@@ -633,6 +641,11 @@ model Property {
   documents        Document[]
   dealProperties   DealProperty[]
   portalPublications PortalPublication[]
+  // Fase 2
+  coOwners         PropertyOwner[]
+  authorizations   PropertyAuthorization[]
+  keyMovements     PropertyKeyMovement[]
+  priceHistory     PropertyPriceHistory[]
 
   @@unique([workspaceId, code])
   @@map("properties")
@@ -643,6 +656,7 @@ model PropertyPhoto {
   propertyId  String
   url         String
   caption     String?
+  fileId      String?  // Fase 2: arquivo enviado (StoredFile); url vira "file:<id>"
   order       Int      @default(0)
   createdAt   DateTime @default(now())
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -747,6 +761,7 @@ model FinancialEntry {
   workspace         Workspace  @relation(fields: [workspaceId], references: [id])
   contract          Contract?  @relation(fields: [contractId], references: [id])
   boleto            Boleto?
+  supplierId        String?   // Fase 2: fornecedor/favorecido (contas a pagar)
 
   @@map("financial_entries")
 }
@@ -1649,4 +1664,153 @@ model OnboardingStep {
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   @@unique([workspaceId, step])
   @@map("onboarding_steps")
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FASE 2 — Cadastros (todas as tabelas abaixo são novas / aditivas)
+// ══════════════════════════════════════════════════════════════════
+
+// Proprietários do imóvel (um imóvel pode ter vários). Property.ownerId
+// continua existindo e espelha o proprietário principal.
+model PropertyOwner {
+  id          String    @id @default(uuid())
+  workspaceId String
+  propertyId  String
+  contactId   String
+  sharePct    Decimal?  @db.Decimal(5, 2) // % de propriedade (opcional)
+  isPrimary   Boolean   @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  property    Property  @relation(fields: [propertyId], references: [id])
+  contact     Contact   @relation("PropertyCoOwner", fields: [contactId], references: [id])
+
+  @@index([workspaceId, propertyId])
+  @@map("property_owners")
+}
+
+// Autorização de venda (captação): data, validade, exclusividade,
+// comissão combinada e corretor captador.
+model PropertyAuthorization {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  propertyId     String
+  signedAt       DateTime
+  validUntil     DateTime
+  exclusive      Boolean   @default(false)
+  commissionRate Decimal?  @db.Decimal(5, 2)
+  askingPrice    Decimal?  @db.Decimal(15, 2) // valor autorizado para venda
+  captorUserId   String?   // WorkspaceUser id do corretor captador
+  documentId     String?   // Document com a autorização assinada
+  notes          String?
+  status         String    @default("ACTIVE") // ACTIVE, CANCELLED (vencida é calculado pela data)
+  cancelledAt    DateTime?
+  cancelReason   String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  property       Property  @relation(fields: [propertyId], references: [id])
+
+  @@index([workspaceId, validUntil])
+  @@map("property_authorizations")
+}
+
+// Controle de chaves: cada retirada/devolução é um registro (histórico imutável).
+model PropertyKeyMovement {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  propertyId       String
+  action           String    // CHECKOUT (retirada), RETURN (devolução)
+  keyLabel         String?   // ex.: "Jogo 1 — portão + porta"
+  holderName       String    // quem está com a chave
+  holderContactId  String?
+  userId           String?   // usuário que registrou
+  expectedReturnAt DateTime?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  property         Property  @relation(fields: [propertyId], references: [id])
+
+  @@index([workspaceId, propertyId])
+  @@map("property_key_movements")
+}
+
+// Histórico de preço (gravado automaticamente quando o preço muda).
+model PropertyPriceHistory {
+  id          String   @id @default(uuid())
+  workspaceId String
+  propertyId  String
+  field       String   // SALE_PRICE, RENTAL_PRICE
+  oldValue    Decimal? @db.Decimal(15, 2)
+  newValue    Decimal? @db.Decimal(15, 2)
+  userId      String?
+  createdAt   DateTime @default(now())
+  property    Property @relation(fields: [propertyId], references: [id])
+
+  @@index([workspaceId, propertyId])
+  @@map("property_price_history")
+}
+
+// Arquivos enviados (fotos, documentos). Guardados no próprio banco,
+// servidos por URL assinada (HMAC) com validade.
+model StoredFile {
+  id          String    @id @default(uuid())
+  workspaceId String
+  fileName    String
+  mimeType    String
+  size        Int
+  sha256      String
+  data        Bytes
+  createdById String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@map("stored_files")
+}
+
+// Fornecedores / favorecidos (para contas a pagar).
+model Supplier {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  name          String
+  personType    String    @default("PJ") // PF, PJ
+  document      String?   // CPF ou CNPJ
+  email         String?
+  phone         String?
+  category      String?   // ex.: CARTORIO, PUBLICIDADE, MANUTENCAO, SERVICOS, CORRETOR, OUTRO
+  pixKeyType    String?
+  pixKey        String?
+  bankCode      String?
+  agency        String?
+  accountNumber String?
+  notes         String?
+  isActive      Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@map("suppliers")
+}
+
+// Perfil de interesse do cliente comprador (para sugerir imóveis).
+model ContactInterestProfile {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  contactId        String   @unique
+  propertyTypes    String[] @default([]) // APARTMENT, HOUSE, LAND...
+  cities           String[] @default([])
+  neighborhoods    String[] @default([])
+  minPrice         Decimal? @db.Decimal(15, 2)
+  maxPrice         Decimal? @db.Decimal(15, 2)
+  minBedrooms      Int?
+  minParkingSpaces Int?
+  paymentMethods   String[] @default([]) // CASH, FINANCING, FGTS, PERMUTA
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  contact          Contact  @relation(fields: [contactId], references: [id])
+
+  @@index([workspaceId])
+  @@map("contact_interest_profiles")
 }

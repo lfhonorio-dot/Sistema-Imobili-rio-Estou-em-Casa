@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreateEntry, type CreateFinancialEntryInput } from '@/hooks/use-financial';
+import { useSuppliers } from '@/hooks/use-suppliers';
+import { getApiErrorMessage } from '@/lib/api-error';
 import { useContracts } from '@/hooks/use-contracts';
 import { useProperties } from '@/hooks/use-properties';
 import { useContacts } from '@/hooks/use-contacts';
@@ -53,6 +55,8 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
   const { data: contractsData } = useContracts({ limit: 500 });
   const { data: propertiesData } = useProperties({ limit: 500 });
   const { data: contactsData } = useContacts({ limit: 500 });
+  const suppliersQuery = useSuppliers();
+  const suppliers = suppliersQuery.data?.items ?? [];
 
   const contracts = contractsData?.items ?? [];
   const properties = propertiesData?.items ?? [];
@@ -68,6 +72,7 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
     contractId: NONE,
     propertyId: NONE,
     contactId: NONE,
+    supplierId: NONE,
     notes: '',
   });
 
@@ -109,6 +114,7 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
       ...(form.contractId !== NONE ? { contractId: form.contractId } : {}),
       ...(form.propertyId !== NONE ? { propertyId: form.propertyId } : {}),
       ...(form.contactId !== NONE ? { contactId: form.contactId } : {}),
+      ...(isPayable && form.supplierId !== NONE ? { supplierId: form.supplierId } : {}),
       ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
     };
 
@@ -159,6 +165,31 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
           </Select>
         </div>
       </div>
+
+      {/* Fornecedor / favorecido (Fase 2) — só para contas a pagar */}
+      {isPayable && (
+        <div className="space-y-1">
+          <Label>Fornecedor / favorecido</Label>
+          <Select value={form.supplierId} onValueChange={(v) => setField('supplierId', v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>Nenhum</SelectItem>
+              {suppliers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {suppliersQuery.isError ? (
+            <p className="text-xs text-red-600">Não foi possível carregar os fornecedores: {getApiErrorMessage(suppliersQuery.error)}</p>
+          ) : suppliers.length === 0 && !suppliersQuery.isLoading ? (
+            <p className="text-xs text-muted-foreground">Nenhum fornecedor cadastrado. Cadastre em Financeiro → Fornecedores.</p>
+          ) : null}
+        </div>
+      )}
 
       {/* Descrição */}
       <div className="space-y-1">

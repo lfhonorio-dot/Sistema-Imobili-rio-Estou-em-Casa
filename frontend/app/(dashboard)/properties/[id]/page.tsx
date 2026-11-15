@@ -15,7 +15,11 @@ import {
 import { PropertyStatusBadge } from '@/components/erp/property-status-badge';
 import { useProperty, useChangePropertyStatus, useDeleteProperty } from '@/hooks/use-properties';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import { useOperationProfile } from '@/hooks/use-operation-profile';
+import {
+  AuthorizationPanel, DocumentsPanel, KeysPanel, MatchingContactsPanel, OwnersPanel, PhotoUploadButton, PriceHistoryPanel,
+} from '@/components/properties/registry-panels';
+import api, { apiFileUrl } from '@/lib/api';
 
 const TYPE_LABELS: Record<string, string> = {
   APARTMENT: 'Apartamento', HOUSE: 'Casa', COMMERCIAL: 'Comercial',
@@ -41,6 +45,7 @@ export default function PropertyDetailPage() {
   const [showStatusDialog, setShowStatusDialog] = useState(false);
 
   const { data: property, isLoading } = useProperty(id);
+  const fullProfile = useOperationProfile() === 'VENDA_E_LOCACAO';
   const [priceSug, setPriceSug] = useState<any>(null);
   useEffect(() => {
     if (!id) return;
@@ -205,12 +210,15 @@ export default function PropertyDetailPage() {
       </div>
 
       {/* Galeria de fotos */}
+      <div className="flex justify-end">
+        <PhotoUploadButton propertyId={id} />
+      </div>
       {property.photos && property.photos.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-2">
           {property.photos.map((photo, i) => (
             <img
               key={photo.id}
-              src={photo.url}
+              src={apiFileUrl(photo.url)}
               alt={photo.caption ?? `Foto ${i + 1}`}
               className="h-40 w-60 object-cover rounded-lg flex-shrink-0"
             />
@@ -246,10 +254,14 @@ export default function PropertyDetailPage() {
       <Tabs defaultValue="details">
         <TabsList>
           <TabsTrigger value="details">Detalhes</TabsTrigger>
-          <TabsTrigger value="contracts">Contratos</TabsTrigger>
-          <TabsTrigger value="inspections">Vistorias</TabsTrigger>
-          <TabsTrigger value="maintenance">Manutenção</TabsTrigger>
+          <TabsTrigger value="owners">Proprietários</TabsTrigger>
+          <TabsTrigger value="authorization">Autorização</TabsTrigger>
           <TabsTrigger value="documents">Documentos</TabsTrigger>
+          <TabsTrigger value="keys">Chaves</TabsTrigger>
+          <TabsTrigger value="matching">Clientes compatíveis</TabsTrigger>
+          <TabsTrigger value="contracts">Contratos</TabsTrigger>
+          {fullProfile && <TabsTrigger value="inspections">Vistorias</TabsTrigger>}
+          {fullProfile && <TabsTrigger value="maintenance">Manutenção</TabsTrigger>}
           <TabsTrigger value="history">Histórico</TabsTrigger>
         </TabsList>
 
@@ -328,7 +340,7 @@ export default function PropertyDetailPage() {
         </TabsContent>
 
         <TabsContent value="inspections" className="mt-4">
-          <p className="text-muted-foreground text-sm">Vistorias serão listadas aqui</p>
+          <p className="text-muted-foreground text-sm">Vistorias: não disponível nesta tela.</p>
         </TabsContent>
 
         <TabsContent value="maintenance" className="mt-4">
@@ -348,11 +360,29 @@ export default function PropertyDetailPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="documents" className="mt-4">
-          <p className="text-muted-foreground text-sm">Documentos serão listados aqui</p>
+        <TabsContent value="owners" className="mt-4">
+          <OwnersPanel propertyId={id} />
         </TabsContent>
 
-        <TabsContent value="history" className="mt-4">
+        <TabsContent value="authorization" className="mt-4">
+          <AuthorizationPanel propertyId={id} />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <DocumentsPanel propertyId={id} />
+        </TabsContent>
+
+        <TabsContent value="keys" className="mt-4">
+          <KeysPanel propertyId={id} />
+        </TabsContent>
+
+        <TabsContent value="matching" className="mt-4">
+          <MatchingContactsPanel propertyId={id} />
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4 space-y-4">
+          <PriceHistoryPanel propertyId={id} />
+          <p className="text-sm font-medium">Mudanças de situação</p>
           <div className="space-y-2">
             {(property as any).statusHistory?.map((h: any) => (
               <div key={h.id} className="flex items-center gap-3 text-sm">

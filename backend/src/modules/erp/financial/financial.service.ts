@@ -63,8 +63,19 @@ export class FinancialService {
       this.prisma.financialEntry.count({ where }),
     ]);
 
+    // Nome do fornecedor (Fase 2) — supplierId não é relação no schema, então
+    // busca os nomes de uma vez, sempre dentro do workspace.
+    const supplierIds = [...new Set(entries.map((e) => e.supplierId).filter((v): v is string => !!v))];
+    const suppliers = supplierIds.length
+      ? await this.prisma.supplier.findMany({
+          where: { workspaceId, id: { in: supplierIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const supplierById = new Map(suppliers.map((s) => [s.id, s]));
+
     return {
-      items: entries,
+      items: entries.map((e) => ({ ...e, supplier: e.supplierId ? supplierById.get(e.supplierId) ?? null : null })),
       meta: { page, limit, total, pages: Math.ceil(total / limit) },
     };
   }
@@ -74,7 +85,7 @@ export class FinancialService {
   // checa a existência do registro, não o tenant).
   private async assertLinksBelongToWorkspace(
     workspaceId: string,
-    dto: { contractId?: string; propertyId?: string; contactId?: string },
+    dto: { contractId?: string; propertyId?: string; contactId?: string; supplierId?: string },
   ) {
     if (dto.contractId) {
       const contract = await this.prisma.contract.findFirst({
@@ -96,6 +107,13 @@ export class FinancialService {
         select: { id: true },
       });
       if (!contact) throw new BadRequestException('Contato não encontrado neste workspace');
+    }
+    if (dto.supplierId) {
+      const supplier = await this.prisma.supplier.findFirst({
+        where: { id: dto.supplierId, workspaceId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!supplier) throw new BadRequestException('Fornecedor não encontrado neste workspace');
     }
   }
 

@@ -210,3 +210,12 @@ function redirectToLogin(): void {
 
 export { api };
 export default api;
+
+// Fase 2: arquivos enviados (fotos/documentos) chegam do backend como
+// caminho relativo assinado ("/files/:id?exp=..&sig=.."). Prefixa com a base
+// da API (em produção, /api-proxy). URLs externas passam sem mudança.
+export function apiFileUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  if (url.startsWith('/files/')) return `${API_URL}${url}`;
+  return url;
+}

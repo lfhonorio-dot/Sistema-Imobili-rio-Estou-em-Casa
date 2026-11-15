@@ -22,6 +22,8 @@ export interface FinancialEntry {
   installment?: number | null;
   totalInstallments?: number | null;
   notes?: string | null;
+  supplierId?: string | null;
+  supplier?: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
   contract?: {
@@ -75,6 +77,7 @@ export interface CreateFinancialEntryInput {
   contractId?: string;
   propertyId?: string;
   contactId?: string;
+  supplierId?: string;
   notes?: string;
   /** Repete o lançamento por N meses a partir do vencimento (1 = lançamento único) */
   months?: number;

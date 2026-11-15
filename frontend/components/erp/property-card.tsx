@@ -1,6 +1,7 @@
 // Card de imóvel para visualização em grid
 'use client';
 
+import { apiFileUrl } from '@/lib/api';
 import Link from 'next/link';
 import { Bath, Bed, Car, Maximize } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,7 +44,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
         <div className="aspect-video bg-gray-100 relative">
           {photo ? (
             <img
-              src={photo.url}
+              src={apiFileUrl(photo.url)}
               alt={photo.caption ?? 'Foto do imóvel'}
               className="w-full h-full object-cover"
             />
