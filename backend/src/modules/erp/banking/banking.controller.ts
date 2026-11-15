@@ -11,6 +11,7 @@ import {
 } from './banking.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { RequiresFullProfile } from '../../../common/decorators/operation-profile.decorator';
 
 @ApiTags('banking')
 @ApiBearerAuth()
@@ -123,6 +124,7 @@ export class BankingController {
 
   // ── OPEN FINANCE ──────────────────────────────────────────
 
+  @RequiresFullProfile('Open Finance')
   @Get('open-finance/consent')
   getOpenFinanceConsent(@Headers('x-workspace-id') workspaceId: string) {
     return this.service.getOpenFinanceConsent(workspaceId);

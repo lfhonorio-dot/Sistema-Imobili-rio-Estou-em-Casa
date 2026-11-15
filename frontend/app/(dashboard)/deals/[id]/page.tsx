@@ -1,5 +1,6 @@
 // Página de detalhe do negócio
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -79,8 +80,8 @@ export default function DealDetailPage() {
       setTargetStageId('');
       setLostReason('');
       setLostNote('');
-    } catch {
-      toast.error('Erro ao mover negócio');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao mover negócio'));
     }
   };
 

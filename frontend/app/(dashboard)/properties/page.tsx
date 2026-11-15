@@ -1,5 +1,6 @@
 // Página de listagem de imóveis com grid/lista, filtros e busca
 'use client';
+import { ErrorState } from '@/components/common/error-state';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -20,7 +21,7 @@ export default function PropertiesPage() {
   const [purposeFilter, setPurposeFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useProperties({
+  const { data, isLoading, isError, error, refetch } = useProperties({
     search: search || undefined,
     type: typeFilter || undefined,
     status: statusFilter || undefined,
@@ -125,6 +126,8 @@ export default function PropertiesPage() {
       {/* Conteúdo */}
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">Carregando imóveis...</div>
+      ) : isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
       ) : properties.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">Nenhum imóvel encontrado</p>

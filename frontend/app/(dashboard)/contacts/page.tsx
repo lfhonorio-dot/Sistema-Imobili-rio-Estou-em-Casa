@@ -1,5 +1,6 @@
 // Página de listagem de contatos
 'use client';
+import { ErrorState } from '@/components/common/error-state';
 
 import { useState } from 'react';
 import { Plus, Search, Download, Upload, AlertTriangle } from 'lucide-react';
@@ -44,7 +45,7 @@ export default function ContactsPage() {
   const [page, setPage] = useState(1);
   const [showNewContactModal, setShowNewContactModal] = useState(false);
 
-  const { data, isLoading } = useContacts({
+  const { data, isLoading, isError, error, refetch } = useContacts({
     search: search || undefined,
     type: typeFilter || undefined,
     origin: originFilter || undefined,
@@ -157,6 +158,12 @@ export default function ContactsPage() {
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   Carregando...
+                </TableCell>
+              </TableRow>
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={8}>
+                  <ErrorState error={error} onRetry={() => refetch()} compact />
                 </TableCell>
               </TableRow>
             ) : contacts.length === 0 ? (

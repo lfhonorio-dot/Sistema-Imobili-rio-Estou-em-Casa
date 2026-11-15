@@ -29,6 +29,9 @@ model Workspace {
   twoFactorRequired  Boolean   @default(false)
   dpoName            String?
   dpoEmail           String?
+  // Perfil de operação: VENDA (só fluxo de venda) ou VENDA_E_LOCACAO.
+  // Controla quais menus/rotas aparecem; nada é apagado ao trocar.
+  operationProfile   String    @default("VENDA")
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   deletedAt          DateTime?

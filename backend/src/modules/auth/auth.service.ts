@@ -800,7 +800,7 @@ export class AuthService {
         workspaces: {
           include: {
             workspace: {
-              select: { id: true, name: true, slug: true },
+              select: { id: true, name: true, slug: true, operationProfile: true },
             },
             role: {
               select: { id: true, name: true, permissions: true },
@@ -810,7 +810,7 @@ export class AuthService {
       },
     });
 
-    if (!user) throw new Error('Usuário não encontrado');
+    if (!user) throw new UnauthorizedException('Sessão inválida: usuário não encontrado. Entre novamente.');
 
     // Admin de plataforma (cross-tenant) é definido por allowlist de e-mail,
     // não por papel de workspace — ver PlatformAdminGuard.
@@ -823,7 +823,7 @@ export class AuthService {
     return {
       ...user,
       isPlatformAdmin,
-      workspaces: user.workspaces.map((m: { workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string }; role: { id: string; name: string; permissions: unknown } }) => ({
+      workspaces: user.workspaces.map((m: { workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string; operationProfile: string }; role: { id: string; name: string; permissions: unknown } }) => ({
         workspaceId: m.workspaceId,
         isOwner: m.isOwner,
         workspace: m.workspace,

@@ -13,8 +13,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCreateContract, useGenerateInstallments } from '@/hooks/use-contracts';
 import { useProperties } from '@/hooks/use-properties';
 import { useContacts } from '@/hooks/use-contacts';
+import { useOperationProfile } from '@/hooks/use-operation-profile';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 export default function NewContractPage() {
+  // No perfil VENDA, os tipos de contrato de locação ficam ocultos.
+  const fullProfile = useOperationProfile() === 'VENDA_E_LOCACAO';
   const router = useRouter();
   const createContract = useCreateContract();
   const generateInstallments = useGenerateInstallments();
@@ -140,8 +144,11 @@ export default function NewContractPage() {
             months: parseInt(generateMonths),
           });
           toast.success(`Contrato criado! ${result.created} parcelas geradas.`);
-        } catch {
-          toast.success('Contrato criado! Gere as parcelas manualmente no detalhe do contrato.');
+        } catch (instErr) {
+          // O contrato foi criado, mas as parcelas não: avisa como erro, não como sucesso.
+          toast.error(
+            `Contrato criado, mas as parcelas NÃO foram geradas: ${getApiErrorMessage(instErr)} Gere-as no detalhe do contrato.`,
+          );
         }
       } else {
         toast.success('Contrato criado com sucesso!');
@@ -187,8 +194,8 @@ export default function NewContractPage() {
             <Select value={form.type} onValueChange={(v) => setField('type', v)}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="RENTAL_RESIDENTIAL">Locação Residencial</SelectItem>
-                <SelectItem value="RENTAL_COMMERCIAL">Locação Comercial</SelectItem>
+                {fullProfile && <SelectItem value="RENTAL_RESIDENTIAL">Locação Residencial</SelectItem>}
+                {fullProfile && <SelectItem value="RENTAL_COMMERCIAL">Locação Comercial</SelectItem>}
                 <SelectItem value="SALE">Compra e Venda</SelectItem>
                 <SelectItem value="BROKERAGE">Intermediação</SelectItem>
               </SelectContent>

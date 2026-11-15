@@ -118,3 +118,34 @@ export function useDashboardKpis() {
     staleTime: 60 * 1000,
   });
 }
+
+// Painel do perfil de venda (Fase 1) — GET /reports/sales-dashboard
+export interface SalesDashboard {
+  newLeads7d: number;
+  visitsThisWeek: { total: number; done: number };
+  openProposals: { available: boolean; count: number | null };
+  vgvInNegotiation: { amount: number; deals: number };
+  salesThisMonth: { amount: number; count: number };
+  commissionsReceivable: { amount: number; count: number };
+  commissionsPayable: { amount: number; count: number };
+  projectedBalance30d: {
+    amount: number;
+    bankBalance: number;
+    bankAccounts: number;
+    receivable: number;
+    payable: number;
+  };
+}
+
+export function useSalesDashboard() {
+  const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
+  return useQuery({
+    queryKey: ['sales-dashboard', workspaceId],
+    queryFn: async () => {
+      const { data } = await sharedApi.get('/reports/sales-dashboard');
+      return data.data as SalesDashboard;
+    },
+    enabled: !!workspaceId,
+    staleTime: 60 * 1000,
+  });
+}

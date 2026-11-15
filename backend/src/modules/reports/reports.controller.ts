@@ -8,6 +8,13 @@ import { WorkspaceGuard } from '../../common/guards/workspace.guard';
 export class ReportsController {
   constructor(private readonly service: ReportsService) {}
 
+  // Painel do perfil de venda (Fase 1)
+  @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Get('sales-dashboard')
+  getSalesDashboard(@Headers('x-workspace-id') workspaceId: string) {
+    return this.service.getSalesDashboard(workspaceId);
+  }
+
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
   @Get('dashboard')
   getDashboard(@Headers('x-workspace-id') workspaceId: string) {

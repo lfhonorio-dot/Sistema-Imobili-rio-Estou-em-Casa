@@ -15,6 +15,7 @@ import { AuditService } from '../../audit/audit.service';
 import { EmailService } from '../../hub/email/email.service';
 import { ContractTemplateService } from './contract-template.service';
 import { DimobService } from '../fiscal/dimob.service';
+import { calcCommissionBreakdown, CommissionBreakdown } from './commission-breakdown';
 import { BillingService } from '../billing/billing.service';
 import {
   CreateContractDto,
@@ -123,7 +124,36 @@ export class ContractsService {
     });
 
     if (!contract) throw new NotFoundException('Contrato não encontrado');
-    return contract;
+
+    // Cálculo da comissão e do repasse aos corretores parceiros (venda e
+    // intermediação), para a tela mostrar a conta completa.
+    let commissionBreakdown: CommissionBreakdown | null = null;
+    const baseValue = contract.saleValue != null ? Number(contract.saleValue) : null;
+    if (
+      (contract.type === 'SALE' || contract.type === 'BROKERAGE') &&
+      baseValue != null &&
+      contract.commissionRate != null
+    ) {
+      const rules = await this.prisma.splitRule.findMany({
+        where: { workspaceId, contractId: id, isActive: true },
+        include: { recipient: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'asc' },
+      });
+      const received = contract.commissions.find((c) => c.status === 'RECEIVED' && c.receivedValue != null);
+      commissionBreakdown = calcCommissionBreakdown({
+        baseValue,
+        commissionRate: Number(contract.commissionRate),
+        receivedValue: received ? Number(received.receivedValue) : null,
+        partners: rules.map((r) => ({
+          recipientId: r.recipientId,
+          name: r.recipient?.name ?? 'Parceiro',
+          type: r.type,
+          value: Number(r.value),
+        })),
+      });
+    }
+
+    return { ...contract, commissionBreakdown };
   }
 
   // Cria contrato validando entidades do workspace
@@ -181,6 +211,18 @@ export class ContractsService {
     // caminhos diferentes; o que importa é o estado atual do imóvel).
     const isSaleType = dto.type === 'SALE' || dto.type === 'BROKERAGE';
     const isRentalType = dto.type === 'RENTAL_RESIDENTIAL' || dto.type === 'RENTAL_COMMERCIAL';
+    if (isRentalType) {
+      const ws = await this.prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { operationProfile: true },
+      });
+      if (ws?.operationProfile !== 'VENDA_E_LOCACAO') {
+        throw new BadRequestException(
+          'Contratos de locação não estão disponíveis no perfil de operação "Venda". ' +
+            'Para usá-los, mude o perfil para "Venda e Locação" em Configurações → Workspace.',
+        );
+      }
+    }
     if (isSaleType && property.status === 'SOLD') {
       throw new ConflictException(
         'Este imóvel já está marcado como vendido. Verifique o cadastro do imóvel antes de criar um novo contrato de venda.',
@@ -456,9 +498,13 @@ export class ContractsService {
   // Gera o boleto de cada lançamento a receber em aberto do contrato que ainda
   // não tenha um. Nunca lança: uma falha aqui não pode derrubar a criação do
   // contrato nem a geração de parcelas. Sem gateway ativo configurado, o
-  // BillingService emite um boleto simulado com status PENDING.
+  // BillingService recusa a emissão (não existe mais boleto simulado).
   private async autoGenerateBoletos(workspaceId: string, contractId: string) {
     try {
+      // Sem gateway Asaas ativo não há emissão real: não tenta (antes gerava
+      // boletos simulados com linha digitável falsa). O usuário pode emitir
+      // depois, em cada conta a receber, quando o gateway estiver configurado.
+      if (!(await this.billingService.hasActiveBoletoGateway(workspaceId))) return;
       const entries = await this.prisma.financialEntry.findMany({
         where: {
           workspaceId,

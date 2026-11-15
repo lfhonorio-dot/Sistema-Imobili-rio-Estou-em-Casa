@@ -12,11 +12,13 @@ import {
 } from './maintenance.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { RequiresFullProfile } from '../../../common/decorators/operation-profile.decorator';
 
 @ApiTags('maintenance')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@RequiresFullProfile('Manutenção')
 @Controller('maintenance')
 export class MaintenanceController {
   constructor(private readonly maintenanceService: MaintenanceService) {}

@@ -1,5 +1,6 @@
 // Formulário de criação de negócio
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -56,8 +57,8 @@ export function DealForm({ defaultPipelineId, onSuccess, onCancel }: DealFormPro
       await createDeal.mutateAsync(data);
       toast.success('Negócio criado com sucesso');
       onSuccess?.();
-    } catch {
-      toast.error('Erro ao criar negócio');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao criar negócio'));
     }
   };
 

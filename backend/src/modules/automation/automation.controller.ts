@@ -5,7 +5,9 @@ import { AutomationService } from './automation.service';
 import { CreateAutomationDto, UpdateAutomationDto, TriggerAutomationDto } from './automation.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../common/guards/workspace.guard';
+import { RequiresFullProfile } from '../../common/decorators/operation-profile.decorator';
 
+@RequiresFullProfile('Automações')
 @Controller('automations')
 export class AutomationController {
   constructor(private readonly service: AutomationService) {}

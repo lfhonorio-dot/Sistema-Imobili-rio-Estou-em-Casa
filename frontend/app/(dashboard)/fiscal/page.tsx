@@ -1,5 +1,9 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { UnavailableNotice } from '@/components/common/error-state';
+import { getApiErrorMessage } from '@/lib/api-error';
+import { useOperationProfile } from '@/hooks/use-operation-profile';
 import { useFiscal } from '@/hooks/use-fiscal';
 import api from '@/lib/api';
 
@@ -10,10 +14,18 @@ type NfseRecord = {
   amount: number;
   issRate: number;
   status: string;
+  number?: string | null;
   issuedAt?: string;
 };
 
 type Tab = 'nfse' | 'dimob' | 'carne-leao';
+
+const NFSE_STATUS_LABELS: Record<string, string> = {
+  ISSUED: 'Autorizada',
+  PENDING: 'Processando',
+  CANCELLED: 'Cancelada',
+  ERROR: 'Rejeitada',
+};
 
 const STATUS_COLORS: Record<string, string> = {
   ISSUED: 'bg-green-100 text-green-700',
@@ -23,8 +35,26 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function FiscalPage() {
+  return (
+    <Suspense fallback={null}>
+      <FiscalPageContent />
+    </Suspense>
+  );
+}
+
+// A aba vem do endereço (?tab=nfse | dimob | carne-leao) para o menu abrir
+// direto em "Notas Fiscais" ou "Fiscal — DIMOB". Carnê-Leão (aluguel de PF)
+// só aparece no perfil Venda e Locação.
+function FiscalPageContent() {
   const { findNfse, findDimob, findCarneLeao, generateDimob, loading } = useFiscal();
-  const [tab, setTab] = useState<Tab>('nfse');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const profile = useOperationProfile();
+  const tabs: Tab[] = profile === 'VENDA_E_LOCACAO' ? ['nfse', 'dimob', 'carne-leao'] : ['nfse', 'dimob'];
+  const tabParam = searchParams.get('tab') as Tab | null;
+  const tab: Tab = tabParam && tabs.includes(tabParam) ? tabParam : 'nfse';
+  const setTab = (t: Tab) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
   const [nfseList, setNfseList] = useState<NfseRecord[]>([]);
   const [dimobList, setDimobList] = useState<Array<Record<string, unknown>>>([]);
   const [exportYear, setExportYear] = useState(String(new Date().getFullYear()));
@@ -54,8 +84,8 @@ export default function FiscalPage() {
       const data = res.data.data;
       setDeclarants(data?.declarantes ?? []);
       setExportCsv(data?.csv ?? '');
-    } catch {
-      alert('Erro ao carregar exportação DIMOB.');
+    } catch (err) {
+      alert(getApiErrorMessage(err, 'Erro ao carregar exportação DIMOB.'));
     }
   }
 
@@ -86,7 +116,7 @@ export default function FiscalPage() {
       </div>
 
       <div className="flex gap-1 border-b mb-6">
-        {(['nfse', 'dimob', 'carne-leao'] as Tab[]).map((t) => (
+        {tabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -100,7 +130,12 @@ export default function FiscalPage() {
       </div>
 
       {tab === 'nfse' && (
-        <div>
+        <div className="space-y-4">
+          <UnavailableNotice title="Emissão de NFS-e ainda não disponível">
+            O provedor de nota fiscal ainda não foi escolhido; a emissão será ligada quando ele for
+            configurado. Notas marcadas como &quot;registro interno&quot; foram criadas por uma versão
+            anterior do sistema e <strong>não foram enviadas à prefeitura</strong>.
+          </UnavailableNotice>
           {loading ? (
             <div className="text-center py-12 text-gray-400">Carregando...</div>
           ) : nfseList.length === 0 ? (
@@ -129,9 +164,18 @@ export default function FiscalPage() {
                         {n.issuedAt ? new Date(n.issuedAt).toLocaleDateString('pt-BR') : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[n.status] ?? 'bg-gray-100'}`}>
-                          {n.status}
-                        </span>
+                        {n.status === 'ISSUED' && !n.number ? (
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600"
+                            title="Criada sem provedor: não foi enviada à prefeitura."
+                          >
+                            Registro interno — não emitida
+                          </span>
+                        ) : (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[n.status] ?? 'bg-gray-100'}`}>
+                            {NFSE_STATUS_LABELS[n.status] ?? n.status}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

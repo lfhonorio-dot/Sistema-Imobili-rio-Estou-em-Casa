@@ -12,11 +12,13 @@ import {
 } from './inspections.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { RequiresFullProfile } from '../../../common/decorators/operation-profile.decorator';
 
 @ApiTags('inspections')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@RequiresFullProfile('Vistorias')
 @Controller('inspections')
 export class InspectionsController {
   constructor(private readonly inspectionsService: InspectionsService) {}

@@ -28,6 +28,7 @@ import {
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { RequiresFullProfile } from '../../../common/decorators/operation-profile.decorator';
 import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
 
 @ApiTags('contracts')
@@ -42,12 +43,14 @@ export class ContractsController {
   ) {}
 
   // Reajuste de aluguel por índice — prévia dos elegíveis no mês
+  @RequiresFullProfile('Reajuste de aluguel')
   @Get('adjustments/preview')
   previewAdjustments() {
     return this.adjustment.preview();
   }
 
   // Dispara o reajuste manualmente (rate opcional em fração, ex.: 0.045)
+  @RequiresFullProfile('Reajuste de aluguel')
   @Post('adjustments/run')
   runAdjustments(@Body() body: { rate?: number }) {
     return this.adjustment.run(body?.rate);

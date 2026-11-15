@@ -1,5 +1,7 @@
 // Página de detalhe do contrato
 'use client';
+import { CommissionBreakdownCard } from '@/components/contracts/commission-breakdown-card';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -132,8 +134,8 @@ export default function ContractDetailPage() {
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch {
-      toast.error('Erro ao gerar o contrato.');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao gerar o contrato.'));
     } finally {
       setLoadingDoc(false);
     }
@@ -524,7 +526,10 @@ export default function ContractDetailPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="commissions" className="mt-4">
+        <TabsContent value="commissions" className="mt-4 space-y-4">
+          {(contract as any).commissionBreakdown && (
+            <CommissionBreakdownCard data={(contract as any).commissionBreakdown} />
+          )}
           {commissions.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nenhuma comissão registrada</p>
           ) : (
@@ -535,8 +540,8 @@ export default function ContractDetailPage() {
                     <div>
                       <p className="text-sm font-medium">{formatCurrency(c.amount)} ({c.rate}%)</p>
                     </div>
-                    <Badge variant={c.status === 'PAID' ? 'default' : 'secondary'}>
-                      {c.status === 'PAID' ? 'Pago' : 'Pendente'}
+                    <Badge variant={c.status === 'PAID' || c.status === 'RECEIVED' ? 'default' : 'secondary'}>
+                      {c.status === 'PAID' || c.status === 'RECEIVED' ? 'Recebida' : 'Pendente'}
                     </Badge>
                   </CardContent>
                 </Card>

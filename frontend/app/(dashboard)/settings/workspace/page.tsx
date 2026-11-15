@@ -16,6 +16,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import api from '@/lib/api';
 import type { Workspace } from '@/types';
+import { useAuthStore } from '@/stores/auth.store';
+import { getApiErrorMessage } from '@/lib/api-error';
+import { ErrorState } from '@/components/common/error-state';
+import { OperationProfileCard } from '@/components/settings/operation-profile-card';
 
 const schema = z.object({
   name: z.string().min(2).max(200).optional(),
@@ -32,7 +36,10 @@ export default function WorkspaceSettingsPage() {
   const queryClient = useQueryClient();
 
   // Busca dados do workspace
-  const { data: workspaceData, isLoading } = useQuery({
+  const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
+  const canEdit = !!currentWorkspace?.isOwner || !!currentWorkspace?.role.permissions?.['workspace:write'];
+
+  const { data: workspaceData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['workspace'],
     queryFn: async () => {
       const response = await api.get<{ data: Workspace }>('/workspace');
@@ -70,8 +77,8 @@ export default function WorkspaceSettingsPage() {
       toast.success('Configurações salvas com sucesso!');
       void queryClient.invalidateQueries({ queryKey: ['workspace'] });
     },
-    onError: () => {
-      toast.error('Erro ao salvar configurações. Tente novamente.');
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err, 'Erro ao salvar configurações. Tente novamente.'));
     },
   });
 
@@ -91,11 +98,26 @@ export default function WorkspaceSettingsPage() {
     );
   }
 
+  if (isError) {
+    return (
+      <div>
+        <Header title="Configurações do Workspace" />
+        <div className="p-6">
+          <ErrorState error={error} onRetry={() => refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <Header title="Configurações do Workspace" />
 
       <div className="p-6 max-w-2xl">
+        <div className="mb-6">
+          <OperationProfileCard current={workspace?.operationProfile} canEdit={canEdit} />
+        </div>
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Dados da empresa */}
           <Card>

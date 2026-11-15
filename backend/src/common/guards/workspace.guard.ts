@@ -11,6 +11,10 @@ import {
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../modules/prisma/prisma.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import {
+  REQUIRES_FULL_PROFILE_KEY,
+  profileBlockedMessage,
+} from '../decorators/operation-profile.decorator';
 
 @Injectable()
 export class WorkspaceGuard implements CanActivate {
@@ -64,7 +68,7 @@ export class WorkspaceGuard implements CanActivate {
       include: {
         role: true,
         workspace: {
-          select: { id: true, name: true, deletedAt: true },
+          select: { id: true, name: true, deletedAt: true, operationProfile: true },
         },
       },
     });
@@ -77,6 +81,16 @@ export class WorkspaceGuard implements CanActivate {
 
     if (workspaceUser.workspace.deletedAt) {
       throw new ForbiddenException('Este workspace foi desativado.');
+    }
+
+    // Módulos fora do perfil de operação (ex.: locação no perfil VENDA)
+    // devolvem mensagem clara em vez de funcionar "escondidos".
+    const blockedModule = this.reflector.getAllAndOverride<string>(
+      REQUIRES_FULL_PROFILE_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (blockedModule && workspaceUser.workspace.operationProfile !== 'VENDA_E_LOCACAO') {
+      throw new ForbiddenException(profileBlockedMessage(blockedModule));
     }
 
     // Injeta informações do workspace na requisição

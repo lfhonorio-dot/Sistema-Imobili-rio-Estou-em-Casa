@@ -1,156 +1,182 @@
-// Página inicial do dashboard
+// Página inicial — Dashboard de venda (Fase 1).
+// Indicadores do fluxo de venda, todos calculados no backend
+// (GET /reports/sales-dashboard). O que ainda não existe aparece como
+// "não disponível", nunca como número inventado.
 
 'use client';
 
-import { Users, Home, FileText, DollarSign, TrendingUp } from 'lucide-react';
+import Link from 'next/link';
+import {
+  UserPlus, CalendarDays, FileSignature, TrendingUp, BadgeDollarSign,
+  ArrowDownCircle, ArrowUpCircle, Wallet,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Header } from '@/components/layout/header';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/common/error-state';
 import { useAuthStore } from '@/stores/auth.store';
-import { useDashboardKpis } from '@/hooks/use-reports';
-import { formatDateTime } from '@/lib/utils';
+import { useSalesDashboard } from '@/hooks/use-reports';
 
 function brl(v: number | null | undefined) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v ?? 0));
 }
 
+function plural(n: number, one: string, many: string) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** Saudação conforme a hora, com o primeiro nome quando houver. */
+function greeting(name?: string | null) {
+  const h = new Date().getHours();
+  const base = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `${base}, ${first}!` : `${base}!`;
+}
+
+interface Kpi {
+  title: string;
+  value: string;
+  hint: string;
+  icon: LucideIcon;
+  tone: string;
+  href?: string;
+  unavailable?: boolean;
+}
+
 export default function DashboardPage() {
   const { user, currentWorkspace } = useAuthStore();
-  const { data: kpis } = useDashboardKpis();
+  const { data, isLoading, isError, error, refetch } = useSalesDashboard();
 
-  const metricsCards = [
-    {
-      title: 'Contatos',
-      value: kpis ? String(kpis.totalContacts) : '—',
-      icon: Users,
-      color: 'text-green-500',
-      bg: 'bg-green-50',
-      hint: kpis ? `${kpis.openDeals} negócios abertos` : 'Carregando...',
-    },
-    {
-      title: 'Imóveis',
-      value: kpis ? String(kpis.totalProperties) : '—',
-      icon: Home,
-      color: 'text-blue-500',
-      bg: 'bg-blue-50',
-      hint: kpis ? 'Total cadastrado' : 'Carregando...',
-    },
-    {
-      title: 'Contratos Ativos',
-      value: kpis ? String(kpis.activeContracts) : '—',
-      icon: FileText,
-      color: 'text-purple-500',
-      bg: 'bg-purple-50',
-      hint: kpis && kpis.overdueCount > 0 ? `${kpis.overdueCount} em atraso` : (kpis ? 'Em dia' : 'Carregando...'),
-    },
-    {
-      title: 'Receita Recebida',
-      value: kpis ? brl(kpis.totalRevenue) : '—',
-      icon: DollarSign,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-      hint: kpis ? 'Lançamentos pagos' : 'Carregando...',
-    },
-    {
-      title: 'Previsão de Receita',
-      value: kpis ? brl(kpis.forecastReceivable) : '—',
-      icon: TrendingUp,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
-      hint: kpis && kpis.overdueAmount > 0 ? `${brl(kpis.overdueAmount)} em atraso` : (kpis ? 'A receber, ainda pendente' : 'Carregando...'),
-    },
-  ];
+  const kpis: Kpi[] = data
+    ? [
+        {
+          title: 'Leads novos',
+          value: String(data.newLeads7d),
+          hint: 'Negócios criados nos últimos 7 dias',
+          icon: UserPlus,
+          tone: 'text-green-600 bg-green-50',
+          href: '/pipeline',
+        },
+        {
+          title: 'Visitas da semana',
+          value: String(data.visitsThisWeek.total),
+          hint: `${plural(data.visitsThisWeek.done, 'realizada', 'realizadas')} (segunda a domingo)`,
+          icon: CalendarDays,
+          tone: 'text-blue-600 bg-blue-50',
+          href: '/visits',
+        },
+        {
+          title: 'Propostas em aberto',
+          value: data.openProposals.available ? String(data.openProposals.count ?? 0) : 'Não disponível',
+          hint: data.openProposals.available
+            ? 'Aguardando resposta'
+            : 'O cadastro de propostas ainda não existe no sistema',
+          icon: FileSignature,
+          tone: 'text-slate-500 bg-slate-100',
+          unavailable: !data.openProposals.available,
+        },
+        {
+          title: 'VGV em negociação',
+          value: brl(data.vgvInNegotiation.amount),
+          hint: `Soma do valor de ${plural(data.vgvInNegotiation.deals, 'negócio aberto', 'negócios abertos')}`,
+          icon: TrendingUp,
+          tone: 'text-purple-600 bg-purple-50',
+          href: '/pipeline',
+        },
+        {
+          title: 'Vendas do mês',
+          value: brl(data.salesThisMonth.amount),
+          hint: `${plural(data.salesThisMonth.count, 'contrato de venda ativo', 'contratos de venda ativos')} criados no mês`,
+          icon: BadgeDollarSign,
+          tone: 'text-emerald-600 bg-emerald-50',
+          href: '/contracts',
+        },
+        {
+          title: 'Comissões a receber',
+          value: brl(data.commissionsReceivable.amount),
+          hint: plural(data.commissionsReceivable.count, 'comissão pendente', 'comissões pendentes'),
+          icon: ArrowDownCircle,
+          tone: 'text-teal-600 bg-teal-50',
+          href: '/commissions',
+        },
+        {
+          title: 'Comissões a pagar',
+          value: brl(data.commissionsPayable.amount),
+          hint: plural(data.commissionsPayable.count, 'pagamento pendente', 'pagamentos pendentes'),
+          icon: ArrowUpCircle,
+          tone: 'text-amber-600 bg-amber-50',
+          href: '/financial?tab=payable',
+        },
+        {
+          title: 'Saldo projetado (30 dias)',
+          value: brl(data.projectedBalance30d.amount),
+          hint:
+            data.projectedBalance30d.bankAccounts > 0
+              ? `Saldo em conta ${brl(data.projectedBalance30d.bankBalance)} + a receber ${brl(data.projectedBalance30d.receivable)} − a pagar ${brl(data.projectedBalance30d.payable)}`
+              : `Sem conta bancária cadastrada: a receber ${brl(data.projectedBalance30d.receivable)} − a pagar ${brl(data.projectedBalance30d.payable)}`,
+          icon: Wallet,
+          tone: data.projectedBalance30d.amount < 0 ? 'text-red-600 bg-red-50' : 'text-sky-600 bg-sky-50',
+          href: '/financial?tab=cashflow',
+        },
+      ]
+    : [];
 
   return (
     <div>
       <Header title="Dashboard" />
 
       <div className="p-6">
-        {/* Boas-vindas */}
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-foreground">
-            Bem-vindo, {user?.name?.split(' ')[0]}!
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {currentWorkspace?.workspace.name} •{' '}
-            {user?.lastLoginAt
-              ? `Último acesso: ${formatDateTime(user.lastLoginAt)}`
-              : 'Primeiro acesso'}
-          </p>
+          <h2 className="text-xl font-semibold text-foreground">{greeting(user?.name)}</h2>
+          {currentWorkspace?.workspace.name && (
+            <p className="text-sm text-muted-foreground mt-1">{currentWorkspace.workspace.name}</p>
+          )}
         </div>
 
-        {/* Cards de métricas */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
-          {metricsCards.map((card) => (
-            <Card key={card.title}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-                <div className={`rounded-lg p-2 ${card.bg}`}>
-                  <card.icon className={`h-4 w-4 ${card.color}`} />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{card.value}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {card.hint}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Informações do workspace */}
-        <div className="grid gap-4 md:grid-cols-2">
+        {isError ? (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Seu Workspace</CardTitle>
-              <CardDescription>Informações da sua imobiliária</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Nome</span>
-                <span className="font-medium">{currentWorkspace?.workspace.name}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Slug</span>
-                <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">
-                  {currentWorkspace?.workspace.slug}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Seu papel</span>
-                <span className="font-medium">{currentWorkspace?.role.name}</span>
-              </div>
-              {currentWorkspace?.isOwner && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tipo</span>
-                  <span className="text-blue-600 font-medium">Proprietário</span>
-                </div>
-              )}
-            </CardContent>
+            <ErrorState error={error} onRetry={() => refetch()} title="Não foi possível carregar os indicadores" />
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Estágio 1 Concluído</CardTitle>
-              <CardDescription>Fundação, Segurança e LGPD</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {[
-                'Autenticação JWT com refresh tokens',
-                'Autenticação de dois fatores (2FA)',
-                'Criptografia AES-256-GCM',
-                'Módulo LGPD completo',
-                'Logs de auditoria',
-                'Rate limiting e headers de segurança',
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-2 text-sm">
-                  <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {isLoading || !data
+              ? Array.from({ length: 8 }).map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-6 space-y-3">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-7 w-24" />
+                      <Skeleton className="h-3 w-40" />
+                    </CardContent>
+                  </Card>
+                ))
+              : kpis.map((kpi) => {
+                  const body = (
+                    <Card className={kpi.href ? 'transition-shadow hover:shadow-md h-full' : 'h-full'}>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{kpi.title}</CardTitle>
+                        <div className={`rounded-lg p-2 ${kpi.tone}`}>
+                          <kpi.icon className="h-4 w-4" />
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className={kpi.unavailable ? 'text-base font-medium text-muted-foreground' : 'text-2xl font-bold'}>
+                          {kpi.value}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{kpi.hint}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                  return kpi.href ? (
+                    <Link key={kpi.title} href={kpi.href} className="block">
+                      {body}
+                    </Link>
+                  ) : (
+                    <div key={kpi.title}>{body}</div>
+                  );
+                })}
+          </div>
+        )}
       </div>
     </div>
   );

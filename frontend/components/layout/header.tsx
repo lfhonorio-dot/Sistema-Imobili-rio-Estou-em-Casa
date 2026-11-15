@@ -1,9 +1,9 @@
-// Header do dashboard
+// Header do dashboard.
+// O sino de notificações foi retirado até existir notificação de verdade
+// (Fase 7) — antes era um botão sem nenhuma ação.
 
 'use client';
 
-import { Bell } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';
 
 interface HeaderProps {
@@ -22,17 +22,11 @@ export function Header({ title }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Papel atual do usuário */}
         {currentWorkspace && (
           <span className="text-sm text-muted-foreground">
             {currentWorkspace.role.name}
           </span>
         )}
-
-        {/* Notificações (placeholder) */}
-        <Button variant="ghost" size="icon" className="h-9 w-9">
-          <Bell className="h-4 w-4" />
-        </Button>
       </div>
     </header>
   );

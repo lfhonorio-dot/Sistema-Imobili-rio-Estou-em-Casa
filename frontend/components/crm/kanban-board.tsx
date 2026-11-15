@@ -1,5 +1,6 @@
 // Kanban board completo com drag-and-drop usando @dnd-kit
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useState, useCallback } from 'react';
 import {
@@ -72,10 +73,10 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
     try {
       await moveStage.mutateAsync({ dealId, stageId: targetStageId });
       toast.success('Negócio movido com sucesso');
-    } catch {
+    } catch (err) {
       // Reverte
       setLocalDeals(deals);
-      toast.error('Erro ao mover negócio');
+      toast.error(getApiErrorMessage(err, 'Erro ao mover negócio'));
     }
   }, [localDeals, pipeline.stages, moveStage, deals]);
 

@@ -1,4 +1,5 @@
 'use client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
@@ -92,8 +93,8 @@ export default function PipelinesSettingsPage() {
       await createPipeline.mutateAsync({ name: pipelineName.trim(), type: pipelineType });
       toast.success('Pipeline criado!');
       setShowNewPipeline(false);
-    } catch {
-      toast.error('Erro ao criar pipeline');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao criar pipeline'));
     }
   }
 
@@ -108,8 +109,8 @@ export default function PipelinesSettingsPage() {
       await updatePipeline.mutateAsync({ id: editPipeline.id, name: pipelineName.trim() });
       toast.success('Pipeline atualizado!');
       setEditPipeline(null);
-    } catch {
-      toast.error('Erro ao atualizar pipeline');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao atualizar pipeline'));
     }
   }
 
@@ -139,8 +140,8 @@ export default function PipelinesSettingsPage() {
       await createStage.mutateAsync({ pipelineId: showNewStage, name: stageName.trim(), color: stageColor, order: nextOrder });
       toast.success('Estágio criado!');
       setShowNewStage(null);
-    } catch {
-      toast.error('Erro ao criar estágio');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao criar estágio'));
     }
   }
 
@@ -161,8 +162,8 @@ export default function PipelinesSettingsPage() {
       });
       toast.success('Estágio atualizado!');
       setEditStageTarget(null);
-    } catch {
-      toast.error('Erro ao atualizar estágio');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao atualizar estágio'));
     }
   }
 
