@@ -9,3 +9,6 @@ coverage/
 .DS_Store
 prisma/migrations/dev.db
 .claude/
+
+# Backups do banco (contêm dados pessoais - nunca enviar ao GitHub)
+backups/
