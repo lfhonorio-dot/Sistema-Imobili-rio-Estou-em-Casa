@@ -94,14 +94,14 @@ export default function MarketingPage() {
   };
 
   const cpl = (c: Campaign) => {
-    const spend = c.spend as number;
+    const spend = Number(c.spend);
     const leads = c.leads as number;
     return leads > 0 ? fmtBRL(spend / leads) : '—';
   };
 
   const roi = (c: Campaign) => {
-    const spend = c.spend as number;
-    const rev = c.revenue as number;
+    const spend = Number(c.spend);
+    const rev = Number(c.revenue);
     return spend > 0 ? (rev / spend).toFixed(2) + 'x' : '—';
   };
 
@@ -174,7 +174,7 @@ export default function MarketingPage() {
                     {metaCampaigns.map(c => (
                       <tr key={c.id as string} className="hover:bg-gray-50">
                         <td className="px-3 py-3 font-medium">{c.name as string}</td>
-                        <td className="px-3 py-3">{fmtBRL(c.spend as number)}</td>
+                        <td className="px-3 py-3">{fmtBRL(Number(c.spend))}</td>
                         <td className="px-3 py-3">{fmt(c.impressions)}</td>
                         <td className="px-3 py-3">{fmt(c.clicks)}</td>
                         <td className="px-3 py-3">{fmt(c.leads)}</td>
@@ -237,10 +237,10 @@ export default function MarketingPage() {
                   </thead>
                   <tbody className="divide-y">
                     {googleCampaigns.map(c => {
-                      const spend = c.spend as number;
+                      const spend = Number(c.spend);
                       const clicks = c.clicks as number;
                       const leads = c.leads as number;
-                      const rev = c.revenue as number;
+                      const rev = Number(c.revenue);
                       return (
                         <tr key={c.id as string} className="hover:bg-gray-50">
                           <td className="px-3 py-3 font-medium">{c.name as string}</td>
