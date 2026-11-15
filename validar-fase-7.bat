@@ -2,7 +2,7 @@
 chcp 65001 >nul
 echo ============================================
 echo   Estou em Casa - Validar a FASE 7
-echo   (nota fiscal de servico - NFS-e Franca)
+echo   (permissoes, relatorios e notificacoes)
 echo ============================================
 echo.
 echo Este script NAO mexe no sistema que esta no ar.

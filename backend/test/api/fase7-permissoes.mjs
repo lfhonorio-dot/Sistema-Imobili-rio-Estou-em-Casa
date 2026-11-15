@@ -150,7 +150,7 @@ try {
   ok('regras geram avisos', runR.status === 200 && runR.data.created > 0, short(runR));
   const notA = (await call('GET', '/notifications?limit=50', as(users.brokerA))).data;
   ok('Corretor A recebeu "Lead novo" e "Visita hoje"/"Tarefa"', notA.items.some((n) => n.type === 'LEAD_NEW') && notA.items.some((n) => ['VISIT_TODAY', 'TASK_DUE'].includes(n.type)), JSON.stringify(notA.items.map((n) => n.type)));
-  ok('sem SMTP: e-mail marcado como não enviado (nada de "enviado")', notA.items.every((n) => n.emailStatus === 'SKIPPED'), JSON.stringify(notA.items.map((n) => n.emailStatus)));
+  ok('sem servidor de e-mail no ar: aviso fica como não enviado ou com falha (nunca "enviado")', notA.items.length > 0 && notA.items.every((n) => ['SKIPPED', 'FAILED'].includes(n.emailStatus)), JSON.stringify(notA.items.map((n) => n.emailStatus)));
   const notB = (await call('GET', '/notifications?limit=50', as(users.brokerB))).data;
   ok('captador (B) avisado da autorização vencendo; não recebe o lead do A', notB.items.some((n) => n.type === 'AUTH_EXPIRING') && !notB.items.some((n) => n.type === 'LEAD_NEW' && n.entityId === dealA.id), JSON.stringify(notB.items.map((n) => n.type)));
   const runR2 = await call('POST', '/notifications/run-rules', as(O));

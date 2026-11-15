@@ -107,7 +107,7 @@ export class EsignatureService {
     // abaixo). Antes, este método só simulava o envio — marcava tudo como
     // SENT e gravava um evento de auditoria fabricado, sem nunca chamar o
     // EmailService, então nenhum e-mail saía de fato.
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
     const deadlineDate = envelope.deadline
       ? new Date(envelope.deadline).toLocaleDateString('pt-BR')
       : null;

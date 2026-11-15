@@ -1,0 +1,123 @@
+name: Fluxo de ouro (ponta a ponta)
+
+# Fase 8. Roda sozinho em todo Pull Request e em todo envio para a main.
+# Sobe um banco de dados de TESTE vazio (PostgreSQL), aplica as migrations,
+# liga o backend de verdade e percorre o fluxo inteiro da venda:
+#   captação → lead → visita → proposta → ganho → contrato → assinatura →
+#   comissão (boleto e PIX) → NFS-e → comissão do corretor → caixa → DIMOB
+# Asaas, prefeitura e e-mail são simulados dentro do próprio teste: nada sai
+# para a internet e nenhum dado real é tocado.
+# Para BLOQUEAR o merge quando falhar, veja docs/FASE-8.md (regra de proteção da main).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: fluxo-de-ouro-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fluxo-de-ouro:
+    name: Fluxo de ouro (ponta a ponta)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: teste
+          POSTGRES_PASSWORD: teste
+          POSTGRES_DB: fluxo_de_ouro
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U teste -d fluxo_de_ouro"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: development
+      PORT: 3001
+      APP_PORT: 3001
+      DATABASE_URL: postgresql://teste:teste@localhost:5432/fluxo_de_ouro
+      FRONTEND_URL: http://localhost:3000
+      APP_URL: http://localhost:3000
+      LOG_TO_FILE: 'false'
+      LOG_LEVEL: warn
+      RATE_LIMIT_PER_MINUTE: 5000
+      # simuladores locais (ver backend/test/api/_simuladores.mjs)
+      ASAAS_API_URL_TEST_OVERRIDE: http://127.0.0.1:3999
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: 2525
+      SMTP_USER: teste
+      SMTP_PASS: teste
+      SMTP_FROM: teste@teste.local
+      API_URL: http://localhost:3001/api/v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Gerar segredos descartáveis (valem só para esta execução)
+        run: |
+          echo "JWT_ACCESS_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "JWT_REFRESH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "HMAC_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar cliente do Prisma
+        run: npx prisma generate
+
+      - name: Compilar o backend
+        run: npm run build
+
+      - name: Criar as tabelas no banco de teste (migrations)
+        run: npx prisma migrate deploy
+
+      - name: Ligar o backend
+        run: |
+          nohup node dist/main.js > backend.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3001/api/v1/health > /dev/null; then echo "backend no ar"; exit 0; fi
+            sleep 2
+          done
+          echo "o backend não subiu:"; tail -n 80 backend.log; exit 1
+
+      - name: Rodar o fluxo de ouro e os testes de integração
+        run: node test/api/rodar-tudo.mjs
+
+      - name: Mostrar o registro do backend (só se falhou)
+        if: failure()
+        run: tail -n 200 backend.log || true
+
+  frontend:
+    name: Frontend (tipos e build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependências
+        run: npm ci
+      - name: Checar tipos
+        run: npx tsc --noEmit
+      - name: Compilar
+        run: npm run build

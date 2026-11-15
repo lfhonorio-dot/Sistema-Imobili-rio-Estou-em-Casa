@@ -700,7 +700,7 @@ export class ContractsService {
     });
 
     // Envia e-mail de assinatura para cada signatário
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
     let sentCount = 0;
     for (const sig of envelope.signatories) {
       const signLink = `${appUrl}/sign/${sig.token}`;

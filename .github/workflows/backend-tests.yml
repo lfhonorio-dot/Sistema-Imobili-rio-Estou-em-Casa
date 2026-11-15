@@ -1,12 +1,11 @@
 name: Testes automáticos do backend
 
-# Roda sozinho toda vez que alguém abrir um Pull Request pra main ou
+# Roda sozinho toda vez que alguém abrir um Pull Request (para qualquer branch) ou
 # enviar (push) direto pra main. Não precisa de banco de dados: os testes
 # de Nível 1 chamam as regras de negócio direto (com o Prisma "fingido"),
 # então terminam em segundos e não arriscam mexer em dado nenhum de verdade.
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
@@ -30,6 +29,9 @@ jobs:
 
       - name: Gerar cliente do Prisma
         run: npx prisma generate
+
+      - name: Checar tipos
+        run: npx tsc --noEmit
 
       - name: Rodar testes (npx jest)
         run: npx jest --ci
