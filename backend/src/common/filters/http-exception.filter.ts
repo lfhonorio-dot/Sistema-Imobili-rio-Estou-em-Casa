@@ -58,6 +58,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       error = HttpStatus[statusCode] || 'Error';
     }
 
+    // Limite de requisições (ThrottlerGuard): a mensagem padrão vem em inglês
+    // ("ThrottlerException: Too Many Requests"). O usuário precisa de uma frase clara.
+    if (statusCode === HttpStatus.TOO_MANY_REQUESTS) {
+      message = 'Muitas tentativas em pouco tempo. Aguarde um minuto e tente de novo.';
+    }
+
     // Log do erro (sem dados sensíveis)
     if (statusCode >= 500) {
       this.logger.error(

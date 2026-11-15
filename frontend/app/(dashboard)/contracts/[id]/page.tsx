@@ -187,7 +187,7 @@ export default function ContractDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold">Contrato</h1>
+              <h1 className="text-xl font-bold">{contract.code ? `Contrato ${contract.code}` : 'Contrato'}</h1>
               <Badge variant="secondary">{TYPE_LABELS[contract.type] ?? contract.type}</Badge>
               <Badge>{STATUS_LABELS[contract.status] ?? contract.status}</Badge>
             </div>

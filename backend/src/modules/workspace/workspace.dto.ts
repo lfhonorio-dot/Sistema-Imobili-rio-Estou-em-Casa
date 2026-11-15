@@ -11,6 +11,7 @@ import {
   IsIn,
 } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
+import { EmptyToNull } from '../../common/transforms/empty-to-null';
 import { OPERATION_PROFILES, OperationProfile } from '../../common/decorators/operation-profile.decorator';
 
 // DTO para atualizar configurações do workspace
@@ -22,19 +23,22 @@ export class UpdateWorkspaceDto {
   name?: string;
 
   @ApiPropertyOptional({ description: 'CNPJ da empresa' })
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  cnpj?: string;
+  cnpj?: string | null;
 
   @ApiPropertyOptional({ description: 'Endereço completo' })
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  address?: string;
+  address?: string | null;
 
   @ApiPropertyOptional({ description: 'Telefone de contato' })
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  phone?: string;
+  phone?: string | null;
 
   @ApiPropertyOptional({ description: 'Fuso horário (ex: America/Sao_Paulo)' })
   @IsOptional()
@@ -42,14 +46,16 @@ export class UpdateWorkspaceDto {
   timezone?: string;
 
   @ApiPropertyOptional({ description: 'Nome do DPO (Encarregado de Dados)' })
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  dpoName?: string;
+  dpoName?: string | null;
 
   @ApiPropertyOptional({ description: 'E-mail do DPO' })
+  @EmptyToNull()
   @IsOptional()
-  @IsEmail()
-  dpoEmail?: string;
+  @IsEmail({}, { message: 'E-mail do DPO inválido.' })
+  dpoEmail?: string | null;
 
   @ApiPropertyOptional({ description: 'Exigir 2FA para todos os membros' })
   @IsOptional()

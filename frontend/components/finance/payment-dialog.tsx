@@ -28,16 +28,33 @@ export function PaymentDialog({ entry, onClose }: { entry: (FinancialEntry & { o
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Campos que a pessoa já digitou. A sugestão (saldo, multa, juros) chega depois,
+  // em segundo plano, e é recalculada quando a data muda: ela só pode preencher o
+  // que ainda NÃO foi editado. Antes, sobrescrevia o valor digitado — uma baixa
+  // parcial de R$ 400 virava baixa do valor cheio sem aviso.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const edit = (k: 'principal' | 'fine' | 'interest' | 'discount', v: string) => {
+    setTouched((t) => ({ ...t, [k]: true }));
+    setF((p) => ({ ...p, [k]: v }));
+  };
+
   const open = suggestion.data?.openAmount ?? entry?.openAmount ?? 0;
   useEffect(() => {
     if (!suggestion.data) return;
-    setF((p) => ({ ...p, principal: fmt(suggestion.data.openAmount), fine: fmt(suggestion.data.fine), interest: fmt(suggestion.data.interest) }));
+    const sug = { principal: fmt(suggestion.data.openAmount), fine: fmt(suggestion.data.fine), interest: fmt(suggestion.data.interest) };
+    setF((p) => ({
+      ...p,
+      ...(touched.principal ? {} : { principal: sug.principal }),
+      ...(touched.fine ? {} : { fine: sug.fine }),
+      ...(touched.interest ? {} : { interest: sug.interest }),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suggestion.data]);
   useEffect(() => {
     const def = accounts.data?.find((a) => a.isDefault);
     if (def) setF((p) => (p.bankAccountId === NONE ? { ...p, bankAccountId: def.id } : p));
   }, [accounts.data]);
-  useEffect(() => { if (!entry) { setFile(null); setPaidAt(todayISO()); } }, [entry]);
+  useEffect(() => { if (!entry) { setFile(null); setPaidAt(todayISO()); setTouched({}); } }, [entry]);
 
   if (!entry) return null;
   const isPay = entry.type === 'PAYABLE';
@@ -83,13 +100,13 @@ export function PaymentDialog({ entry, onClose }: { entry: (FinancialEntry & { o
             <div className="space-y-1"><Label>Data do {isPay ? 'pagamento' : 'recebimento'}</Label>
               <Input type="date" value={paidAt} max={todayISO()} onChange={(e) => setPaidAt(e.target.value)} /></div>
             <div className="space-y-1"><Label htmlFor="pay-principal">Valor a baixar (R$)</Label>
-              <Input id="pay-principal" inputMode="decimal" value={f.principal} onChange={(e) => setF({ ...f, principal: e.target.value })} /></div>
+              <Input id="pay-principal" inputMode="decimal" value={f.principal} onChange={(e) => edit('principal', e.target.value)} /></div>
             <div className="space-y-1"><Label htmlFor="pay-fine">Multa (R$)</Label>
-              <Input id="pay-fine" inputMode="decimal" value={f.fine} onChange={(e) => setF({ ...f, fine: e.target.value })} placeholder="0,00" /></div>
+              <Input id="pay-fine" inputMode="decimal" value={f.fine} onChange={(e) => edit('fine', e.target.value)} placeholder="0,00" /></div>
             <div className="space-y-1"><Label htmlFor="pay-interest">Juros (R$)</Label>
-              <Input id="pay-interest" inputMode="decimal" value={f.interest} onChange={(e) => setF({ ...f, interest: e.target.value })} placeholder="0,00" /></div>
+              <Input id="pay-interest" inputMode="decimal" value={f.interest} onChange={(e) => edit('interest', e.target.value)} placeholder="0,00" /></div>
             <div className="space-y-1"><Label htmlFor="pay-discount">Desconto (R$)</Label>
-              <Input id="pay-discount" inputMode="decimal" value={f.discount} onChange={(e) => setF({ ...f, discount: e.target.value })} placeholder="0,00" /></div>
+              <Input id="pay-discount" inputMode="decimal" value={f.discount} onChange={(e) => edit('discount', e.target.value)} placeholder="0,00" /></div>
             <div className="space-y-1"><Label>Forma</Label>
               <Select value={f.method} onValueChange={(v) => setF({ ...f, method: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>

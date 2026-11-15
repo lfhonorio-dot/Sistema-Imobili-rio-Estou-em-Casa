@@ -31,9 +31,10 @@ import { TaskForm } from '@/components/crm/task-form';
 import { ContactForm } from '@/components/crm/contact-form';
 import { useContact, useContactTimeline, useDeleteContact } from '@/hooks/use-contacts';
 import Link from 'next/link';
+import { ErrorState } from '@/components/common/error-state';
 import { useRoleKey } from '@/hooks/use-role';
 import { lgpdAnonymize, lgpdExport, lgpdPreview } from '@/hooks/use-team';
-import { getApiErrorMessage } from '@/lib/api-error';
+import { getApiErrorMessage, getApiErrorStatus } from '@/lib/api-error';
 import type { Activity } from '@/hooks/use-activities';
 
 export default function ContactDetailPage() {
@@ -68,7 +69,7 @@ export default function ContactDetailPage() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const { data: contact, isLoading } = useContact(id);
+  const { data: contact, isLoading, isError, error, refetch } = useContact(id);
   const { data: timeline = [] } = useContactTimeline(id);
   const deleteContact = useDeleteContact();
 
@@ -86,6 +87,12 @@ export default function ContactDetailPage() {
         </div>
       </div>
     );
+  }
+
+  // Erro que não seja "não encontrado" (rede, servidor) aparece como erro, não como
+  // "Contato não encontrado" — regra do projeto: diferenciar erro de ausência.
+  if (isError && getApiErrorStatus(error) !== 404) {
+    return <div className="p-6"><ErrorState error={error} onRetry={() => void refetch()} /></div>;
   }
 
   if (!contact) {

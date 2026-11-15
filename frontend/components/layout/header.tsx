@@ -4,7 +4,6 @@
 'use client';
 
 import { useAuthStore } from '@/stores/auth.store';
-import { NotificationBell } from './notification-bell';
 import { ROLE_LABELS } from '@/lib/navigation';
 import { useRoleKey } from '@/hooks/use-role';
 
@@ -30,7 +29,6 @@ export function Header({ title }: HeaderProps) {
             {ROLE_LABELS[role]}
           </span>
         )}
-        {currentWorkspace && <NotificationBell />}
       </div>
     </header>
   );

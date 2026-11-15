@@ -20,7 +20,9 @@ const dealSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório'),
   contactId: z.string().min(1, 'Contato é obrigatório'),
   pipelineId: z.string().min(1, 'Pipeline é obrigatório'),
-  value: z.number().optional(),
+  // Valor em branco é normal num lead novo: o campo numérico vazio vira NaN e,
+  // sem este tratamento, a validação recusava o formulário sem mostrar mensagem.
+  value: z.preprocess((v) => (typeof v === 'number' && Number.isNaN(v) ? undefined : v), z.number().min(0, 'Valor não pode ser negativo').optional()),
   origin: z.string().optional(),
   propertyId: z.string().optional(),
 });
@@ -133,6 +135,7 @@ export function DealForm({ defaultPipelineId, onSuccess, onCancel }: DealFormPro
           {...register('value', { valueAsNumber: true })}
           placeholder="0,00"
         />
+        {errors.value && <p className="text-xs text-red-500">{errors.value.message}</p>}
       </div>
 
       {/* Imóvel de interesse (Fase 3) */}

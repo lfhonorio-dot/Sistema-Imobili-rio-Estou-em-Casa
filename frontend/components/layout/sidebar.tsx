@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { useRoleKey } from '@/hooks/use-role';
 import { useOperationProfile } from '@/hooks/use-operation-profile';
+import { NotificationBell } from './notification-bell';
 import { isNavItemActive, PROFILE_LABELS, visibleNavGroups, ROLE_LABELS } from '@/lib/navigation';
 
 function SidebarContent({ tab }: { tab: string | null }) {
@@ -47,9 +48,11 @@ function SidebarContent({ tab }: { tab: string | null }) {
       <div className="px-6 py-4">
         <div className="flex items-center gap-2">
           <Building2 className="h-6 w-6 text-primary" />
-          <span className="font-bold text-lg text-foreground truncate">
+          <span className="font-bold text-lg text-foreground truncate flex-1">
             {currentWorkspace?.workspace.name || 'Estou em Casa'}
           </span>
+          {/* Sino na barra lateral: aparece em TODAS as telas (o cabeçalho só existe em algumas). */}
+          {currentWorkspace && <NotificationBell align="start" />}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">Perfil: {PROFILE_LABELS[profile]} · {ROLE_LABELS[role]}</p>
       </div>
