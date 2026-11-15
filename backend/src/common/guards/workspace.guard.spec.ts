@@ -80,3 +80,28 @@ describe('WorkspaceGuard — perfil de operação', () => {
     await expect(guard.canActivate(ctx)).rejects.toThrow('Você não tem acesso a este workspace.');
   });
 });
+
+// Fase 8 — vazamento entre imobiliárias. Sem o cabeçalho X-Workspace-Id o guard
+// resolvia a imobiliária do usuário, mas os controllers (que leem o cabeçalho)
+// recebiam "undefined" e as consultas saíam SEM filtro de imobiliária.
+describe('WorkspaceGuard — requisição sem X-Workspace-Id', () => {
+  it('grava no cabeçalho a imobiliária do próprio usuário, para o controller filtrar por ela', async () => {
+    const prisma = makePrisma('VENDA');
+    prisma.workspaceUser.findFirst.mockResolvedValue({ workspaceId: 'ws-do-usuario' });
+    const guard = new WorkspaceGuard(prisma as any, makeReflector({}));
+    const { ctx, request } = makeContext({}, { sub: 'u-1' });
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect((request.headers as Record<string, string>)['x-workspace-id']).toBe('ws-do-usuario');
+    expect(request.workspaceId).toBe('ws-do-usuario');
+  });
+
+  it('usuário sem imobiliária nenhuma é recusado', async () => {
+    const prisma = makePrisma('VENDA');
+    prisma.workspaceUser.findFirst.mockResolvedValue(null);
+    const guard = new WorkspaceGuard(prisma as any, makeReflector({}));
+    const { ctx } = makeContext({}, { sub: 'u-1' });
+
+    await expect(guard.canActivate(ctx)).rejects.toThrow(/X-Workspace-Id é obrigatório/);
+  });
+});
