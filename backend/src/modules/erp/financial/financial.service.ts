@@ -28,13 +28,14 @@ export class FinancialService {
 
   // Lista lançamentos financeiros com filtros
   async findAllEntries(workspaceId: string, query: FinancialQueryDto) {
-    const { page = 1, limit = 20, type, status, contractId, contactId, dateFrom, dateTo } = query;
+    const { page = 1, limit = 20, type, category, status, contractId, contactId, dateFrom, dateTo } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.FinancialEntryWhereInput = {
       workspaceId,
       deletedAt: null,
       ...(type && { type }),
+      ...(category && { category }),
       ...(status && { status }),
       ...(contractId && { contractId }),
       ...(contactId && { contactId }),

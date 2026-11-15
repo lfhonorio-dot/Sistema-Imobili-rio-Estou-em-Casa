@@ -110,6 +110,11 @@ export class FinancialQueryDto {
   @IsString()
   type?: string;
 
+  // Fase 4: filtrar por categoria (ex.: COMMISSION)
+  @IsOptional()
+  @IsString()
+  category?: string;
+
   @IsOptional()
   @IsString()
   status?: string;

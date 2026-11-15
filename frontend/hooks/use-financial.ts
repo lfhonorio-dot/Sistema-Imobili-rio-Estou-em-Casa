@@ -24,6 +24,9 @@ export interface FinancialEntry {
   notes?: string | null;
   supplierId?: string | null;
   supplier?: { id: string; name: string } | null;
+  cancelReason?: string | null;
+  sourceEntryId?: string | null;
+  beneficiaryUserId?: string | null;
   createdAt: string;
   updatedAt: string;
   contract?: {
@@ -37,6 +40,7 @@ export interface FinancialQuery {
   page?: number;
   limit?: number;
   type?: string;
+  category?: string;
   status?: string;
   contractId?: string;
   contactId?: string;

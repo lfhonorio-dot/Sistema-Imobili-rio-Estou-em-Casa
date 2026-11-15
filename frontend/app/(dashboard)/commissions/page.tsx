@@ -5,6 +5,7 @@ import { getApiErrorMessage } from '@/lib/api-error';
 import { useMemo, useState } from 'react';
 import { Percent, TrendingUp, Clock, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { SaleCommissionsSection } from '@/components/contracts/sale-commissions-section';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -214,7 +215,10 @@ export default function CommissionsPage() {
         </div>
       )}
 
-      {/* Repasses aos corretores parceiros */}
+      {/* Fase 4: comissões das vendas ativadas (parcelas e repasses) */}
+      <SaleCommissionsSection />
+
+      {/* Repasses aos corretores parceiros (modelo antigo) */}
       {splitTransactions.length > 0 && (
         <div className="space-y-3 pt-2">
           <h2 className="text-lg font-semibold">Repasses aos Corretores Parceiros</h2>

@@ -25,6 +25,8 @@ export class ReportsService {
     const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
     const openStatuses = ['PENDING', 'OVERDUE'];
+    const todayStart = new Date(now);
+    todayStart.setUTCHours(0, 0, 0, 0);
 
     const [
       newLeads,
@@ -38,6 +40,8 @@ export class ReportsService {
       bankBalance,
       receivable30,
       payable30,
+      commissionReceivableEntries,
+      openProposals,
     ] = await Promise.all([
       this.prisma.deal.count({
         where: { workspaceId, deletedAt: null, createdAt: { gte: sevenDaysAgo } },
@@ -67,13 +71,21 @@ export class ReportsService {
           deletedAt: null,
           type: { in: ['SALE', 'BROKERAGE'] },
           status: 'ACTIVE',
-          createdAt: { gte: monthStart, lt: nextMonthStart },
+          // Fase 4: venda conta no mês em que foi ATIVADA (contratos antigos: criação)
+          OR: [
+            { activatedAt: { gte: monthStart, lt: nextMonthStart } },
+            { activatedAt: null, createdAt: { gte: monthStart, lt: nextMonthStart } },
+          ],
         },
         _sum: { saleValue: true },
         _count: true,
       }),
       this.prisma.commission.aggregate({
-        where: { workspaceId, status: 'PENDING', contract: { deletedAt: null } },
+        // modelo antigo: comissão sem parcelas lançadas no financeiro
+        where: {
+          workspaceId, status: 'PENDING',
+          contract: { deletedAt: null, financialEntries: { none: { type: 'RECEIVABLE', category: 'COMMISSION', deletedAt: null } } },
+        },
         _sum: { amount: true },
         _count: true,
       }),
@@ -109,6 +121,16 @@ export class ReportsService {
         },
         _sum: { amount: true },
       }),
+      // Fase 4: comissão a receber lançada em parcelas na ativação da venda
+      this.prisma.financialEntry.aggregate({
+        where: { workspaceId, deletedAt: null, type: 'RECEIVABLE', category: 'COMMISSION', status: { in: openStatuses } },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      // Propostas em aberto e dentro da validade (Fase 3)
+      this.prisma.proposal.count({
+        where: { workspaceId, deletedAt: null, status: 'OPEN', validUntil: { gte: todayStart } },
+      }),
     ]);
 
     const n = (v: unknown) => Number(v ?? 0);
@@ -119,13 +141,12 @@ export class ReportsService {
     return {
       newLeads7d: newLeads,
       visitsThisWeek: { total: visitsWeek, done: visitsWeekDone },
-      // Propostas ainda não existem como cadastro (chegam na Fase 3).
-      openProposals: { available: false, count: null as number | null },
+      openProposals: { available: true, count: openProposals as number | null },
       vgvInNegotiation: { amount: n(openDeals._sum.value), deals: openDeals._count },
       salesThisMonth: { amount: n(salesMonth._sum.saleValue), count: salesMonth._count },
       commissionsReceivable: {
-        amount: n(commissionsReceivable._sum.amount),
-        count: commissionsReceivable._count,
+        amount: n(commissionsReceivable._sum.amount) + n(commissionReceivableEntries._sum.amount),
+        count: commissionsReceivable._count + commissionReceivableEntries._count,
       },
       commissionsPayable: {
         amount: n(commissionPayableEntries._sum.amount) + n(partnerPayouts._sum.amount),

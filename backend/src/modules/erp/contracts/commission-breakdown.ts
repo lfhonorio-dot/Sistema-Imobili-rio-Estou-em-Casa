@@ -43,11 +43,15 @@ export function calcCommissionBreakdown(input: {
   baseValue: number;
   commissionRate: number;
   receivedValue?: number | null;
+  /** Fase 4: comissão total combinada na ativação (substitui valor × taxa). */
+  commissionTotalOverride?: number | null;
   partners: PartnerRuleInput[];
 }): CommissionBreakdown {
   const baseValue = Number(input.baseValue) || 0;
   const commissionRate = Number(input.commissionRate) || 0;
-  const commissionCents = Math.round((toCents(baseValue) * commissionRate) / 100);
+  const commissionCents = input.commissionTotalOverride != null
+    ? toCents(Number(input.commissionTotalOverride))
+    : Math.round((toCents(baseValue) * commissionRate) / 100);
 
   const received = input.receivedValue != null ? Number(input.receivedValue) : null;
   const splitBaseCents = received != null ? toCents(received) : commissionCents;

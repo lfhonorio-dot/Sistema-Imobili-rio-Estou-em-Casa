@@ -235,6 +235,7 @@ export class FiscalService {
     return this.prisma.dimobRecord.findMany({
       where: {
         workspaceId,
+        deletedAt: null,
         ...(query.year && { year: query.year }),
       },
       orderBy: { year: 'desc' },
@@ -274,7 +275,7 @@ export class FiscalService {
     for (const contract of contracts) {
       const totalValue = contract.financialEntries.reduce((s, e) => s + Number(e.amount), 0);
       const existing = await this.prisma.dimobRecord.findFirst({
-        where: { workspaceId, year: dto.year, contractId: contract.id },
+        where: { workspaceId, year: dto.year, contractId: contract.id, deletedAt: null },
       });
 
       const prop = contract.property as Record<string, unknown>;
