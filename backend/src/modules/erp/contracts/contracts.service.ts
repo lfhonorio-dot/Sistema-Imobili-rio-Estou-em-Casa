@@ -252,6 +252,23 @@ export class ContractsService {
       );
     }
 
+    // Fase 3: negócio de origem precisa ser deste workspace e não pode já ter
+    // um contrato vigente (evita contrato em duplicidade pelo "Ganho").
+    if (dto.dealId) {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: dto.dealId, workspaceId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!deal) throw new BadRequestException('Negócio de origem não encontrado neste workspace.');
+      const dupByDeal = await this.prisma.contract.findFirst({
+        where: { workspaceId, dealId: dto.dealId, deletedAt: null, status: { not: 'RESCINDED' } },
+        select: { code: true, id: true },
+      });
+      if (dupByDeal) {
+        throw new ConflictException(`Este negócio já tem o contrato ${dupByDeal.code ?? dupByDeal.id}.`);
+      }
+    }
+
     // Valida contatos se informados
     if (dto.ownerId) {
       const owner = await this.prisma.contact.findFirst({

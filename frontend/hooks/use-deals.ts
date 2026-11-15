@@ -16,6 +16,8 @@ export interface DealQuery {
   assigneeId?: string;
   search?: string;
   view?: 'kanban' | 'list';
+  /** Fase 3: só os negócios do usuário logado */
+  mine?: boolean;
 }
 
 function useWorkspaceId() {
@@ -35,6 +37,7 @@ export function useDeals(query: DealQuery = {}) {
       if (query.stageId) params.set('stageId', query.stageId);
       if (query.assigneeId) params.set('assigneeId', query.assigneeId);
       if (query.search) params.set('search', query.search);
+      if (query.mine) params.set('mine', 'true');
 
       const res = await api.get(`/deals?${params}`, {
         headers: { 'x-workspace-id': workspaceId },
@@ -72,6 +75,7 @@ export function useCreateDeal() {
       value?: number;
       stageId?: string;
       assigneeId?: string;
+      propertyIds?: string[];
     }) => {
       const res = await api.post<{ success: boolean; data: Deal }>('/deals', data, {
         headers: { 'x-workspace-id': workspaceId },
@@ -118,7 +122,7 @@ export function useMoveStage() {
       lostReason?: string;
       lostNote?: string;
     }) => {
-      const res = await api.patch<{ success: boolean; data: Deal }>(
+      const res = await api.patch<{ success: boolean; data: Deal & { nextStep?: { type: string; url: string } } }>(
         `/deals/${dealId}/stage`,
         { stageId, lostReason, lostNote },
         { headers: { 'x-workspace-id': workspaceId } },
@@ -127,6 +131,8 @@ export function useMoveStage() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['deals', workspaceId] });
+      void qc.invalidateQueries({ queryKey: ['deal'] });
+      void qc.invalidateQueries({ queryKey: ['sales-dashboard'] });
     },
   });
 }

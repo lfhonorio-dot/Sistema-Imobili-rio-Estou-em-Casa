@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
+import { DEFAULT_SALES_FUNNEL, SALES_FUNNEL_NAME } from './funnel-stages';
 import {
   CreatePipelineDto,
   UpdatePipelineDto,
@@ -16,16 +17,8 @@ import {
   ReorderStagesDto,
 } from './pipelines.dto';
 
-// Estágios padrão para pipeline de VENDA
-const DEFAULT_SALE_STAGES = [
-  { name: 'Novo Lead', color: '#6366f1', order: 0, isWon: false, isLost: false },
-  { name: 'Contato Feito', color: '#8b5cf6', order: 1, isWon: false, isLost: false },
-  { name: 'Visita Agendada', color: '#f59e0b', order: 2, isWon: false, isLost: false },
-  { name: 'Proposta', color: '#3b82f6', order: 3, isWon: false, isLost: false },
-  { name: 'Documentação', color: '#10b981', order: 4, isWon: false, isLost: false },
-  { name: 'Ganho', color: '#22c55e', order: 5, isWon: true, isLost: false },
-  { name: 'Perdido', color: '#ef4444', order: 6, isWon: false, isLost: true },
-];
+// Estágios padrão para pipeline de VENDA (Fase 3: etapas definidas pelo dono)
+const DEFAULT_SALE_STAGES = DEFAULT_SALES_FUNNEL;
 
 // Estágios padrão para pipeline de LOCAÇÃO
 const DEFAULT_RENTAL_STAGES = [
@@ -46,8 +39,22 @@ export class PipelinesService {
     private auditService: AuditService,
   ) {}
 
+  // Fase 3: imobiliária nova (sem nenhum funil) ganha o "Funil de Venda"
+  // padrão com as etapas definidas pelo dono. Quem já tem funil não é tocado.
+  async ensureSalesFunnel(workspaceId: string) {
+    const count = await this.prisma.pipeline.count({ where: { workspaceId, deletedAt: null } });
+    if (count > 0) return;
+    await this.prisma.$transaction(async (tx) => {
+      const p = await tx.pipeline.create({
+        data: { workspaceId, name: SALES_FUNNEL_NAME, type: 'SALE', isDefault: true, order: 0 },
+      });
+      await tx.pipelineStage.createMany({ data: DEFAULT_SALES_FUNNEL.map((s) => ({ ...s, pipelineId: p.id })) });
+    });
+  }
+
   // Lista todos os pipelines com contagens por estágio
   async findAll(workspaceId: string) {
+    await this.ensureSalesFunnel(workspaceId);
     const pipelines = await this.prisma.pipeline.findMany({
       where: { workspaceId, deletedAt: null },
       orderBy: { order: 'asc' },

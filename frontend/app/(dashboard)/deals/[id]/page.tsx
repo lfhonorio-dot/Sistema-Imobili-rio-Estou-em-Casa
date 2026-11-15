@@ -25,6 +25,8 @@ import { useActivities } from '@/hooks/use-activities';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import type { Activity } from '@/hooks/use-activities';
+import { LOST_REASONS, lostReasonLabel } from '@/lib/funnel';
+import { DealPropertiesPanel, DealProposalsPanel, DealVisitsPanel } from '@/components/funnel/deal-panels';
 
 function formatCurrency(value: number | null | undefined): string {
   if (value == null) return '-';
@@ -62,6 +64,8 @@ export default function DealDetailPage() {
     );
   }
 
+  const dealProps = ((deal as { properties?: Array<{ propertyId: string; property?: { id: string; code: string; street?: string | null; salePrice?: unknown } | null }> }).properties ?? []);
+
   const targetStage = deal.pipeline?.stages?.find((s: {id: string; isLost: boolean}) => s.id === targetStageId);
   const isLostStage = targetStage?.isLost;
 
@@ -69,17 +73,27 @@ export default function DealDetailPage() {
     if (!targetStageId) return;
 
     try {
-      await moveStage.mutateAsync({
+      const result = await moveStage.mutateAsync({
         dealId: id,
         stageId: targetStageId,
         lostReason: lostReason || undefined,
         lostNote: lostNote || undefined,
       });
-      toast.success('Negócio movido com sucesso');
       setShowMoveModal(false);
       setTargetStageId('');
       setLostReason('');
       setLostNote('');
+      // Ganho → abre o contrato de venda já preenchido (ou o contrato existente)
+      if (result.nextStep?.url) {
+        toast.success(
+          result.nextStep.type === 'OPEN_CONTRACT'
+            ? 'Negócio ganho. Este negócio já tem contrato: abrindo.'
+            : 'Negócio ganho! Abrindo o contrato de venda já preenchido.',
+        );
+        router.push(result.nextStep.url);
+        return;
+      }
+      toast.success('Negócio movido com sucesso');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Erro ao mover negócio'));
     }
@@ -220,8 +234,27 @@ export default function DealDetailPage() {
           )}
         </div>
 
-        {/* Coluna direita: atividades */}
-        <div className="col-span-2">
+        {/* Coluna direita: funil (Fase 3) + atividades */}
+        <div className="col-span-2 space-y-4">
+          {deal.lostReason && deal.stage?.isLost && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              Perdido — motivo: <strong>{lostReasonLabel(deal.lostReason)}</strong>
+              {deal.lostNote && <> · {deal.lostNote}</>}
+            </div>
+          )}
+          {deal.stage?.isWon && (
+            <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 flex items-center justify-between">
+              <span>Negócio ganho.</span>
+              <Button size="sm" onClick={() => router.push(`/contracts/new?dealId=${id}`)}>Abrir contrato de venda</Button>
+            </div>
+          )}
+          <DealPropertiesPanel dealId={id} items={dealProps} />
+          <DealVisitsPanel dealId={id} propertyIds={dealProps.map((p) => p.propertyId)} />
+          <DealProposalsPanel
+            dealId={id}
+            closed={!!(deal.stage?.isWon || deal.stage?.isLost)}
+            properties={dealProps.map((p) => ({ id: p.propertyId, code: p.property?.code ?? p.propertyId }))}
+          />
           <ActivityFeed
             activities={activities as Activity[]}
             dealId={id}
@@ -265,12 +298,9 @@ export default function DealDetailPage() {
                       <SelectValue placeholder="Selecione o motivo" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="PRICE">Preço</SelectItem>
-                      <SelectItem value="COMPETITOR">Concorrência</SelectItem>
-                      <SelectItem value="NOT_INTERESTED">Sem interesse</SelectItem>
-                      <SelectItem value="NO_CONTACT">Sem resposta</SelectItem>
-                      <SelectItem value="TIMING">Timing inadequado</SelectItem>
-                      <SelectItem value="OTHER">Outro</SelectItem>
+                      {Object.entries(LOST_REASONS).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

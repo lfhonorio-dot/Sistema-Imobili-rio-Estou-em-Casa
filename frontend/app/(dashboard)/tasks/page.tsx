@@ -17,6 +17,7 @@ import { TaskForm } from '@/components/crm/task-form';
 import { ActivityItem } from '@/components/crm/activity-item';
 import { useActivities, useTodayActivities, useCalendarActivities, useMarkActivityDone } from '@/hooks/use-activities';
 import { toast } from 'sonner';
+import { ErrorState } from '@/components/common/error-state';
 import { cn } from '@/lib/utils';
 
 const PRIORITY_BADGE_COLORS: Record<string, string> = {
@@ -39,10 +40,12 @@ export default function TasksPage() {
   const markDone = useMarkActivityDone();
 
   const { data: todayActivities = [] } = useTodayActivities();
-  const { data: weekActivities } = useActivities({
+  const [mine, setMine] = useState(false);
+  // Pendentes: tarefas e visitas (a visita agendada gera uma atividade do tipo Visita)
+  const { data: weekActivities, isError: pendingError, error: pendingErr, refetch: refetchPending } = useActivities({
     done: 'false',
-    type: 'TASK',
-    limit: 50,
+    limit: 100,
+    mine,
   });
   const { data: calendarData } = useCalendarActivities(
     calendarDate.getFullYear(),
@@ -76,10 +79,12 @@ export default function TasksPage() {
             {todayActivities.length} tarefas para hoje
           </p>
         </div>
-        <Button onClick={() => setShowNewTaskModal(true)}>
-          <Plus className="w-4 h-4 mr-1.5" />
-          Nova Tarefa
-        </Button>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Só minhas tarefas
+          </label>
+
+        </div>
       </div>
 
       <Tabs defaultValue="today">
@@ -88,7 +93,7 @@ export default function TasksPage() {
             <CheckSquare className="w-4 h-4 mr-1.5" />
             Hoje ({todayActivities.length})
           </TabsTrigger>
-          <TabsTrigger value="week">Esta Semana</TabsTrigger>
+          <TabsTrigger value="week">Pendentes</TabsTrigger>
           <TabsTrigger value="calendar">
             <Calendar className="w-4 h-4 mr-1.5" />
             Calendário
@@ -148,9 +153,11 @@ export default function TasksPage() {
 
         {/* Esta semana */}
         <TabsContent value="week" className="mt-4">
-          {weekTasks.length === 0 ? (
+          {pendingError ? (
+            <ErrorState error={pendingErr} onRetry={() => refetchPending()} />
+          ) : weekTasks.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              Nenhuma tarefa pendente esta semana
+              {mine ? 'Você não tem tarefas pendentes.' : 'Nenhuma tarefa pendente.'}
             </div>
           ) : (
             <div className="divide-y border rounded-lg overflow-hidden">

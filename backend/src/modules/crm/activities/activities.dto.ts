@@ -103,6 +103,11 @@ export class ActivityQueryDto {
   @IsString()
   assigneeId?: string;
 
+  // Fase 3: "minhas tarefas"
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  mine?: 'true' | 'false';
+
   @IsOptional()
   @IsDateString()
   startDate?: string;

@@ -366,6 +366,9 @@ model Contact {
   // Fase 2
   propertyShares    PropertyOwner[] @relation("PropertyCoOwner")
   interestProfile   ContactInterestProfile?
+  // Fase 3
+  visits            Visit[]
+  proposals         Proposal[]
 
   @@map("contacts")
 }
@@ -452,6 +455,10 @@ model PipelineStage {
   isWon            Boolean   @default(false)
   isLost           Boolean   @default(false)
   rottenAfterDays  Int?
+  // Fase 3: papel da etapa no funil de venda (NEW_LEAD, ATTENDANCE, VISIT_SCHEDULED,
+  // VISIT_DONE, PROPOSAL, NEGOTIATION, DOCUMENTATION, WON, LOST). Usado para
+  // avançar o negócio sozinho (visita agendada/realizada, proposta aceita).
+  stageKey         String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   pipeline         Pipeline  @relation(fields: [pipelineId], references: [id])
@@ -492,6 +499,9 @@ model Deal {
   stageHistory    DealStageHistory[]
   activities      Activity[]
   properties      DealProperty[]
+  // Fase 3
+  visits          Visit[]
+  proposals       Proposal[]
 
   @@map("deals")
 }
@@ -646,6 +656,9 @@ model Property {
   authorizations   PropertyAuthorization[]
   keyMovements     PropertyKeyMovement[]
   priceHistory     PropertyPriceHistory[]
+  // Fase 3
+  visits           Visit[]
+  proposals        Proposal[]
 
   @@unique([workspaceId, code])
   @@map("properties")
@@ -732,6 +745,8 @@ model Contract {
   documents        Document[]
   signatureEnvelopes SignatureEnvelope[]
   splitRules       SplitRule[]
+  // Fase 3: negócio (funil) que originou o contrato
+  dealId           String?
 
   @@unique([workspaceId, code])
   @@map("contracts")
@@ -1813,4 +1828,69 @@ model ContactInterestProfile {
 
   @@index([workspaceId])
   @@map("contact_interest_profiles")
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FASE 3 — Funil de venda (tabelas novas / aditivas)
+// ══════════════════════════════════════════════════════════════════
+
+// Visita a um imóvel. Cada visita gera uma atividade do tipo VISIT (aparece
+// em Tarefas e no calendário) e, quando há negócio, avança o funil.
+model Visit {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  dealId        String?
+  contactId     String
+  propertyId    String
+  brokerId      String?   // WorkspaceUser id do corretor que acompanha
+  scheduledAt   DateTime
+  durationMin   Int       @default(60)
+  status        String    @default("SCHEDULED") // SCHEDULED, DONE, CANCELLED, NO_SHOW
+  feedback      String?   @db.Text // retorno do cliente
+  interestLevel String?   // HIGH, MEDIUM, LOW, NONE
+  cancelReason  String?
+  activityId    String?   // Activity (tipo VISIT) criada junto
+  createdById   String?
+  completedAt   DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deal          Deal?     @relation(fields: [dealId], references: [id])
+  contact       Contact   @relation(fields: [contactId], references: [id])
+  property      Property  @relation(fields: [propertyId], references: [id])
+
+  @@index([workspaceId, scheduledAt])
+  @@map("visits")
+}
+
+// Proposta de compra (e contrapropostas encadeadas por parentId).
+model Proposal {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  dealId              String
+  contactId           String    // comprador
+  propertyId          String
+  parentId            String?   // proposta respondida por esta (contraproposta)
+  kind                String    @default("OFFER") // OFFER (comprador), COUNTER (vendedor)
+  amount              Decimal   @db.Decimal(15, 2)
+  paymentMethod       String    // CASH, FINANCING, FGTS, PERMUTA, MIXED
+  downPayment         Decimal?  @db.Decimal(15, 2) // entrada / sinal
+  financedAmount      Decimal?  @db.Decimal(15, 2)
+  fgtsAmount          Decimal?  @db.Decimal(15, 2)
+  exchangeDescription String?   // imóvel/bem dado em permuta
+  conditions          String?   @db.Text
+  validUntil          DateTime
+  status              String    @default("OPEN") // OPEN, ACCEPTED, REJECTED, COUNTERED, WITHDRAWN (vencida = calculado)
+  decidedAt           DateTime?
+  decisionNote        String?
+  createdById         String?
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deal                Deal      @relation(fields: [dealId], references: [id])
+  contact             Contact   @relation(fields: [contactId], references: [id])
+  property            Property  @relation(fields: [propertyId], references: [id])
+
+  @@index([workspaceId, dealId])
+  @@map("proposals")
 }

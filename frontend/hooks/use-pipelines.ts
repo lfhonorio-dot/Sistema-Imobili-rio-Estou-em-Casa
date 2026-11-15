@@ -42,6 +42,7 @@ export interface Deal {
   expectedCloseAt?: string | null;
   closedAt?: string | null;
   lostReason?: string | null;
+  lostNote?: string | null;
   origin?: string | null;
   lastActivityAt?: string | null;
   deletedAt?: string | null;

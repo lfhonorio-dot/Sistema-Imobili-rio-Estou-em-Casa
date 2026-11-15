@@ -35,6 +35,8 @@ export interface ActivityQuery {
   done?: 'true' | 'false';
   startDate?: string;
   endDate?: string;
+  /** Fase 3: só as tarefas do usuário logado */
+  mine?: boolean;
 }
 
 function useWorkspaceId() {
@@ -54,6 +56,7 @@ export function useActivities(query: ActivityQuery = {}) {
       if (query.contactId) params.set('contactId', query.contactId);
       if (query.dealId) params.set('dealId', query.dealId);
       if (query.done) params.set('done', query.done);
+      if (query.mine) params.set('mine', 'true');
       if (query.startDate) params.set('startDate', query.startDate);
       if (query.endDate) params.set('endDate', query.endDate);
 

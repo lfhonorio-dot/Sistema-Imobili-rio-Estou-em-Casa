@@ -18,6 +18,11 @@ import { KanbanColumn } from './kanban-column';
 import { useMoveStage } from '@/hooks/use-deals';
 import type { Pipeline, Deal } from '@/hooks/use-pipelines';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { LOST_REASONS } from '@/lib/funnel';
 
 interface KanbanBoardProps {
   pipeline: Pipeline;
@@ -29,6 +34,22 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
   const moveStage = useMoveStage();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [localDeals, setLocalDeals] = useState<Deal[]>(deals);
+  const [pendingLost, setPendingLost] = useState<{ dealId: string; stageId: string; title: string } | null>(null);
+  const [lostReason, setLostReason] = useState('');
+  const [lostNote, setLostNote] = useState('');
+
+  const confirmLost = async () => {
+    if (!pendingLost || !lostReason) return;
+    try {
+      await moveStage.mutateAsync({ dealId: pendingLost.dealId, stageId: pendingLost.stageId, lostReason, lostNote: lostNote || undefined });
+      toast.success('Negócio marcado como perdido');
+      setPendingLost(null);
+      setLostReason('');
+      setLostNote('');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao mover negócio'));
+    }
+  };
 
   // Atualiza quando deals muda externamente
   if (JSON.stringify(deals.map(d => d.id)) !== JSON.stringify(localDeals.map(d => d.id))) {
@@ -59,9 +80,9 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
     const deal = localDeals.find((d) => d.id === dealId);
     if (!deal || deal.stageId === targetStageId) return;
 
-    // Se o estágio é de perda, não permite drag direto — exige motivo
+    // Perdido exige motivo: abre a janela antes de mover (Fase 3)
     if (targetStage.isLost) {
-      toast.error('Para marcar como perdido, use o botão "Mover Etapa" no negócio');
+      setPendingLost({ dealId, stageId: targetStageId, title: deal.title });
       return;
     }
 
@@ -71,7 +92,12 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
     );
 
     try {
-      await moveStage.mutateAsync({ dealId, stageId: targetStageId });
+      const result = await moveStage.mutateAsync({ dealId, stageId: targetStageId });
+      if (result.nextStep?.url) {
+        toast.success('Negócio ganho! Abrindo o contrato de venda já preenchido.');
+        router.push(result.nextStep.url);
+        return;
+      }
       toast.success('Negócio movido com sucesso');
     } catch (err) {
       // Reverte
@@ -123,6 +149,28 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
             />
           ))}
       </div>
+
+      <Dialog open={!!pendingLost} onOpenChange={(o) => !o && setPendingLost(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Marcar como perdido</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{pendingLost?.title}</p>
+          <div className="space-y-1">
+            <Label>Motivo da perda *</Label>
+            <select className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm" value={lostReason} onChange={(e) => setLostReason(e.target.value)}>
+              <option value="">Selecione…</option>
+              {Object.entries(LOST_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label>Observação</Label>
+            <Textarea rows={3} value={lostNote} onChange={(e) => setLostNote(e.target.value)} />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setPendingLost(null)}>Cancelar</Button>
+            <Button onClick={() => void confirmLost()} disabled={!lostReason || moveStage.isPending}>Marcar como perdido</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DndContext>
   );
 }

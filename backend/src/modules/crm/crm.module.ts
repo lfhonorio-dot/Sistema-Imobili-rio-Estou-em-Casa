@@ -8,6 +8,7 @@ import { DealsModule } from './deals/deals.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { TagsModule } from './tags/tags.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
+import { FunnelModule } from './funnel/funnel.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { CustomFieldsModule } from './custom-fields/custom-fields.module';
     ActivitiesModule,
     TagsModule,
     CustomFieldsModule,
+    FunnelModule,
   ],
   exports: [
     ContactsModule,
@@ -25,6 +27,7 @@ import { CustomFieldsModule } from './custom-fields/custom-fields.module';
     ActivitiesModule,
     TagsModule,
     CustomFieldsModule,
+    FunnelModule,
   ],
 })
 export class CrmModule {}

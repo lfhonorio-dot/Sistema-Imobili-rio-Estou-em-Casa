@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCreateDeal } from '@/hooks/use-deals';
 import { usePipelines } from '@/hooks/use-pipelines';
 import { useContacts } from '@/hooks/use-contacts';
+import { useProperties } from '@/hooks/use-properties';
 import { toast } from 'sonner';
 import { useState } from 'react';
 
@@ -21,6 +22,7 @@ const dealSchema = z.object({
   pipelineId: z.string().min(1, 'Pipeline é obrigatório'),
   value: z.number().optional(),
   origin: z.string().optional(),
+  propertyId: z.string().optional(),
 });
 
 type DealFormValues = z.infer<typeof dealSchema>;
@@ -36,6 +38,7 @@ export function DealForm({ defaultPipelineId, onSuccess, onCancel }: DealFormPro
   const { data: pipelines = [] } = usePipelines();
   const [contactSearch, setContactSearch] = useState('');
   const { data: contactsResult } = useContacts({ search: contactSearch, limit: 10 });
+  const { data: propertiesResult } = useProperties({ limit: 500 });
   const contacts = contactsResult?.items ?? [];
 
   const {
@@ -54,7 +57,10 @@ export function DealForm({ defaultPipelineId, onSuccess, onCancel }: DealFormPro
 
   const onSubmit = async (data: DealFormValues) => {
     try {
-      await createDeal.mutateAsync(data);
+      const { propertyId, ...rest } = data;
+      // valor vazio vira NaN no input numérico: não envia
+      const value = Number.isFinite(rest.value) ? rest.value : undefined;
+      await createDeal.mutateAsync({ ...rest, value, ...(propertyId ? { propertyIds: [propertyId] } : {}) });
       toast.success('Negócio criado com sucesso');
       onSuccess?.();
     } catch (err) {
@@ -127,6 +133,17 @@ export function DealForm({ defaultPipelineId, onSuccess, onCancel }: DealFormPro
           {...register('value', { valueAsNumber: true })}
           placeholder="0,00"
         />
+      </div>
+
+      {/* Imóvel de interesse (Fase 3) */}
+      <div className="space-y-1">
+        <Label htmlFor="propertyId">Imóvel de interesse</Label>
+        <select id="propertyId" className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm" {...register('propertyId')}>
+          <option value="">Nenhum (definir depois)</option>
+          {((propertiesResult?.items ?? []) as Array<{ id: string; code: string; street?: string | null; status: string }>)
+            .filter((p) => p.status !== 'SOLD')
+            .map((p) => <option key={p.id} value={p.id}>{p.code}{p.street ? ' — ' + p.street : ''}</option>)}
+        </select>
       </div>
 
       <div className="flex gap-2 justify-end pt-2">

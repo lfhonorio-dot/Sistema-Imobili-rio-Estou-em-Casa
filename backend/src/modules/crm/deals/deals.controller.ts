@@ -38,8 +38,9 @@ export class DealsController {
   findAll(
     @Headers('x-workspace-id') workspaceId: string,
     @Query() query: DealQueryDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.dealsService.findAll(workspaceId, query);
+    return this.dealsService.findAll(workspaceId, query, user.sub);
   }
 
   @Post()
