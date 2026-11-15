@@ -219,3 +219,12 @@ export function apiFileUrl(url: string | null | undefined): string {
   if (url.startsWith('/files/')) return `${API_URL}${url}`;
   return url;
 }
+
+// Fase 5: endereço público completo de uma rota da API (ex.: URL do webhook
+// para colar no Asaas). Em produção a base é relativa (/api-proxy).
+export function apiPublicUrl(path: string): string {
+  const base = API_URL.startsWith('http')
+    ? API_URL
+    : `${typeof window !== 'undefined' ? window.location.origin : ''}${API_URL}`;
+  return `${base}${path}`;
+}

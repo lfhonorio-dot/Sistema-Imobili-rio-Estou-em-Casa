@@ -16,7 +16,11 @@ import {
   PayEntryDto,
   CommissionQueryDto,
   ReceiveCommissionDto,
+  RegisterPaymentDto,
 } from './financial.dto';
+import { OPEN_STATUSES, PaymentsService } from './payments.service';
+import { FinancialConfigService } from './financial-config.service';
+import { BillingService } from '../billing/billing.service';
 
 @Injectable()
 export class FinancialService {
@@ -24,21 +28,32 @@ export class FinancialService {
     private prisma: PrismaService,
     private emailService: EmailService,
     private commissionReceipt: CommissionReceiptService,
+    private payments: PaymentsService,
+    private config: FinancialConfigService,
+    private billing: BillingService,
   ) {}
 
   // Lista lançamentos financeiros com filtros
   async findAllEntries(workspaceId: string, query: FinancialQueryDto) {
-    const { page = 1, limit = 20, type, category, status, contractId, contactId, dateFrom, dateTo } = query;
+    const { page = 1, limit = 20, type, category, status, contractId, contactId, dateFrom, dateTo, costCenterId, search } = query;
     const skip = (page - 1) * limit;
+
+    // Fase 5: "PARTIAL" = em aberto com parte já baixada; "OPEN" = em aberto
+    const statusWhere: Prisma.FinancialEntryWhereInput =
+      status === 'PARTIAL' ? { status: { in: OPEN_STATUSES }, paidAmount: { not: null } }
+      : status === 'OPEN' ? { status: { in: OPEN_STATUSES } }
+      : status ? { status } : {};
 
     const where: Prisma.FinancialEntryWhereInput = {
       workspaceId,
       deletedAt: null,
       ...(type && { type }),
       ...(category && { category }),
-      ...(status && { status }),
+      ...statusWhere,
       ...(contractId && { contractId }),
       ...(contactId && { contactId }),
+      ...(costCenterId && { costCenterId }),
+      ...(search && { description: { contains: search, mode: 'insensitive' as const } }),
       ...(dateFrom || dateTo
         ? {
             dueDate: {
@@ -57,26 +72,42 @@ export class FinancialService {
         orderBy: { dueDate: 'asc' },
         include: {
           contract: {
-            select: { id: true, type: true, property: { select: { id: true, code: true, street: true } } },
+            select: { id: true, type: true, code: true, property: { select: { id: true, code: true, street: true } } },
+          },
+          // cobrança ativa (boleto/PIX). Canceladas são desvinculadas (Fase 5).
+          boleto: {
+            select: {
+              id: true, kind: true, status: true, bankSlipUrl: true, linhaDigitavel: true,
+              pixCopiaECola: true, dueDate: true, amount: true, lastSentAt: true, lastSentChannels: true,
+            },
           },
         },
       }),
       this.prisma.financialEntry.count({ where }),
     ]);
 
-    // Nome do fornecedor (Fase 2) — supplierId não é relação no schema, então
-    // busca os nomes de uma vez, sempre dentro do workspace.
-    const supplierIds = [...new Set(entries.map((e) => e.supplierId).filter((v): v is string => !!v))];
-    const suppliers = supplierIds.length
-      ? await this.prisma.supplier.findMany({
-          where: { workspaceId, id: { in: supplierIds } },
-          select: { id: true, name: true },
-        })
-      : [];
-    const supplierById = new Map(suppliers.map((s) => [s.id, s]));
+    // Nomes de fornecedor, contato e centro de custo (sempre dentro do workspace)
+    const ids = (k: 'supplierId' | 'contactId' | 'costCenterId') =>
+      [...new Set(entries.map((e) => e[k]).filter((v): v is string => !!v))];
+    const [suppliers, contacts, centers] = await Promise.all([
+      ids('supplierId').length ? this.prisma.supplier.findMany({ where: { workspaceId, id: { in: ids('supplierId') } }, select: { id: true, name: true } }) : [],
+      ids('contactId').length ? this.prisma.contact.findMany({ where: { workspaceId, id: { in: ids('contactId') } }, select: { id: true, name: true } }) : [],
+      ids('costCenterId').length ? this.prisma.costCenter.findMany({ where: { workspaceId, id: { in: ids('costCenterId') } }, select: { id: true, name: true } }) : [],
+    ]);
+    const byId = <T extends { id: string }>(l: T[]) => new Map(l.map((x) => [x.id, x]));
+    const supplierById = byId(suppliers);
+    const contactById = byId(contacts);
+    const centerById = byId(centers);
 
     return {
-      items: entries.map((e) => ({ ...e, supplier: e.supplierId ? supplierById.get(e.supplierId) ?? null : null })),
+      items: entries.map((e) => ({
+        ...e,
+        openAmount: e.status === 'CANCELLED' || e.status === 'EXEMPT' ? 0 : PaymentsService.openAmount(e),
+        isPartial: OPEN_STATUSES.includes(e.status) && e.paidAmount != null && Number(e.paidAmount) > 0,
+        supplier: e.supplierId ? supplierById.get(e.supplierId) ?? null : null,
+        contact: e.contactId ? contactById.get(e.contactId) ?? null : null,
+        costCenter: e.costCenterId ? centerById.get(e.costCenterId) ?? null : null,
+      })),
       meta: { page, limit, total, pages: Math.ceil(total / limit) },
     };
   }
@@ -86,7 +117,7 @@ export class FinancialService {
   // checa a existência do registro, não o tenant).
   private async assertLinksBelongToWorkspace(
     workspaceId: string,
-    dto: { contractId?: string; propertyId?: string; contactId?: string; supplierId?: string },
+    dto: { contractId?: string; propertyId?: string; contactId?: string; supplierId?: string; costCenterId?: string },
   ) {
     if (dto.contractId) {
       const contract = await this.prisma.contract.findFirst({
@@ -116,10 +147,13 @@ export class FinancialService {
       });
       if (!supplier) throw new BadRequestException('Fornecedor não encontrado neste workspace');
     }
+    if (dto.costCenterId) await this.config.assertCostCenter(workspaceId, dto.costCenterId);
   }
 
   // Cria lançamento manual
   async createEntry(workspaceId: string, dto: CreateFinancialEntryDto) {
+    if (!(dto.amount > 0)) throw new BadRequestException('Informe um valor maior que zero.');
+    await this.config.assertCategory(workspaceId, dto.type, dto.category);
     await this.assertLinksBelongToWorkspace(workspaceId, dto);
 
     return this.prisma.financialEntry.create({
@@ -137,33 +171,64 @@ export class FinancialService {
       where: { id, workspaceId, deletedAt: null },
       include: {
         contract: { include: { property: true } },
+        boleto: true,
       },
     });
     if (!entry) throw new NotFoundException('Lançamento não encontrado');
-    return entry;
+    return { ...entry, openAmount: PaymentsService.openAmount(entry) };
   }
 
-  // Atualiza lançamento
+  // Atualiza lançamento (Fase 5: regras para não desalinhar baixas e cobranças)
   async updateEntry(workspaceId: string, id: string, dto: UpdateFinancialEntryDto) {
     const existing = await this.prisma.financialEntry.findFirst({
       where: { id, workspaceId, deletedAt: null },
+      include: { boleto: { select: { id: true, kind: true } } },
     });
     if (!existing) throw new NotFoundException('Lançamento não encontrado');
+    if (existing.status === 'CANCELLED') throw new BadRequestException('Lançamento cancelado não pode ser editado.');
+    if (existing.status === 'PAID') throw new BadRequestException('Lançamento quitado não pode ser editado. Estorne a baixa antes, se precisar corrigir.');
+    if (dto.type !== existing.type) throw new BadRequestException('Não é possível trocar uma conta a receber por uma a pagar (ou vice-versa). Cancele e crie outra.');
+    if (!(dto.amount > 0)) throw new BadRequestException('Informe um valor maior que zero.');
+    if (dto.category !== existing.category) await this.config.assertCategory(workspaceId, dto.type, dto.category);
+
+    const paid = Number(existing.paidAmount ?? 0);
+    if (dto.amount < paid) {
+      throw new BadRequestException(`O valor não pode ficar abaixo do que já foi baixado (R$ ${paid.toFixed(2)}).`);
+    }
+    const changesCharge = Number(existing.amount) !== Number(dto.amount) ||
+      existing.dueDate.toISOString().slice(0, 10) !== dto.dueDate.slice(0, 10);
+    if (existing.boleto && changesCharge) {
+      throw new BadRequestException(
+        `Esta conta tem ${existing.boleto.kind === 'PIX' ? 'cobrança PIX' : 'boleto'} emitido. Para mudar valor ou vencimento, use "Reemitir" (o sistema cancela a cobrança antiga no banco).`,
+      );
+    }
 
     await this.assertLinksBelongToWorkspace(workspaceId, dto);
 
-    return this.prisma.financialEntry.update({
-      where: { id },
-      data: { ...dto, dueDate: new Date(dto.dueDate) },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.financialEntry.update({
+        where: { id },
+        data: { ...dto, dueDate: new Date(dto.dueDate) },
+      });
+      await this.payments.recompute(tx, id); // valor/vencimento mudam a situação
+      return tx.financialEntry.findUnique({ where: { id } });
     });
   }
 
-  // Soft delete
+  // Soft delete — só para lançamentos sem baixa e sem cobrança ativa
   async removeEntry(workspaceId: string, id: string) {
     const existing = await this.prisma.financialEntry.findFirst({
       where: { id, workspaceId, deletedAt: null },
+      include: { boleto: { select: { id: true } } },
     });
     if (!existing) throw new NotFoundException('Lançamento não encontrado');
+    const activePayments = await this.prisma.financialPayment.count({ where: { entryId: id, reversedAt: null } });
+    if (activePayments > 0) {
+      throw new BadRequestException('Este lançamento tem baixa registrada. Use "Cancelar" (com motivo) depois de estornar as baixas.');
+    }
+    if (existing.boleto) {
+      throw new BadRequestException('Este lançamento tem boleto/PIX emitido. Cancele a cobrança antes de excluir.');
+    }
 
     await this.prisma.financialEntry.update({
       where: { id },
@@ -172,123 +237,123 @@ export class FinancialService {
     return { success: true };
   }
 
-  // Marca lançamento como pago
-  async payEntry(workspaceId: string, id: string, dto: PayEntryDto) {
+  /**
+   * Cancela uma conta (com motivo). Se houver boleto/PIX ativo, cancela
+   * PRIMEIRO no gateway; se o gateway recusar, nada é cancelado aqui.
+   */
+  async cancelEntry(workspaceId: string, id: string, reason: string, userId?: string) {
+    const why = reason?.trim();
+    if (!why) throw new BadRequestException('Informe o motivo do cancelamento.');
+    const existing = await this.prisma.financialEntry.findFirst({
+      where: { id, workspaceId, deletedAt: null },
+      include: { boleto: { select: { id: true } } },
+    });
+    if (!existing) throw new NotFoundException('Lançamento não encontrado');
+    if (existing.status === 'CANCELLED') throw new BadRequestException('Este lançamento já está cancelado.');
+    const activePayments = await this.prisma.financialPayment.count({ where: { entryId: id, reversedAt: null } });
+    if (activePayments > 0) {
+      throw new BadRequestException('Este lançamento tem baixa registrada. Estorne as baixas antes de cancelar.');
+    }
+    if (existing.boleto) {
+      await this.billing.cancelCharge(workspaceId, existing.boleto.id, `Conta cancelada: ${why}`, userId);
+    }
+    const flip = await this.prisma.financialEntry.updateMany({
+      where: { id, workspaceId, status: { not: 'CANCELLED' } },
+      data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: why },
+    });
+    if (flip.count !== 1) throw new BadRequestException('Este lançamento já está cancelado.');
+    return this.prisma.financialEntry.findUnique({ where: { id } });
+  }
+
+  // Marca lançamento como pago (compatibilidade: quita o saldo em aberto)
+  async payEntry(workspaceId: string, id: string, dto: PayEntryDto, userId?: string) {
     const existing = await this.prisma.financialEntry.findFirst({
       where: { id, workspaceId, deletedAt: null },
     });
     if (!existing) throw new NotFoundException('Lançamento não encontrado');
-
-    return this.prisma.financialEntry.update({
-      where: { id },
-      data: {
-        status: 'PAID',
-        paidAt: dto.paidAt ? new Date(dto.paidAt) : new Date(),
-        paidAmount: dto.paidAmount ?? existing.amount,
-        paymentMethod: dto.paymentMethod,
-      },
-    });
+    const open = PaymentsService.openAmount(existing);
+    const paid = dto.paidAmount ?? open;
+    return this.registerPayment(workspaceId, id, {
+      principal: Math.min(paid, open),
+      interest: paid > open ? Math.round((paid - open) * 100) / 100 : 0,
+      paidAt: dto.paidAt,
+      method: dto.paymentMethod,
+    }, userId);
   }
 
-  // DRE resumido do workspace
+  /** Baixa manual (total ou parcial). Recusa se houver boleto/PIX ativo. */
+  async registerPayment(workspaceId: string, id: string, dto: RegisterPaymentDto, userId?: string) {
+    const charge = await this.prisma.boleto.findFirst({
+      where: { workspaceId, financialEntryId: id, deletedAt: null, status: { notIn: ['CANCELLED', 'PAID'] } },
+      select: { kind: true },
+    });
+    if (charge) {
+      throw new BadRequestException(
+        `Esta conta tem ${charge.kind === 'PIX' ? 'cobrança PIX' : 'boleto'} emitido: a baixa vem automaticamente quando o banco confirmar. ` +
+        'Se o pagador pagou por outro meio, cancele a cobrança antes (para ele não pagar duas vezes) e registre o recebimento.',
+      );
+    }
+    return this.payments.register(workspaceId, id, { ...dto, source: 'MANUAL' }, userId);
+  }
+
+  // Resumo do workspace (Fase 5: saldo em aberto desconta baixas parciais;
+  // recebido/pago no mês vem das baixas efetivas)
   async getSummary(workspaceId: string) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const open = { workspaceId, deletedAt: null, status: { in: OPEN_STATUSES } };
 
-    const [receivable, payable, received, paid, overdue] = await Promise.all([
-      // Total a receber (pendente)
+    const [receivable, payable, overdue, monthPays] = await Promise.all([
+      this.prisma.financialEntry.aggregate({ where: { ...open, type: 'RECEIVABLE' }, _sum: { amount: true, paidAmount: true } }),
+      this.prisma.financialEntry.aggregate({ where: { ...open, type: 'PAYABLE' }, _sum: { amount: true, paidAmount: true } }),
       this.prisma.financialEntry.aggregate({
-        where: { workspaceId, deletedAt: null, type: 'RECEIVABLE', status: 'PENDING' },
-        _sum: { amount: true },
-      }),
-      // Total a pagar (pendente)
-      this.prisma.financialEntry.aggregate({
-        where: { workspaceId, deletedAt: null, type: 'PAYABLE', status: 'PENDING' },
-        _sum: { amount: true },
-      }),
-      // Recebido no mês
-      this.prisma.financialEntry.aggregate({
-        where: {
-          workspaceId,
-          deletedAt: null,
-          type: 'RECEIVABLE',
-          status: 'PAID',
-          paidAt: { gte: startOfMonth, lte: endOfMonth },
-        },
-        _sum: { paidAmount: true },
-      }),
-      // Pago no mês
-      this.prisma.financialEntry.aggregate({
-        where: {
-          workspaceId,
-          deletedAt: null,
-          type: 'PAYABLE',
-          status: 'PAID',
-          paidAt: { gte: startOfMonth, lte: endOfMonth },
-        },
-        _sum: { paidAmount: true },
-      }),
-      // Em atraso
-      this.prisma.financialEntry.aggregate({
-        where: {
-          workspaceId,
-          deletedAt: null,
-          status: 'PENDING',
-          dueDate: { lt: now },
-        },
-        _sum: { amount: true },
+        where: { ...open, dueDate: { lt: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } },
+        _sum: { amount: true, paidAmount: true },
         _count: true,
       }),
+      this.prisma.financialPayment.findMany({
+        where: { workspaceId, reversedAt: null, paidAt: { gte: startOfMonth, lte: endOfMonth } },
+        select: { total: true, entryId: true },
+      }),
     ]);
+    const types = monthPays.length
+      ? await this.prisma.financialEntry.findMany({ where: { workspaceId, id: { in: [...new Set(monthPays.map((p) => p.entryId))] } }, select: { id: true, type: true } })
+      : [];
+    const typeById = new Map(types.map((t) => [t.id, t.type]));
+    const sumType = (t: string) => monthPays.filter((p) => typeById.get(p.entryId) === t).reduce((s, p) => s + Number(p.total), 0);
+    const rest = (a: { _sum: { amount: unknown; paidAmount: unknown } }) => Number(a._sum.amount ?? 0) - Number(a._sum.paidAmount ?? 0);
 
-    const totalReceivable = Number(receivable._sum.amount ?? 0);
-    const totalPayable = Number(payable._sum.amount ?? 0);
-    const totalReceived = Number(received._sum.paidAmount ?? 0);
-    const totalPaid = Number(paid._sum.paidAmount ?? 0);
-    const totalOverdue = Number(overdue._sum.amount ?? 0);
-
+    const totalReceived = Math.round(sumType('RECEIVABLE') * 100) / 100;
+    const totalPaid = Math.round(sumType('PAYABLE') * 100) / 100;
     return {
-      totalReceivable,
-      totalPayable,
+      totalReceivable: rest(receivable),
+      totalPayable: rest(payable),
       totalReceived,
       totalPaid,
-      balance: totalReceived - totalPaid,
-      totalOverdue,
+      balance: Math.round((totalReceived - totalPaid) * 100) / 100,
+      totalOverdue: rest(overdue),
       overdueCount: overdue._count,
     };
   }
 
-  // Previsão de recebimentos para os próximos 30/60/90 dias
+  // Previsão de recebimentos para os próximos 30/60/90 dias (saldo em aberto)
   async getForecast(workspaceId: string) {
     const now = new Date();
     const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
     const in60 = new Date(now); in60.setDate(in60.getDate() + 60);
     const in90 = new Date(now); in90.setDate(in90.getDate() + 90);
+    const base = { workspaceId, deletedAt: null, type: 'RECEIVABLE', status: { in: OPEN_STATUSES } };
 
+    const agg = (dueDate: Prisma.DateTimeFilter) =>
+      this.prisma.financialEntry.aggregate({ where: { ...base, dueDate }, _sum: { amount: true, paidAmount: true }, _count: true });
     const [p30, p60, p90] = await Promise.all([
-      this.prisma.financialEntry.aggregate({
-        where: { workspaceId, deletedAt: null, type: 'RECEIVABLE', status: 'PENDING', dueDate: { gte: now, lte: in30 } },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.financialEntry.aggregate({
-        where: { workspaceId, deletedAt: null, type: 'RECEIVABLE', status: 'PENDING', dueDate: { gt: in30, lte: in60 } },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.financialEntry.aggregate({
-        where: { workspaceId, deletedAt: null, type: 'RECEIVABLE', status: 'PENDING', dueDate: { gt: in60, lte: in90 } },
-        _sum: { amount: true },
-        _count: true,
-      }),
+      agg({ gte: now, lte: in30 }), agg({ gt: in30, lte: in60 }), agg({ gt: in60, lte: in90 }),
     ]);
+    const val = (a: { _sum: { amount: unknown; paidAmount: unknown }; _count: number }) =>
+      ({ amount: Number(a._sum.amount ?? 0) - Number(a._sum.paidAmount ?? 0), count: a._count });
 
-    return {
-      next30Days: { amount: Number(p30._sum.amount ?? 0), count: p30._count },
-      next60Days: { amount: Number(p60._sum.amount ?? 0), count: p60._count },
-      next90Days: { amount: Number(p90._sum.amount ?? 0), count: p90._count },
-    };
+    return { next30Days: val(p30), next60Days: val(p60), next90Days: val(p90) };
   }
 
   // Lista lançamentos em atraso com dados do contato
@@ -299,7 +364,7 @@ export class FinancialService {
       where: {
         workspaceId,
         deletedAt: null,
-        status: 'PENDING',
+        status: { in: OPEN_STATUSES },
         dueDate: { lt: now },
       },
       orderBy: { dueDate: 'asc' },
@@ -405,6 +470,13 @@ export class FinancialService {
           paidAmount: receivedValue,
           paymentMethod: dto.paymentMethod,
           contractId: commission.contractId,
+        },
+      });
+      // Fase 5: a baixa entra no fluxo de caixa e no DRE
+      await tx.financialPayment.create({
+        data: {
+          workspaceId, entryId: entry.id, principal: receivedValue, total: receivedValue,
+          paidAt: receivedAt, method: dto.paymentMethod ?? null, source: 'MANUAL',
         },
       });
 

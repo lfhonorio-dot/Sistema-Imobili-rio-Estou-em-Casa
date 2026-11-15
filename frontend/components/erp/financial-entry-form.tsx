@@ -8,22 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCreateEntry, type CreateFinancialEntryInput } from '@/hooks/use-financial';
+import { useCreateEntry, type CreateFinancialEntryInput, type FinancialEntry } from '@/hooks/use-financial';
+import { useCategories, useCostCenters, useUpdateEntry } from '@/hooks/use-finance';
 import { useSuppliers } from '@/hooks/use-suppliers';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { useContracts } from '@/hooks/use-contracts';
 import { useProperties } from '@/hooks/use-properties';
 import { useContacts } from '@/hooks/use-contacts';
-
-const CATEGORIES: Array<{ value: string; label: string }> = [
-  { value: 'RENT', label: 'Aluguel' },
-  { value: 'SALE', label: 'Venda' },
-  { value: 'ADMINISTRATION', label: 'Administração' },
-  { value: 'COMMISSION', label: 'Comissão' },
-  { value: 'MAINTENANCE', label: 'Manutenção' },
-  { value: 'MARKETING', label: 'Marketing' },
-  { value: 'OTHER', label: 'Outro' },
-];
 
 // O Select do Radix não aceita SelectItem com value vazio: usamos um sentinela
 // para representar "sem vínculo" e traduzimos para undefined no envio.
@@ -45,12 +36,16 @@ function parseAmount(value: string) {
 
 interface FinancialEntryFormProps {
   defaultType?: 'RECEIVABLE' | 'PAYABLE';
+  /** Fase 5: quando informado, o formulário edita este lançamento */
+  entry?: FinancialEntry | null;
   onSuccess?: (type: 'RECEIVABLE' | 'PAYABLE') => void;
   onCancel?: () => void;
 }
 
-export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCancel }: FinancialEntryFormProps) {
+export function FinancialEntryForm({ defaultType = 'PAYABLE', entry, onSuccess, onCancel }: FinancialEntryFormProps) {
   const createEntry = useCreateEntry();
+  const updateEntry = useUpdateEntry();
+  const editing = !!entry;
 
   const { data: contractsData } = useContracts({ limit: 500 });
   const { data: propertiesData } = useProperties({ limit: 500 });
@@ -63,18 +58,24 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
   const contacts = contactsData?.items ?? [];
 
   const [form, setForm] = useState({
-    type: defaultType as string,
-    category: 'OTHER',
-    description: '',
-    amount: '',
-    dueDate: todayISO(),
+    type: (entry?.type ?? defaultType) as string,
+    category: entry?.category ?? 'OTHER',
+    description: entry?.description ?? '',
+    amount: entry ? String(Number(entry.amount)).replace('.', ',') : '',
+    dueDate: entry ? entry.dueDate.slice(0, 10) : todayISO(),
     months: '1',
-    contractId: NONE,
-    propertyId: NONE,
-    contactId: NONE,
-    supplierId: NONE,
-    notes: '',
+    contractId: entry?.contractId ?? NONE,
+    propertyId: entry?.propertyId ?? NONE,
+    contactId: entry?.contactId ?? NONE,
+    supplierId: entry?.supplierId ?? NONE,
+    costCenterId: entry?.costCenterId ?? NONE,
+    notes: entry?.notes ?? '',
   });
+  // Fase 5: plano de categorias e centros de custo configuráveis
+  const categoriesQuery = useCategories(form.type);
+  const costCentersQuery = useCostCenters();
+  const categories = categoriesQuery.data ?? [];
+  const costCenters = costCentersQuery.data ?? [];
 
   function setField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -115,8 +116,21 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
       ...(form.propertyId !== NONE ? { propertyId: form.propertyId } : {}),
       ...(form.contactId !== NONE ? { contactId: form.contactId } : {}),
       ...(isPayable && form.supplierId !== NONE ? { supplierId: form.supplierId } : {}),
+      ...(form.costCenterId !== NONE ? { costCenterId: form.costCenterId } : {}),
       ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
     };
+
+    if (editing && entry) {
+      const { months: _m, ...rest } = payload;
+      try {
+        await updateEntry.mutateAsync({ id: entry.id, ...rest, dueDate: `${form.dueDate}T12:00:00` });
+        toast.success('Lançamento atualizado.');
+        onSuccess?.(entryType);
+      } catch (err) {
+        toast.error(getApiErrorMessage(err, 'Erro ao salvar o lançamento.'));
+      }
+      return;
+    }
 
     try {
       const created = await createEntry.mutateAsync(payload);
@@ -138,7 +152,7 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label>Tipo</Label>
-          <Select value={form.type} onValueChange={(v) => setField('type', v)}>
+          <Select value={form.type} disabled={editing} onValueChange={(v) => { setField('type', v); setField('category', 'OTHER'); }}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -156,14 +170,31 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CATEGORIES.map((c) => (
-                <SelectItem key={c.value} value={c.value}>
-                  {c.label}
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={c.code}>
+                  {c.name}
                 </SelectItem>
               ))}
+              {editing && entry && !categories.some((c) => c.code === entry.category) && (
+                <SelectItem value={entry.category}>{entry.category}</SelectItem>
+              )}
             </SelectContent>
           </Select>
+          {categoriesQuery.isError && <p className="text-xs text-red-600">Categorias: {getApiErrorMessage(categoriesQuery.error)}</p>}
         </div>
+      </div>
+
+      {/* Centro de custo (Fase 5) */}
+      <div className="space-y-1">
+        <Label>Centro de custo (opcional)</Label>
+        <Select value={form.costCenterId} onValueChange={(v) => setField('costCenterId', v)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>Nenhum</SelectItem>
+            {costCenters.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {costCentersQuery.isError && <p className="text-xs text-red-600">Centros de custo: {getApiErrorMessage(costCentersQuery.error)}</p>}
       </div>
 
       {/* Fornecedor / favorecido (Fase 2) — só para contas a pagar */}
@@ -222,8 +253,8 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
           />
         </div>
 
-        <div className="space-y-1">
-          <Label>Repetir (meses)</Label>
+        <div className={`space-y-1 ${editing ? 'invisible' : ''}`}>
+          <Label>Parcelar em (meses)</Label>
           <Input
             type="number"
             min={1}
@@ -234,7 +265,7 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
         </div>
       </div>
       <p className="text-xs text-muted-foreground -mt-2">
-        Repetir 1 cria um lançamento único. Acima disso, gera uma parcela por mês a partir do vencimento.
+        {editing ? 'Contas com boleto/PIX emitido: para mudar valor ou vencimento, use "Reemitir" na cobrança.' : 'Parcelar em 1 cria um lançamento único. Acima disso, gera uma parcela por mês a partir do vencimento. Para despesas fixas todo mês, use Configurações → Recorrências.'}
       </p>
 
       {/* Vínculos opcionais */}
@@ -309,8 +340,8 @@ export function FinancialEntryForm({ defaultType = 'PAYABLE', onSuccess, onCance
             Cancelar
           </Button>
         )}
-        <Button onClick={() => void handleSubmit()} disabled={createEntry.isPending}>
-          {createEntry.isPending ? 'Salvando...' : 'Salvar lançamento'}
+        <Button onClick={() => void handleSubmit()} disabled={createEntry.isPending || updateEntry.isPending}>
+          {createEntry.isPending || updateEntry.isPending ? 'Salvando...' : editing ? 'Salvar alterações' : 'Salvar lançamento'}
         </Button>
       </div>
     </div>

@@ -9,6 +9,7 @@ import {
   IsInt,
   Min,
   Max,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -16,7 +17,8 @@ export class CreateFinancialEntryDto {
   @IsEnum(['RECEIVABLE', 'PAYABLE'])
   type!: string;
 
-  @IsEnum(['RENT', 'SALE', 'ADMINISTRATION', 'COMMISSION', 'MAINTENANCE', 'MARKETING', 'OTHER'])
+  // Fase 5: plano de categorias configurável (validado no serviço contra financial_categories)
+  @IsString()
   category!: string;
 
   @IsString()
@@ -44,6 +46,11 @@ export class CreateFinancialEntryDto {
   @IsOptional()
   @IsString()
   supplierId?: string;
+
+  // Fase 5: centro de custo
+  @IsOptional()
+  @IsString()
+  costCenterId?: string;
 
   @IsOptional()
   @IsInt()
@@ -134,6 +141,15 @@ export class FinancialQueryDto {
   @IsOptional()
   @IsString()
   dateTo?: string;
+
+  // Fase 5
+  @IsOptional()
+  @IsString()
+  costCenterId?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
 
 export class CommissionQueryDto {
@@ -165,4 +181,83 @@ export class CommissionQueryDto {
   @IsOptional()
   @IsString()
   dateTo?: string;
+}
+
+// ── Fase 5 ───────────────────────────────────────────────
+
+export class RegisterPaymentDto {
+  @IsOptional() @IsNumber() principal?: number;
+  @IsOptional() @IsNumber() interest?: number;
+  @IsOptional() @IsNumber() fine?: number;
+  @IsOptional() @IsNumber() discount?: number;
+  @IsOptional() @IsDateString() paidAt?: string;
+  @IsOptional() @IsEnum(['PIX', 'TRANSFER', 'CASH', 'BOLETO', 'CARD', 'CHECK', 'OTHER']) method?: string;
+  @IsOptional() @IsString() bankAccountId?: string;
+  @IsOptional() @IsString() receiptFileId?: string;
+  @IsOptional() @IsString() notes?: string;
+}
+
+export class ReasonDto {
+  @IsString() reason!: string;
+}
+
+export class CategoryDto {
+  @IsEnum(['RECEIVABLE', 'PAYABLE']) type!: string;
+  @IsString() name!: string;
+}
+
+export class UpdateCategoryDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+export class CostCenterDto {
+  @IsString() name!: string;
+}
+
+export class UpdateCostCenterDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+export class FinancialSettingsDto {
+  @IsOptional() @IsNumber() finePct?: number;
+  @IsOptional() @IsNumber() interestMonthlyPct?: number;
+}
+
+export class RecurringDto {
+  @IsEnum(['RECEIVABLE', 'PAYABLE']) type!: string;
+  @IsString() category!: string;
+  @IsString() description!: string;
+  @IsNumber() amount!: number;
+  @IsInt() @Min(1) @Max(28) dayOfMonth!: number;
+  @IsDateString() startDate!: string;
+  @IsOptional() @IsDateString() endDate?: string;
+  @IsOptional() @IsString() contactId?: string;
+  @IsOptional() @IsString() supplierId?: string;
+  @IsOptional() @IsString() costCenterId?: string;
+  @IsOptional() @IsString() propertyId?: string;
+  @IsOptional() @IsString() notes?: string;
+}
+
+export class UpdateRecurringDto {
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsNumber() amount?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(28) dayOfMonth?: number;
+  @IsOptional() @IsDateString() endDate?: string;
+  @IsOptional() @IsString() costCenterId?: string;
+  @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+export class CashFlowQueryDto {
+  @IsOptional() @IsDateString() from?: string;
+  @IsOptional() @IsDateString() to?: string;
+  @IsOptional() @IsEnum(['day', 'month']) granularity?: 'day' | 'month';
+  @IsOptional() @IsString() bankAccountId?: string;
+}
+
+export class DreQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() year?: number;
 }

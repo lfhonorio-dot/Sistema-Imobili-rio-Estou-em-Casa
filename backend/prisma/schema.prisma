@@ -794,6 +794,10 @@ model FinancialEntry {
   sourceEntryId     String?   // lançamento de origem (parcela da comissão / estorno)
   cancelledAt       DateTime?
   cancelReason      String?
+  // Fase 5
+  costCenterId      String?
+  recurrenceId      String?   // RecurringEntry que gerou este lançamento
+  competence        String?   // AAAA-MM (recorrência)
 
   @@map("financial_entries")
 }
@@ -1111,6 +1115,12 @@ model Boleto {
   instructions     String?  @db.Text
   description      String?
   cnabReturnLines  Json     @default("[]")
+  // Fase 5
+  kind             String   @default("BOLETO") // BOLETO, PIX
+  entryRef         String?  // lançamento de origem (mantido após cancelar; financialEntryId é liberado)
+  cancelReason     String?
+  lastSentAt       DateTime?
+  lastSentChannels String?  // ex.: "EMAIL,WHATSAPP"
   deletedAt        DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -1251,6 +1261,9 @@ model BankAccount {
   balance             Decimal  @default(0) @db.Decimal(15, 2)
   balanceDate         DateTime?
   isDefault           Boolean  @default(false)
+  // Fase 5: saldo inicial para o fluxo de caixa
+  openingBalance      Decimal  @default(0) @db.Decimal(15, 2)
+  openingDate         DateTime?
   isActive            Boolean  @default(true)
   deletedAt           DateTime?
   createdAt           DateTime @default(now())
@@ -1276,7 +1289,8 @@ model BankTransaction {
   balance         Decimal? @db.Decimal(15, 2)
   reconciled      Boolean  @default(false)
   financialEntryId String?
-  importSource    String?  // OPEN_FINANCE, OFX, CNAB, MANUAL
+  importSource    String?  // OPEN_FINANCE, OFX, CNAB, MANUAL, CSV, XLSX
+  paymentId       String?  // Fase 5: baixa (FinancialPayment) gerada pela conciliação
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   bankAccount     BankAccount    @relation(fields: [bankAccountId], references: [id])
@@ -1938,4 +1952,122 @@ model ContractChecklistItem {
 
   @@index([workspaceId, contractId])
   @@map("contract_checklist_items")
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FASE 5 — Financeiro (tabelas novas)
+// ══════════════════════════════════════════════════════════════════
+
+// Cada recebimento/pagamento (baixa) de um lançamento. Permite baixa parcial,
+// juros, multa, desconto, estorno e comprovante. O lançamento fica PARTIAL
+// enquanto o principal pago < valor, e PAID quando quita.
+model FinancialPayment {
+  id                String    @id @default(uuid())
+  workspaceId       String
+  entryId           String
+  principal         Decimal   @db.Decimal(15, 2) // quanto abate do valor do lançamento
+  interest          Decimal   @default(0) @db.Decimal(15, 2)
+  fine              Decimal   @default(0) @db.Decimal(15, 2)
+  discount          Decimal   @default(0) @db.Decimal(15, 2)
+  total             Decimal   @db.Decimal(15, 2) // principal + juros + multa - desconto (o que entrou/saiu)
+  paidAt            DateTime
+  method            String?   // BOLETO, PIX, TRANSFER, CASH, CARD, OTHER
+  bankAccountId     String?
+  source            String    @default("MANUAL") // MANUAL, GATEWAY, RECONCILIATION, LEGACY
+  gatewayPaymentId  String?
+  receiptFileId     String?   // comprovante (StoredFile)
+  notes             String?
+  createdById       String?
+  reversedAt        DateTime?
+  reversalReason    String?
+  reversedById      String?
+  createdAt         DateTime  @default(now())
+
+  @@index([workspaceId, paidAt])
+  @@index([entryId])
+  @@map("financial_payments")
+}
+
+// Plano de categorias de receita e despesa (configurável).
+model FinancialCategory {
+  id          String    @id @default(uuid())
+  workspaceId String
+  type        String    // RECEIVABLE, PAYABLE
+  code        String    // gravado em FinancialEntry.category
+  name        String
+  isSystem    Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([workspaceId, type, code])
+  @@map("financial_categories")
+}
+
+// Centro de custo simples (ex.: Venda, Administrativo, Marketing).
+model CostCenter {
+  id          String    @id @default(uuid())
+  workspaceId String
+  name        String
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@map("cost_centers")
+}
+
+// Recorrência mensal real: o sistema gera os lançamentos dos próximos meses
+// sozinho (rotina diária), um por competência, sem duplicar.
+model RecurringEntry {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  type          String    // RECEIVABLE, PAYABLE
+  category      String
+  description   String
+  amount        Decimal   @db.Decimal(15, 2)
+  dayOfMonth    Int       // 1-28
+  startDate     DateTime
+  endDate       DateTime?
+  contactId     String?
+  supplierId    String?
+  costCenterId  String?
+  propertyId    String?
+  notes         String?
+  isActive      Boolean   @default(true)
+  lastCompetence String?  // última competência gerada (AAAA-MM)
+  createdById   String?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workspaceId, isActive])
+  @@map("recurring_entries")
+}
+
+// Padrões financeiros da imobiliária (multa e juros sugeridos na baixa).
+model WorkspaceFinancialSettings {
+  id                 String   @id @default(uuid())
+  workspaceId        String   @unique
+  finePct            Decimal  @default(2) @db.Decimal(5, 2)   // % multa por atraso
+  interestMonthlyPct Decimal  @default(1) @db.Decimal(5, 2)   // % juros ao mês (pro rata dia)
+  updatedAt          DateTime @updatedAt
+
+  @@map("workspace_financial_settings")
+}
+
+// Eventos de webhook do gateway já processados (idempotência).
+model GatewayWebhookEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  eventId     String
+  event       String
+  paymentId   String?
+  result      String?
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, eventId])
+  @@map("gateway_webhook_events")
 }

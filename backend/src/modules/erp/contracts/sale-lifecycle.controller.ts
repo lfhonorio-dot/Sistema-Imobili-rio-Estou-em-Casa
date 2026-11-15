@@ -28,6 +28,17 @@ export class SaleLifecycleController {
     return this.sale.activate(ws, u.sub, id, dto);
   }
 
+  // Fase 5: vendas antigas (ativas antes do novo fluxo)
+  @Get('sale/legacy')
+  legacy(@Headers('x-workspace-id') ws: string) {
+    return this.sale.legacyDiagnostic(ws);
+  }
+
+  @Post(':id/sale/regularize')
+  regularize(@Headers('x-workspace-id') ws: string, @CurrentUser() u: JwtPayload, @Param('id') id: string, @Body() dto: ActivateSaleDto) {
+    return this.sale.regularizeLegacy(ws, u.sub, id, dto);
+  }
+
   @Post(':id/sale/rescind')
   rescind(@Headers('x-workspace-id') ws: string, @CurrentUser() u: JwtPayload, @Param('id') id: string, @Body() dto: RescindSaleDto) {
     return this.sale.rescind(ws, u.sub, id, dto);
