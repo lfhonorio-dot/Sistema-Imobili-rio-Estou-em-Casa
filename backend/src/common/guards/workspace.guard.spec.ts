@@ -81,7 +81,7 @@ describe('WorkspaceGuard — perfil de operação', () => {
   });
 });
 
-// Fase 8 — vazamento entre imobiliárias. Sem o cabeçalho X-Workspace-Id o guard
+// Vazamento entre imobiliárias. Sem o cabeçalho X-Workspace-Id o guard
 // resolvia a imobiliária do usuário, mas os controllers (que leem o cabeçalho)
 // recebiam "undefined" e as consultas saíam SEM filtro de imobiliária.
 describe('WorkspaceGuard — requisição sem X-Workspace-Id', () => {
