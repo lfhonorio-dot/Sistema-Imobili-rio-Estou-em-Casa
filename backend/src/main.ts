@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { requestContextMiddleware } from './common/access/request-context.middleware';
 import helmet from 'helmet';
 import * as compression from 'compression';
 import * as express from 'express';
@@ -19,6 +20,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: WinstonModule.createLogger(createWinstonLogger()),
   });
+
+  // Fase 7: atrás do proxy do Railway, o IP real vem em X-Forwarded-For
+  // (sem isto todo mundo teria o mesmo IP e o limite por IP valeria para todos)
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
+  // Fase 7: contexto por requisição (papel do usuário para o escopo do Corretor)
+  app.use(requestContextMiddleware);
 
   // -----------------------------------------------
   // Segurança: Helmet com CSP configurado para produção

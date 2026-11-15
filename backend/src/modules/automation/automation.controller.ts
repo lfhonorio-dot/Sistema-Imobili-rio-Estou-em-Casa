@@ -6,8 +6,10 @@ import { CreateAutomationDto, UpdateAutomationDto, TriggerAutomationDto } from '
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../common/guards/workspace.guard';
 import { RequiresFullProfile } from '../../common/decorators/operation-profile.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../common/access/access';
 
 @RequiresFullProfile('Automações')
+@Access(...MANAGEMENT)
 @Controller('automations')
 export class AutomationController {
   constructor(private readonly service: AutomationService) {}

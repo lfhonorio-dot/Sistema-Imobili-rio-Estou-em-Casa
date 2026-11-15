@@ -15,14 +15,16 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
+import { useRoleKey } from '@/hooks/use-role';
 import { useOperationProfile } from '@/hooks/use-operation-profile';
-import { isNavItemActive, PROFILE_LABELS, visibleNavGroups } from '@/lib/navigation';
+import { isNavItemActive, PROFILE_LABELS, visibleNavGroups, ROLE_LABELS } from '@/lib/navigation';
 
 function SidebarContent({ tab }: { tab: string | null }) {
   const pathname = usePathname();
   const { user, currentWorkspace } = useAuthStore();
   const { logout } = useAuth();
   const profile = useOperationProfile();
+  const role = useRoleKey();
 
   const initials =
     user?.name
@@ -37,6 +39,7 @@ function SidebarContent({ tab }: { tab: string | null }) {
     permissions: currentWorkspace?.role.permissions || {},
     isOwner: !!currentWorkspace?.isOwner,
     isPlatformAdmin: !!user?.isPlatformAdmin,
+    role,
   });
 
   return (
@@ -48,7 +51,7 @@ function SidebarContent({ tab }: { tab: string | null }) {
             {currentWorkspace?.workspace.name || 'Estou em Casa'}
           </span>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">Perfil: {PROFILE_LABELS[profile]}</p>
+        <p className="mt-1 text-xs text-muted-foreground">Perfil: {PROFILE_LABELS[profile]} · {ROLE_LABELS[role]}</p>
       </div>
 
       <Separator />

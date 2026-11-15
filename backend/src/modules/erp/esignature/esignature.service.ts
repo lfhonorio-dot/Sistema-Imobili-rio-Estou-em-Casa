@@ -148,7 +148,7 @@ export class EsignatureService {
         });
         emailSent = true;
       } catch (e) {
-        console.error(`[EsignatureService] Falha ao enviar e-mail de assinatura para ${sig.email}:`, (e as Error).message);
+        console.error(`[EsignatureService] Falha ao enviar e-mail de assinatura (signatário ${sig.id}):`, (e as Error).message);
       }
 
       if (emailSent) {
@@ -266,7 +266,7 @@ export class EsignatureService {
       });
       emailSent = true;
     } catch (e) {
-      console.error(`[EsignatureService] Falha ao enviar OTP para ${signatory.email}:`, (e as Error).message);
+      console.error(`[EsignatureService] Falha ao enviar código (signatário ${signatory.id}):`, (e as Error).message);
     }
 
     // Em produção o código nunca é retornado na resposta — apenas por e-mail.

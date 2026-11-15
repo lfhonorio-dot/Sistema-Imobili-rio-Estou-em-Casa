@@ -131,6 +131,8 @@ model WorkspaceUser {
   userId      String
   roleId      String
   isOwner     Boolean   @default(false)
+  // Fase 7: receber notificações também por e-mail
+  emailNotifications Boolean @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
@@ -150,6 +152,8 @@ model Role {
   name           String
   isSystem       Boolean         @default(false)
   permissions    Json            @default("{}")
+  // Fase 7: papel de sistema que define o acesso (ADMIN, FINANCE, MANAGER, BROKER)
+  systemKey      String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   workspace      Workspace       @relation(fields: [workspaceId], references: [id])
@@ -324,6 +328,8 @@ model Contact {
   // Empresa
   companyName   String?   // razão social
   tradeName     String?   // nome fantasia
+  // Fase 7: corretor responsável (WorkspaceUser id) — o corretor só vê os seus
+  assigneeId    String?
   // Endereço
   zipCode       String?
   street        String?
@@ -962,9 +968,16 @@ model Notification {
   entityType  String?
   entityId    String?
   readAt      DateTime?
+  // Fase 7: link, chave anti-duplicação e situação do e-mail
+  link        String?
+  dedupeKey   String?
+  emailStatus String?   // SENT, FAILED, SKIPPED
+  emailError  String?
   createdAt   DateTime @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
 
+  @@unique([workspaceId, userId, dedupeKey])
+  @@index([workspaceId, userId, readAt])
   @@map("notifications")
 }
 

@@ -12,11 +12,13 @@ import {
 } from './fiscal.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('fiscal')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...FINANCE_AREA)
 @Controller('fiscal')
 export class FiscalController {
   constructor(
@@ -44,6 +46,12 @@ export class FiscalController {
   }
 
   // Arquivo TXT de importação do PGD DIMOB (por declarante/ano)
+  // Fase 7: valida partes e estrutura do arquivo da DIMOB
+  @Get('dimob/validate')
+  validateDimob(@Headers('x-workspace-id') workspaceId: string, @Query('year') year: string, @Query('declarantDoc') declarantDoc: string) {
+    return this.dimob.validateDimob(workspaceId, Number(year), declarantDoc);
+  }
+
   @Get('dimob/pgd')
   generatePgdFile(
     @Headers('x-workspace-id') workspaceId: string,

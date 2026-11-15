@@ -14,7 +14,7 @@ import {
   MessageSquare, FileText, PenSquare, ArrowDownCircle, ArrowUpCircle, Banknote,
   LineChart, Landmark, Percent, Receipt, BarChart2, FileSpreadsheet, Building2,
   Users, Shield, ClipboardList, Mail, Wrench, Zap, Megaphone, Handshake, Plug,
-  ShieldCheck, Truck,
+  ShieldCheck, Truck, Bell,
 } from 'lucide-react';
 
 export type OperationProfile = 'VENDA' | 'VENDA_E_LOCACAO';
@@ -24,10 +24,20 @@ export const PROFILE_LABELS: Record<OperationProfile, string> = {
   VENDA_E_LOCACAO: 'Venda e Locação',
 };
 
+// Fase 7: papéis (o backend é quem garante; o menu só esconde o que não pode)
+export type RoleKey = 'ADMIN' | 'FINANCE' | 'MANAGER' | 'BROKER';
+export const ROLE_LABELS: Record<RoleKey, string> = { ADMIN: 'Dono/Admin', FINANCE: 'Financeiro', MANAGER: 'Gerente', BROKER: 'Corretor' };
+const STAFF: RoleKey[] = ['ADMIN', 'FINANCE', 'MANAGER'];
+const FIN: RoleKey[] = ['ADMIN', 'FINANCE', 'MANAGER'];
+const MGMT: RoleKey[] = ['ADMIN', 'MANAGER'];
+const ADMIN: RoleKey[] = ['ADMIN'];
+
 export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Papéis que veem o item (sem: todos). */
+  roles?: RoleKey[];
   /** Permissão necessária (o dono do workspace sempre vê). */
   permission?: string;
   /** Só administradores de plataforma (allowlist do backend). */
@@ -64,24 +74,25 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Financeiro',
     items: [
-      { label: 'A Receber', href: '/financial?tab=receivable', icon: ArrowDownCircle },
-      { label: 'A Pagar', href: '/financial?tab=payable', icon: ArrowUpCircle },
-      { label: 'Boletos e PIX', href: '/financial/billing', icon: Banknote },
-      { label: 'Fluxo de Caixa', href: '/financial?tab=cashflow', icon: LineChart },
-      { label: 'DRE', href: '/financial?tab=dre', icon: LineChart },
-      { label: 'Bancário', href: '/financial/banking', icon: Landmark },
-      { label: 'Config. Financeiras', href: '/financial?tab=settings', icon: Banknote },
-      { label: 'Comissões', href: '/commissions', icon: Percent },
-      { label: 'Corretores Parceiros', href: '/partners', icon: Handshake },
-      { label: 'Fornecedores', href: '/suppliers', icon: Truck },
-      { label: 'Notas Fiscais', href: '/fiscal?tab=nfse', icon: Receipt },
+      { label: 'A Receber', href: '/financial?tab=receivable', icon: ArrowDownCircle, roles: FIN },
+      { label: 'A Pagar', href: '/financial?tab=payable', icon: ArrowUpCircle, roles: FIN },
+      { label: 'Boletos e PIX', href: '/financial/billing', icon: Banknote, roles: FIN },
+      { label: 'Fluxo de Caixa', href: '/financial?tab=cashflow', icon: LineChart, roles: FIN },
+      { label: 'DRE', href: '/financial?tab=dre', icon: LineChart, roles: FIN },
+      { label: 'Bancário', href: '/financial/banking', icon: Landmark, roles: FIN },
+      { label: 'Config. Financeiras', href: '/financial?tab=settings', icon: Banknote, roles: FIN },
+      { label: 'Comissões', href: '/commissions', icon: Percent, roles: FIN },
+      { label: 'Minhas comissões', href: '/my-commissions', icon: Percent },
+      { label: 'Corretores Parceiros', href: '/partners', icon: Handshake, roles: FIN },
+      { label: 'Fornecedores', href: '/suppliers', icon: Truck, roles: FIN },
+      { label: 'Notas Fiscais', href: '/fiscal?tab=nfse', icon: Receipt, roles: FIN },
     ],
   },
   {
     label: 'Gestão',
     items: [
-      { label: 'Relatórios', href: '/reports', icon: BarChart2 },
-      { label: 'Fiscal — DIMOB', href: '/fiscal?tab=dimob', icon: FileSpreadsheet },
+      { label: 'Relatórios', href: '/reports', icon: BarChart2, roles: STAFF },
+      { label: 'Fiscal — DIMOB', href: '/fiscal?tab=dimob', icon: FileSpreadsheet, roles: FIN },
     ],
   },
   {
@@ -97,12 +108,13 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Configurações',
     items: [
-      { label: 'Workspace', href: '/settings/workspace', icon: Building2, permission: 'workspace:read' },
-      { label: 'Usuários', href: '/settings/users', icon: Users, permission: 'users:read' },
-      { label: 'Funis de venda', href: '/settings/pipelines', icon: KanbanSquare, permission: 'workspace:read' },
-      { label: 'Modelos de e-mail', href: '/email-templates', icon: Mail },
-      { label: 'LGPD', href: '/settings/lgpd', icon: Shield, permission: 'lgpd:read' },
-      { label: 'Auditoria', href: '/settings/audit', icon: ClipboardList, permission: 'audit:read' },
+      { label: 'Workspace', href: '/settings/workspace', icon: Building2, roles: ADMIN },
+      { label: 'Usuários e papéis', href: '/settings/users', icon: Users, roles: ADMIN },
+      { label: 'Funis de venda', href: '/settings/pipelines', icon: KanbanSquare, roles: MGMT },
+      { label: 'Modelos de e-mail', href: '/email-templates', icon: Mail, roles: MGMT },
+      { label: 'Notificações', href: '/settings/notifications', icon: Bell },
+      { label: 'LGPD', href: '/settings/lgpd', icon: Shield, roles: ADMIN },
+      { label: 'Auditoria', href: '/settings/audit', icon: ClipboardList, roles: ADMIN },
       { label: 'Admin da plataforma', href: '/admin', icon: ShieldCheck, platformAdminOnly: true },
     ],
   },
@@ -115,6 +127,32 @@ export const FULL_PROFILE_ROUTES: { prefix: string; module: string }[] = [
   { prefix: '/marketing', module: 'Marketing' },
   { prefix: '/integrations', module: 'Integrações' },
 ];
+
+/** Fase 7: rotas por papel (espelha o backend). */
+export const ROLE_ROUTES: { prefix: string; roles: RoleKey[]; module: string }[] = [
+  { prefix: '/financial', roles: FIN, module: 'Financeiro' },
+  { prefix: '/commissions', roles: FIN, module: 'Comissões da imobiliária' },
+  { prefix: '/partners', roles: FIN, module: 'Corretores parceiros' },
+  { prefix: '/suppliers', roles: FIN, module: 'Fornecedores' },
+  { prefix: '/fiscal', roles: FIN, module: 'Fiscal' },
+  { prefix: '/reports', roles: STAFF, module: 'Relatórios' },
+  { prefix: '/settings/workspace', roles: ADMIN, module: 'Configurações da imobiliária' },
+  { prefix: '/settings/users', roles: ADMIN, module: 'Usuários e papéis' },
+  { prefix: '/settings/lgpd', roles: ADMIN, module: 'LGPD' },
+  { prefix: '/settings/audit', roles: ADMIN, module: 'Auditoria' },
+  { prefix: '/settings/pipelines', roles: MGMT, module: 'Funis de venda' },
+  { prefix: '/email-templates', roles: MGMT, module: 'Modelos de e-mail' },
+];
+
+export function blockedForRole(pathname: string, role: RoleKey): string | null {
+  const hit = ROLE_ROUTES.find((r) => pathname === r.prefix || pathname.startsWith(`${r.prefix}/`));
+  return hit && !hit.roles.includes(role) ? hit.module : null;
+}
+
+export function normalizeRole(value: unknown, isOwner: boolean): RoleKey {
+  if (isOwner) return 'ADMIN';
+  return value === 'ADMIN' || value === 'FINANCE' || value === 'MANAGER' || value === 'BROKER' ? value : 'BROKER';
+}
 
 export function normalizeProfile(value: unknown): OperationProfile {
   return value === 'VENDA_E_LOCACAO' ? 'VENDA_E_LOCACAO' : 'VENDA';
@@ -135,12 +173,14 @@ export function visibleNavGroups(opts: {
   permissions: Record<string, boolean>;
   isOwner: boolean;
   isPlatformAdmin: boolean;
+  role?: RoleKey;
 }): NavGroup[] {
   return NAV_GROUPS.filter((g) => !g.fullProfileOnly || opts.profile === 'VENDA_E_LOCACAO')
     .map((g) => ({
       ...g,
       items: g.items.filter((item) => {
         if (item.platformAdminOnly) return opts.isPlatformAdmin;
+        if (item.roles && !item.roles.includes(opts.role ?? (opts.isOwner ? 'ADMIN' : 'BROKER'))) return false;
         if (!item.permission) return true;
         return opts.isOwner || !!opts.permissions[item.permission];
       }),

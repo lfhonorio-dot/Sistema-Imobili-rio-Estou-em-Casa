@@ -4,11 +4,13 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 import { SuppliersService } from './suppliers.service';
 import { CreateSupplierDto, SupplierQueryDto, UpdateSupplierDto } from './suppliers.dto';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('suppliers')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...FINANCE_AREA)
 @Controller('suppliers')
 export class SuppliersController {
   constructor(private readonly service: SuppliersService) {}

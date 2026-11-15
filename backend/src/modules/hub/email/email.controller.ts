@@ -13,16 +13,19 @@ import {
 } from './email.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('email')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('email')
 export class EmailController {
   constructor(private readonly service: EmailService) {}
 
   // Diagnóstico de conectividade SMTP (autenticado)
+  @Access(...ADMIN_ONLY)
   @Get('smtp-health')
   smtpHealth() {
     return this.service.verifySmtp();
@@ -44,6 +47,7 @@ export class EmailController {
     return this.service.findOneTemplate(workspaceId, id);
   }
 
+  @Access(...MANAGEMENT)
   @Post('templates')
   createTemplate(
     @Headers('x-workspace-id') workspaceId: string,
@@ -52,6 +56,7 @@ export class EmailController {
     return this.service.createTemplate(workspaceId, dto);
   }
 
+  @Access(...MANAGEMENT)
   @Patch('templates/:id')
   updateTemplate(
     @Headers('x-workspace-id') workspaceId: string,
@@ -61,6 +66,7 @@ export class EmailController {
     return this.service.updateTemplate(workspaceId, id, dto);
   }
 
+  @Access(...MANAGEMENT)
   @Delete('templates/:id')
   deleteTemplate(
     @Headers('x-workspace-id') workspaceId: string,

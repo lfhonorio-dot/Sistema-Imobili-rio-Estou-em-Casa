@@ -9,6 +9,7 @@ import { AuditService } from '../../audit/audit.service';
 import { advanceDealToStage } from '../pipelines/funnel-stages';
 import { visitsOverlap } from './funnel-rules';
 import { CancelVisitDto, CompleteVisitDto, CreateVisitDto, RescheduleVisitDto, VisitQueryDto } from './funnel.dto';
+import { brokerMemberId, dealScope, visitScope } from '../../../common/access/access';
 
 const INTEREST_LABEL: Record<string, string> = { HIGH: 'alto', MEDIUM: 'médio', LOW: 'baixo', NONE: 'nenhum' };
 
@@ -53,6 +54,8 @@ export class VisitsService {
         ...(q.propertyId && { propertyId: q.propertyId }),
         ...(q.contactId && { contactId: q.contactId }),
         ...(brokerId && { brokerId }),
+        // Fase 7: Corretor só vê as visitas dele
+        AND: [visitScope()],
         ...((q.from || q.to) && {
           scheduledAt: { ...(q.from && { gte: new Date(q.from) }), ...(q.to && { lte: new Date(q.to) }) },
         }),
@@ -65,7 +68,7 @@ export class VisitsService {
   }
 
   private async findOrThrow(workspaceId: string, id: string) {
-    const v = await this.prisma.visit.findFirst({ where: { id, workspaceId, deletedAt: null } });
+    const v = await this.prisma.visit.findFirst({ where: { id, workspaceId, deletedAt: null, AND: [visitScope()] } });
     if (!v) throw new NotFoundException('Visita não encontrada.');
     return v;
   }
@@ -95,7 +98,7 @@ export class VisitsService {
     let contactId = dto.contactId;
     if (dto.dealId) {
       const deal = await this.prisma.deal.findFirst({
-        where: { id: dto.dealId, workspaceId, deletedAt: null },
+        where: { id: dto.dealId, workspaceId, deletedAt: null, ...dealScope() },
         select: { id: true, contactId: true },
       });
       if (!deal) throw new BadRequestException('Negócio não encontrado neste workspace.');
@@ -115,7 +118,10 @@ export class VisitsService {
     }
 
     let broker: { id: string; userId: string } | null;
-    if (dto.brokerId) {
+    // Fase 7: Corretor agenda sempre em nome dele
+    if (brokerMemberId()) {
+      broker = await this.me(workspaceId, userId);
+    } else if (dto.brokerId) {
       broker = await this.prisma.workspaceUser.findFirst({
         where: { id: dto.brokerId, workspaceId }, select: { id: true, userId: true },
       });

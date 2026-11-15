@@ -15,6 +15,7 @@ import {
   MoveStageDealDto,
   DealQueryDto,
 } from './deals.dto';
+import { brokerMemberId, dealScope } from '../../../common/access/access';
 
 @Injectable()
 export class DealsService {
@@ -54,6 +55,8 @@ export class DealsService {
       ...(stageId && { stageId }),
       ...(assigneeId && { assigneeId }),
       ...(mineAssigneeId && { assigneeId: mineAssigneeId }),
+      // Fase 7: Corretor só vê os negócios dele (vence qualquer filtro)
+      ...dealScope(),
       ...(tags && tags.length > 0 && { tags: { some: { tagId: { in: tags } } } }),
       ...(minValue !== undefined && { value: { gte: minValue } }),
       ...(maxValue !== undefined && { value: { lte: maxValue } }),
@@ -100,7 +103,7 @@ export class DealsService {
   // Busca negócio por ID com detalhes completos
   async findOne(workspaceId: string, id: string) {
     const deal = await this.prisma.deal.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, ...dealScope() },
       include: {
         contact: true,
         stage: true,
@@ -191,7 +194,8 @@ export class DealsService {
         contactId: dto.contactId,
         pipelineId: dto.pipelineId,
         stageId,
-        assigneeId: dto.assigneeId,
+        // Fase 7: negócio criado por Corretor fica sempre com ele
+        assigneeId: brokerMemberId() ?? dto.assigneeId,
         expectedCloseAt: dto.expectedCloseAt ? new Date(dto.expectedCloseAt) : undefined,
         origin: dto.origin,
         utmSource: dto.utmSource,
@@ -228,7 +232,7 @@ export class DealsService {
   // Atualiza negócio
   async update(workspaceId: string, userId: string, id: string, dto: UpdateDealDto) {
     const existing = await this.prisma.deal.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, ...dealScope() },
     });
 
     if (!existing) throw new NotFoundException('Negócio não encontrado');
@@ -238,7 +242,8 @@ export class DealsService {
       data: {
         ...(dto.title && { title: dto.title }),
         ...(dto.value !== undefined && { value: dto.value }),
-        ...(dto.assigneeId !== undefined && { assigneeId: dto.assigneeId }),
+        // Fase 7: Corretor não repassa o negócio para outro corretor
+        ...(dto.assigneeId !== undefined && !brokerMemberId() && { assigneeId: dto.assigneeId }),
         ...(dto.expectedCloseAt !== undefined && {
           expectedCloseAt: dto.expectedCloseAt ? new Date(dto.expectedCloseAt) : null,
         }),
@@ -262,7 +267,7 @@ export class DealsService {
   // Move negócio para outro estágio
   async moveStage(workspaceId: string, userId: string, dealId: string, dto: MoveStageDealDto) {
     const deal = await this.prisma.deal.findFirst({
-      where: { id: dealId, workspaceId, deletedAt: null },
+      where: { id: dealId, workspaceId, deletedAt: null, ...dealScope() },
     });
 
     if (!deal) throw new NotFoundException('Negócio não encontrado');
@@ -338,7 +343,7 @@ export class DealsService {
   // Soft delete de negócio
   async remove(workspaceId: string, userId: string, id: string) {
     const deal = await this.prisma.deal.findFirst({
-      where: { id, workspaceId, deletedAt: null },
+      where: { id, workspaceId, deletedAt: null, ...dealScope() },
     });
 
     if (!deal) throw new NotFoundException('Negócio não encontrado');
@@ -362,7 +367,7 @@ export class DealsService {
   // Adiciona tag a um negócio
   async addTag(workspaceId: string, dealId: string, tagId: string) {
     const deal = await this.prisma.deal.findFirst({
-      where: { id: dealId, workspaceId, deletedAt: null },
+      where: { id: dealId, workspaceId, deletedAt: null, ...dealScope() },
     });
 
     if (!deal) throw new NotFoundException('Negócio não encontrado');
@@ -383,7 +388,7 @@ export class DealsService {
   // Remove tag de um negócio
   async removeTag(workspaceId: string, dealId: string, tagId: string) {
     const deal = await this.prisma.deal.findFirst({
-      where: { id: dealId, workspaceId, deletedAt: null },
+      where: { id: dealId, workspaceId, deletedAt: null, ...dealScope() },
     });
 
     if (!deal) throw new NotFoundException('Negócio não encontrado');

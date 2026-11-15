@@ -12,11 +12,13 @@ import {
   CancelVisitDto, CompleteVisitDto, CreateProposalDto, CreateVisitDto, DecideProposalDto, ProposalTermsDto,
   RescheduleVisitDto, SetDealPropertiesDto, VisitQueryDto,
 } from './funnel.dto';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('visits')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('visits')
 export class VisitsController {
   constructor(private readonly visits: VisitsService) {}
@@ -51,6 +53,7 @@ export class VisitsController {
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('proposals')
 export class ProposalsController {
   constructor(private readonly proposals: ProposalsService) {}
@@ -98,6 +101,7 @@ export class ProposalsController {
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('deals')
 export class DealFunnelController {
   constructor(private readonly service: DealFunnelService) {}

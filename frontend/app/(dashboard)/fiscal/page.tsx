@@ -6,6 +6,7 @@ import { getApiErrorMessage } from '@/lib/api-error';
 import { useOperationProfile } from '@/hooks/use-operation-profile';
 import { useFiscal } from '@/hooks/use-fiscal';
 import { NfsePanel } from '@/components/nfse/nfse-panel';
+import { validateDimob } from '@/hooks/use-team';
 import api from '@/lib/api';
 
 type Tab = 'nfse' | 'dimob' | 'carne-leao';
@@ -69,6 +70,15 @@ function FiscalPageContent() {
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
+  }
+
+  const [validation, setValidation] = useState<Awaited<ReturnType<typeof validateDimob>> | null>(null);
+  async function runValidation(declarantDoc: string) {
+    try {
+      setValidation(await validateDimob(Number(exportYear), declarantDoc));
+    } catch (err) {
+      alert(getApiErrorMessage(err, 'Não foi possível validar a DIMOB.'));
+    }
   }
 
   async function downloadPgd(declarantDoc: string) {
@@ -162,6 +172,17 @@ function FiscalPageContent() {
                 </button>
               )}
             </div>
+            {validation && (
+              <div className={`rounded border p-3 text-sm ${validation.ok ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                <p className="font-medium">
+                  {validation.ok ? 'Arquivo sem erros' : `${validation.errors} erro(s)`}{validation.warnings ? ` e ${validation.warnings} aviso(s)` : ''} · {validation.sales} venda(s)
+                </p>
+                <ul className="mt-1 list-disc pl-5">
+                  {validation.issues.map((x, i) => <li key={i} className={x.level === 'ERROR' ? 'text-red-700' : 'text-amber-700'}>{x.where}: {x.message}</li>)}
+                </ul>
+                <p className="mt-2 text-xs text-gray-600">Confere vendedor e comprador (CPF/CNPJ válidos e nome), valores, datas e a estrutura do arquivo (R01, R02 locação, R04 venda, T9). O programa da Receita faz a conferência final ao importar.</p>
+              </div>
+            )}
             {declarants.length > 0 && (
               <div className="space-y-2">
                 {declarants.map((d, i) => (
@@ -173,13 +194,22 @@ function FiscalPageContent() {
                         Comissão total: {Number(d.totalComissao ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </p>
                     </div>
-                    <button
-                      onClick={() => downloadPgd(String(d.declarantDoc ?? ''))}
-                      disabled={!d.declarantDoc}
-                      className="bg-gray-900 text-white text-xs px-3 py-2 rounded disabled:opacity-40"
-                    >
-                      Arquivo PGD (TXT)
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => void runValidation(String(d.declarantDoc ?? ''))}
+                        disabled={!d.declarantDoc}
+                        className="border text-xs px-3 py-2 rounded disabled:opacity-40"
+                      >
+                        Validar
+                      </button>
+                      <button
+                        onClick={() => downloadPgd(String(d.declarantDoc ?? ''))}
+                        disabled={!d.declarantDoc}
+                        className="bg-gray-900 text-white text-xs px-3 py-2 rounded disabled:opacity-40"
+                      >
+                        Arquivo PGD (TXT)
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

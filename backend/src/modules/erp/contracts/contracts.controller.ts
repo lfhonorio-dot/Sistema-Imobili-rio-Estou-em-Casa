@@ -30,11 +30,13 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 import { RequiresFullProfile } from '../../../common/decorators/operation-profile.decorator';
 import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('contracts')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard)
+@Access(...ALL)
 @Controller('contracts')
 export class ContractsController {
   constructor(
@@ -44,6 +46,7 @@ export class ContractsController {
 
   // Reajuste de aluguel por índice — prévia dos elegíveis no mês
   @RequiresFullProfile('Reajuste de aluguel')
+  @Access(...STAFF)
   @Get('adjustments/preview')
   previewAdjustments() {
     return this.adjustment.preview();
@@ -51,6 +54,7 @@ export class ContractsController {
 
   // Dispara o reajuste manualmente (rate opcional em fração, ex.: 0.045)
   @RequiresFullProfile('Reajuste de aluguel')
+  @Access(...STAFF)
   @Post('adjustments/run')
   runAdjustments(@Body() body: { rate?: number }) {
     return this.adjustment.run(body?.rate);
@@ -121,6 +125,7 @@ export class ContractsController {
     return this.contractsService.remove(workspaceId, id, user.sub);
   }
 
+  @Access(...STAFF)
   @Patch(':id/status')
   changeStatus(
     @Headers('x-workspace-id') workspaceId: string,
@@ -131,6 +136,7 @@ export class ContractsController {
     return this.contractsService.changeStatus(workspaceId, id, dto, user.sub);
   }
 
+  @Access(...STAFF)
   @Post(':id/generate-installments')
   generateInstallments(
     @Headers('x-workspace-id') workspaceId: string,

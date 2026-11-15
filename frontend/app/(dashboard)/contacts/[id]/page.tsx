@@ -31,6 +31,9 @@ import { TaskForm } from '@/components/crm/task-form';
 import { ContactForm } from '@/components/crm/contact-form';
 import { useContact, useContactTimeline, useDeleteContact } from '@/hooks/use-contacts';
 import Link from 'next/link';
+import { useRoleKey } from '@/hooks/use-role';
+import { lgpdAnonymize, lgpdExport, lgpdPreview } from '@/hooks/use-team';
+import { getApiErrorMessage } from '@/lib/api-error';
 import type { Activity } from '@/hooks/use-activities';
 
 export default function ContactDetailPage() {
@@ -38,6 +41,30 @@ export default function ContactDetailPage() {
   const router = useRouter();
   const id = params.id as string;
   const [showEditModal, setShowEditModal] = useState(false);
+  const roleKey = useRoleKey();
+  const [lgpdBusy, setLgpdBusy] = useState(false);
+  const doLgpdExport = async () => {
+    setLgpdBusy(true);
+    try { await lgpdExport(id); toast.success('Arquivo com os dados do titular baixado.'); }
+    catch (e) { toast.error(getApiErrorMessage(e, 'Não foi possível exportar os dados.')); }
+    finally { setLgpdBusy(false); }
+  };
+  const doLgpdAnonymize = async () => {
+    setLgpdBusy(true);
+    try {
+      const p = await lgpdPreview(id);
+      const intro = p.legalHold
+        ? `Este cliente tem contratos, lançamentos ou notas fiscais. Por obrigação legal, nome, CPF/CNPJ e endereço serão mantidos (${p.reason}); telefone, e-mail, conversas e anotações serão apagados.`
+        : 'Todos os dados pessoais deste cliente serão apagados de forma definitiva.';
+      const reason = window.prompt(`${intro}\n\nEsta ação não pode ser desfeita. Informe o motivo (ex.: pedido do titular por e-mail em dd/mm):`);
+      if (!reason || !reason.trim()) return;
+      await lgpdAnonymize(id, reason.trim());
+      toast.success('Dados anonimizados conforme a LGPD.');
+      router.refresh();
+      window.location.reload();
+    } catch (e) { toast.error(getApiErrorMessage(e, 'Não foi possível anonimizar.')); }
+    finally { setLgpdBusy(false); }
+  };
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -103,6 +130,10 @@ export default function ContactDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {roleKey === 'ADMIN' && (<>
+            <Button variant="outline" size="sm" disabled={lgpdBusy} onClick={() => void doLgpdExport()}>Exportar dados (LGPD)</Button>
+            <Button variant="outline" size="sm" disabled={lgpdBusy} onClick={() => void doLgpdAnonymize()}>Anonimizar</Button>
+          </>)}
           <Button variant="outline" size="sm" onClick={() => setShowTaskModal(true)}>
             <Plus className="w-4 h-4 mr-1.5" />
             Tarefa

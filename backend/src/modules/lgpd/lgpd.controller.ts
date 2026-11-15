@@ -24,6 +24,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { LgpdService } from './lgpd.service';
+import { LgpdContactService } from './lgpd-contact.service';
 import {
   RecordConsentDto,
   WithdrawConsentDto,
@@ -31,6 +32,7 @@ import {
   UpdateLgpdRequestDto,
   CreatePrivacyPolicyDto,
   CreateSecurityIncidentDto,
+  AnonymizeContactDto,
 } from './lgpd.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../common/guards/workspace.guard';
@@ -38,14 +40,41 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../common/access/access';
 
 @ApiTags('lgpd')
 @ApiBearerAuth()
 @ApiHeader({ name: 'X-Workspace-Id', required: true })
 @UseGuards(JwtAuthGuard, WorkspaceGuard, RolesGuard)
+@Access(...ADMIN_ONLY)
 @Controller('lgpd')
 export class LgpdController {
-  constructor(private readonly lgpdService: LgpdService) {}
+  constructor(private readonly lgpdService: LgpdService, private readonly contacts: LgpdContactService) {}
+
+  // -----------------------------------------------
+  // Fase 7: direitos do titular sobre o CADASTRO do cliente
+  // -----------------------------------------------
+
+  @Get('contacts/:id/export')
+  @RequirePermissions('lgpd:read')
+  @ApiOperation({ summary: 'Exportar tudo o que o sistema tem sobre o cliente' })
+  exportContact(@Headers('x-workspace-id') workspaceId: string, @Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.contacts.exportContact(workspaceId, id, user.sub);
+  }
+
+  @Get('contacts/:id/anonymize-preview')
+  @RequirePermissions('lgpd:read')
+  anonymizePreview(@Headers('x-workspace-id') workspaceId: string, @Param('id') id: string) {
+    return this.contacts.anonymizePreview(workspaceId, id);
+  }
+
+  @Post('contacts/:id/anonymize')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('lgpd:write')
+  @ApiOperation({ summary: 'Anonimizar o cadastro do cliente (respeitando guarda legal)' })
+  anonymizeContact(@Headers('x-workspace-id') workspaceId: string, @Param('id') id: string, @CurrentUser() user: JwtPayload, @Body() dto: AnonymizeContactDto) {
+    return this.contacts.anonymizeContact(workspaceId, id, user.sub, dto.reason);
+  }
 
   // -----------------------------------------------
   // CONSENTIMENTOS

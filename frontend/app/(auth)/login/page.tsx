@@ -50,9 +50,16 @@ export default function LoginPage() {
     handleSubmit,
     formState: { errors },
     getValues,
+    setValue,
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
+
+  // Fase 7: quem acabou de aceitar um convite chega com ?email= preenchido.
+  useEffect(() => {
+    const e = new URLSearchParams(window.location.search).get('email');
+    if (e) setValue('email', e);
+  }, [setValue]);
 
   async function onSubmit(data: LoginFormData) {
     try {

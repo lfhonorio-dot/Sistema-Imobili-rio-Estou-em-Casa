@@ -134,3 +134,8 @@ export class CreateSecurityIncidentDto {
   @IsString()
   affectedData?: string;
 }
+
+// Fase 7
+export class AnonymizeContactDto {
+  @IsString() reason!: string;
+}

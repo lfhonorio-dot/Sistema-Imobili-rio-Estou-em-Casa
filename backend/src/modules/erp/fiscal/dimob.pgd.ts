@@ -3,9 +3,13 @@
 // Estrutura (IN RFB 1.115/2010 — leiaute do programa gerador):
 //   Linha 1 : "DIMOB" — identificador do arquivo
 //   R01     : dados do declarante (um por arquivo)
-//   R02     : operações de VENDA/INTERMEDIAÇÃO (uma linha por operação)
-//   R03     : LOCAÇÃO (uma linha por contrato/locador/locatário no ano, com
-//             12 pares de valores mensais: rendimento bruto e comissão)
+//   R02     : LOCAÇÃO (uma linha por contrato/locador/locatário no ano, com
+//             12 grupos mensais: rendimento bruto, comissão e imposto retido)
+//   R04     : INTERMEDIAÇÃO DE VENDA (uma linha por operação)
+//   (R03 é construção/incorporação/loteamento — não se aplica a esta imobiliária)
+//
+// Fase 7: os tipos foram corrigidos para a numeração do leiaute oficial
+// (antes a venda saía como R02 e a locação como R03).
 //   T9      : trailer (totalizador)
 //
 // IMPORTANTE: as larguras/posições abaixo estão centralizadas nos helpers e
@@ -87,9 +91,10 @@ export function buildR01(d: PgdDeclarant): string {
   ].join('');
 }
 
-export function buildR02(declarant: PgdDeclarant, e: PgdSaleEvent): string {
+/** Registro de intermediação de VENDA (tipo R04 no leiaute oficial). */
+export function buildSaleRecord(declarant: PgdDeclarant, e: PgdSaleEvent): string {
   return [
-    'R02',
+    'R04',
     digits(declarant.cnpj, 14),
     String(declarant.year).padStart(4, '0'),
     digits(e.sellerDoc, 14),
@@ -103,7 +108,8 @@ export function buildR02(declarant: PgdDeclarant, e: PgdSaleEvent): string {
   ].join('');
 }
 
-export function buildR03(declarant: PgdDeclarant, r: PgdRentalYear): string {
+/** Registro de LOCAÇÃO (tipo R02 no leiaute oficial). */
+export function buildRentalRecord(declarant: PgdDeclarant, r: PgdRentalYear): string {
   const months: string[] = [];
   for (let m = 0; m < 12; m++) {
     months.push(money(r.monthlyGross[m] ?? 0));
@@ -111,7 +117,7 @@ export function buildR03(declarant: PgdDeclarant, r: PgdRentalYear): string {
     months.push(money(r.monthlyTax[m] ?? 0));
   }
   return [
-    'R03',
+    'R02',
     digits(declarant.cnpj, 14),
     String(declarant.year).padStart(4, '0'),
     digits(r.landlordDoc, 14),
@@ -135,8 +141,15 @@ export function buildPgdFile(
 ): string {
   const lines: string[] = ['DIMOB'];
   lines.push(buildR01(declarant));
-  for (const s of sales) lines.push(buildR02(declarant, s));
-  for (const r of rentals) lines.push(buildR03(declarant, r));
-  lines.push(buildT9(lines.length - 1)); // R01+R02*+R03* (exclui identificador)
+  for (const r of rentals) lines.push(buildRentalRecord(declarant, r));
+  for (const s of sales) lines.push(buildSaleRecord(declarant, s));
+  lines.push(buildT9(lines.length - 1)); // R01+R02*+R04* (exclui identificador)
   return lines.join('\r\n') + '\r\n';
 }
+
+// Tamanho de cada registro neste gerador (usado pela validação estrutural)
+export const RECORD_LENGTHS: Record<string, number> = {
+  R01: 3 + 14 + 4 + 1 + 60,
+  R02: 3 + 14 + 4 + 14 + 60 + 14 + 60 + 36 * 14 + 120,
+  R04: 3 + 14 + 4 + 14 + 60 + 14 + 60 + 8 + 14 + 14 + 120,
+};

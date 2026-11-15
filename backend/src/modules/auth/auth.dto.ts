@@ -124,3 +124,17 @@ export class RevokeSessionDto {
   @IsNotEmpty()
   sessionId!: string;
 }
+
+// Fase 7: aceitar convite para entrar na imobiliária
+export class AcceptInviteDto {
+  @IsString()
+  token!: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsString()
+  @MinLength(8, { message: 'Senha deve ter no mínimo 8 caracteres' })
+  password!: string;
+}

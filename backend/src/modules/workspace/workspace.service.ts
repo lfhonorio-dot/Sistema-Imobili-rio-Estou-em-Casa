@@ -69,6 +69,7 @@ export class WorkspaceService {
         id: true,
         name: true,
         isSystem: true,
+        systemKey: true,
         permissions: true,
         createdAt: true,
         _count: { select: { workspaceUsers: true } },

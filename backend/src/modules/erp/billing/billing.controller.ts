@@ -13,8 +13,10 @@ import { CurrentUser, JwtPayload } from '../../../common/decorators/current-user
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
 import { Public } from '../../../common/decorators/public.decorator';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
 @ApiTags('billing')
+@Access(...FINANCE_AREA)
 @Controller('billing')
 export class BillingController {
   constructor(private readonly service: BillingService) {}
@@ -24,6 +26,7 @@ export class BillingController {
   @ApiBearerAuth()
   @ApiHeader({ name: 'X-Workspace-Id', required: true })
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Access(...FINANCE_CONFIG)
   @Get('gateways')
   getGateways(@Headers('x-workspace-id') workspaceId: string) {
     return this.service.getGateways(workspaceId);
@@ -32,6 +35,7 @@ export class BillingController {
   @ApiBearerAuth()
   @ApiHeader({ name: 'X-Workspace-Id', required: true })
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Access(...FINANCE_CONFIG)
   @Post('gateways')
   createGateway(
     @Headers('x-workspace-id') workspaceId: string,
@@ -43,6 +47,7 @@ export class BillingController {
   @ApiBearerAuth()
   @ApiHeader({ name: 'X-Workspace-Id', required: true })
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Access(...FINANCE_CONFIG)
   @Patch('gateways/:id')
   updateGateway(
     @Headers('x-workspace-id') workspaceId: string,
@@ -55,6 +60,7 @@ export class BillingController {
   @ApiBearerAuth()
   @ApiHeader({ name: 'X-Workspace-Id', required: true })
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Access(...FINANCE_CONFIG)
   @Delete('gateways/:id')
   deleteGateway(
     @Headers('x-workspace-id') workspaceId: string,
@@ -66,6 +72,7 @@ export class BillingController {
   @ApiBearerAuth()
   @ApiHeader({ name: 'X-Workspace-Id', required: true })
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Access(...FINANCE_CONFIG)
   @Post('gateways/:id/webhook-token')
   @HttpCode(HttpStatus.OK)
   rotateWebhookToken(@Headers('x-workspace-id') workspaceId: string, @Param('id') id: string) {
@@ -75,6 +82,7 @@ export class BillingController {
   @ApiBearerAuth()
   @ApiHeader({ name: 'X-Workspace-Id', required: true })
   @UseGuards(JwtAuthGuard, WorkspaceGuard)
+  @Access(...FINANCE_CONFIG)
   @Post('gateways/:id/test')
   @HttpCode(HttpStatus.OK)
   testGateway(@Headers('x-workspace-id') workspaceId: string, @Param('id') id: string) {

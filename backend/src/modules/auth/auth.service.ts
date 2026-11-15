@@ -1,6 +1,7 @@
 // Serviço de autenticação - implementação completa
 // Gerencia: registro, login, logout, refresh, 2FA, reset de senha
 
+import { roleKeyOf } from '../../common/access/access';
 import {
   Injectable,
   ConflictException,
@@ -44,10 +45,11 @@ export interface TokenPair {
 
 // Custo do bcrypt - 12 rounds para boa segurança
 const BCRYPT_ROUNDS = 12;
-// Máximo de tentativas antes de bloquear conta
-const MAX_FAILED_ATTEMPTS = 20;
+// Fase 7: bloqueio de conta por tentativas de senha (antes as constantes
+// existiam, mas o login nunca contava as tentativas)
+const MAX_FAILED_ATTEMPTS = 10;
 // Tempo de bloqueio em minutos
-const LOCK_DURATION_MINUTES = 5;
+const LOCK_DURATION_MINUTES = 15;
 
 @Injectable()
 export class AuthService {
@@ -123,6 +125,7 @@ export class AuthService {
           workspaceId: workspace.id,
           name: 'Administrador',
           isSystem: true,
+          systemKey: 'ADMIN',
           permissions: {
             'users:read': true,
             'users:write': true,
@@ -138,18 +141,22 @@ export class AuthService {
         },
       });
 
-      // Cria papel de Corretor com permissões básicas
-      await tx.role.create({
-        data: {
-          workspaceId: workspace.id,
-          name: 'Corretor',
-          isSystem: true,
-          permissions: {
-            'users:read': true,
-            'workspace:read': true,
+      // Fase 7: papéis Corretor, Financeiro e Gerente (acesso definido por systemKey)
+      for (const r of [
+        { name: 'Corretor', systemKey: 'BROKER' },
+        { name: 'Financeiro', systemKey: 'FINANCE' },
+        { name: 'Gerente', systemKey: 'MANAGER' },
+      ]) {
+        await tx.role.create({
+          data: {
+            workspaceId: workspace.id,
+            name: r.name,
+            isSystem: true,
+            systemKey: r.systemKey,
+            permissions: { 'users:read': true, 'workspace:read': true },
           },
-        },
-      });
+        });
+      }
 
       // Cria o usuário administrador
       const user = await tx.user.create({
@@ -174,7 +181,7 @@ export class AuthService {
     });
 
     this.logger.log(
-      `Novo workspace registrado: ${result.workspace.slug} (admin: ${result.user.email})`,
+      `Novo workspace registrado: ${result.workspace.slug} (admin: ${result.user.id})`,
     );
 
     // Envia e-mail de boas-vindas de forma assíncrona (não bloqueia o registro)
@@ -239,10 +246,17 @@ export class AuthService {
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
+    // Fase 7: conta bloqueada temporariamente por excesso de tentativas
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const min = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
+      throw new UnauthorizedException(`Muitas tentativas de senha. Por segurança, o acesso foi bloqueado por ${min} minuto(s). Tente de novo depois ou use "Esqueci minha senha".`);
+    }
+
     // Valida senha
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!isPasswordValid) {
+      await this.registerFailedLogin(user.id, user.failedLoginAttempts);
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
 
@@ -261,6 +275,7 @@ export class AuthService {
       });
 
       if (!isValid) {
+        await this.registerFailedLogin(user.id, user.failedLoginAttempts);
         throw new UnauthorizedException('Código 2FA inválido.');
       }
     }
@@ -440,7 +455,7 @@ export class AuthService {
 
     // Sempre retorna sucesso para não revelar se e-mail existe
     if (!user) {
-      this.logger.debug(`Recuperação de senha para e-mail não encontrado: ${dto.email}`);
+      this.logger.debug('Recuperação de senha pedida para e-mail não cadastrado.');
       return;
     }
 
@@ -753,7 +768,7 @@ export class AuthService {
         `,
       });
     } catch (error) {
-      this.logger.error(`Erro ao enviar e-mail de boas-vindas para ${email}:`, error);
+      this.logger.error(`Erro ao enviar e-mail de boas-vindas: ${(error as Error).message}`);
     }
   }
 
@@ -764,7 +779,7 @@ export class AuthService {
     resetUrl: string,
   ): Promise<void> {
     if (!this.mailTransporter) {
-      this.logger.debug(`SMTP não configurado. Link de reset: ${resetUrl}`);
+      this.logger.warn('SMTP não configurado: e-mail de redefinição de senha não enviado.');
       return;
     }
 
@@ -784,7 +799,7 @@ export class AuthService {
         `,
       });
     } catch (error) {
-      this.logger.error(`Erro ao enviar e-mail de reset para ${email}:`, error);
+      this.logger.error(`Erro ao enviar e-mail de redefinição de senha: ${(error as Error).message}`);
     }
   }
 
@@ -803,7 +818,7 @@ export class AuthService {
               select: { id: true, name: true, slug: true, operationProfile: true },
             },
             role: {
-              select: { id: true, name: true, permissions: true },
+              select: { id: true, name: true, permissions: true, systemKey: true },
             },
           },
         },
@@ -823,13 +838,84 @@ export class AuthService {
     return {
       ...user,
       isPlatformAdmin,
-      workspaces: user.workspaces.map((m: { workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string; operationProfile: string }; role: { id: string; name: string; permissions: unknown } }) => ({
+      workspaces: user.workspaces.map((m: { id: string; workspaceId: string; isOwner: boolean; workspace: { id: string; name: string; slug: string; operationProfile: string }; role: { id: string; name: string; permissions: unknown; systemKey: string | null } }) => ({
         workspaceId: m.workspaceId,
+        memberId: m.id,
         isOwner: m.isOwner,
         workspace: m.workspace,
         role: m.role,
+        // Fase 7: papel efetivo usado pelo backend (menu e telas se ajustam a ele)
+        roleKey: roleKeyOf(m.role, m.isOwner),
       })),
     };
+  }
+
+  /** Conta uma tentativa errada; na 10ª seguida bloqueia por 15 minutos. */
+  private async registerFailedLogin(userId: string, previous: number) {
+    const attempts = previous + 1;
+    const lock = attempts >= MAX_FAILED_ATTEMPTS;
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedLoginAttempts: lock ? 0 : attempts,
+        ...(lock && { lockedUntil: new Date(Date.now() + LOCK_DURATION_MINUTES * 60_000) }),
+      },
+    });
+    if (lock) this.logger.warn(`Conta ${userId} bloqueada por ${LOCK_DURATION_MINUTES} min após ${attempts} tentativas.`);
+  }
+
+  // ── Fase 7: convites ─────────────────────────────────────
+
+  /** Dados do convite para a tela de aceite (sem exigir login). */
+  async getInvite(token: string) {
+    const inv = await this.prisma.inviteToken.findUnique({ where: { token } });
+    if (!inv) throw new BadRequestException('Convite inválido.');
+    const [ws, role, existing] = await Promise.all([
+      this.prisma.workspace.findUnique({ where: { id: inv.workspaceId }, select: { name: true } }),
+      this.prisma.role.findUnique({ where: { id: inv.roleId }, select: { name: true } }),
+      this.prisma.user.findUnique({ where: { email: inv.email }, select: { id: true } }),
+    ]);
+    return {
+      workspaceName: ws?.name ?? '', email: inv.email, roleName: role?.name ?? '',
+      used: !!inv.usedAt, expired: inv.expiresAt < new Date(), hasAccount: !!existing,
+    };
+  }
+
+  /**
+   * Aceita o convite: cria a conta (ou usa a existente, conferindo a senha) e
+   * vincula à imobiliária com o papel do convite. O convite só vale uma vez.
+   */
+  async acceptInvite(dto: { token: string; name?: string; password: string }) {
+    const inv = await this.prisma.inviteToken.findUnique({ where: { token: dto.token } });
+    if (!inv || inv.usedAt) throw new BadRequestException('Convite inválido ou já utilizado.');
+    if (inv.expiresAt < new Date()) throw new BadRequestException('Convite vencido. Peça um novo ao dono da imobiliária.');
+    const role = await this.prisma.role.findFirst({ where: { id: inv.roleId, workspaceId: inv.workspaceId } });
+    if (!role) throw new BadRequestException('O papel deste convite não existe mais. Peça um novo convite.');
+
+    let user = await this.prisma.user.findUnique({ where: { email: inv.email } });
+    if (user) {
+      if (user.deletedAt) throw new BadRequestException('Esta conta foi desativada.');
+      const ok = await bcrypt.compare(dto.password, user.passwordHash);
+      if (!ok) throw new UnauthorizedException('Você já tem conta com este e-mail: digite a senha atual dela para aceitar o convite.');
+    } else {
+      if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(dto.password)) {
+        throw new BadRequestException('A senha precisa ter 8+ caracteres, com maiúscula, minúscula, número e símbolo (@$!%*?&).');
+      }
+      if (!dto.name?.trim()) throw new BadRequestException('Informe seu nome.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const used = await tx.inviteToken.updateMany({ where: { id: inv.id, usedAt: null }, data: { usedAt: new Date() } });
+      if (used.count !== 1) throw new BadRequestException('Convite já utilizado.');
+      if (!user) {
+        user = await tx.user.create({ data: { email: inv.email, name: dto.name!.trim(), passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS) } });
+      }
+      const already = await tx.workspaceUser.findUnique({ where: { workspaceId_userId: { workspaceId: inv.workspaceId, userId: user.id } } });
+      if (already) throw new BadRequestException('Você já faz parte desta imobiliária.');
+      await tx.workspaceUser.create({ data: { workspaceId: inv.workspaceId, userId: user.id, roleId: role.id, isOwner: false } });
+    });
+    this.logger.log(`Convite aceito no workspace ${inv.workspaceId} (papel ${role.name}).`);
+    return { accepted: true, email: inv.email, workspaceId: inv.workspaceId };
   }
 
   async unlockUser(email: string): Promise<void> {

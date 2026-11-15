@@ -62,7 +62,7 @@ describe('ReportsService.getSalesDashboard', () => {
     // comissão a pagar = lançamentos PAYABLE de comissão + repasses a parceiros pendentes
     expect(r.commissionsPayable).toEqual({ amount: 4000, count: 3 });
     // saldo projetado = saldo bancário + a receber 30d - a pagar 30d
-    expect(r.projectedBalance30d.amount).toBe(13000.75);
+    expect(r.projectedBalance30d!.amount).toBe(13000.75);
   });
 
   it('propostas em aberto: conta só as abertas e dentro da validade (Fase 3)', async () => {

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateNotificationPreferenceDto, CreateInAppNotificationDto } from './notifications.dto';
+import { UpdateNotificationPreferenceDto } from './notifications.dto';
 
 @Injectable()
 export class NotificationsService {
@@ -13,14 +13,12 @@ export class NotificationsService {
       where: { workspaceId, userId },
     });
 
-    const defaults = [
-      'DEAL_CREATED', 'DEAL_WON', 'DEAL_LOST', 'TASK_DUE', 'LEAD_RECEIVED',
-      'CONTRACT_EXPIRING', 'BOLETO_OVERDUE', 'MAINTENANCE_OPENED',
-    ];
+    // Fase 7: os tipos de aviso que o sistema realmente gera
+    const defaults = ['LEAD_NEW', 'VISIT_TODAY', 'TASK_DUE', 'PROPOSAL_STALE', 'INSTALLMENT_OVERDUE', 'AUTH_EXPIRING', 'NFSE_REJECTED'];
 
     const existing = new Map(prefs.map(p => [p.type, p]));
     return defaults.map(type => existing.get(type) ?? {
-      workspaceId, userId, type, inApp: true, email: false, push: false,
+      workspaceId, userId, type, inApp: true, email: true, push: false,
     });
   }
 
@@ -37,30 +35,20 @@ export class NotificationsService {
         userId,
         type: dto.type,
         inApp: dto.inApp ?? true,
-        email: dto.email ?? false,
+        email: dto.email ?? true,
         push: dto.push ?? false,
       },
     });
   }
 
-  async createNotification(workspaceId: string, dto: CreateInAppNotificationDto) {
-    // In-app notifications are stored as a simple log — no dedicated model yet
-    // Returns simulated notification IDs for now
-    const notifType = dto.type ?? 'INFO';
-    const targets = dto.userIds ?? [];
+  async getEmailSwitch(workspaceId: string, userId: string) {
+    const me = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId }, select: { emailNotifications: true } });
+    return { emailNotifications: me?.emailNotifications ?? true };
+  }
 
-    this.logger.log(`Notification [${notifType}] sent to ${targets.length} users in workspace ${workspaceId}`);
-
-    return {
-      sent: targets.length,
-      title: dto.title,
-      body: dto.body,
-      type: notifType,
-      entityId: dto.entityId,
-      entityType: dto.entityType,
-      userIds: targets,
-      createdAt: new Date().toISOString(),
-    };
+  async setEmailSwitch(workspaceId: string, userId: string, enabled: boolean) {
+    await this.prisma.workspaceUser.updateMany({ where: { workspaceId, userId }, data: { emailNotifications: enabled } });
+    return { emailNotifications: enabled };
   }
 
   async getStats(workspaceId: string) {

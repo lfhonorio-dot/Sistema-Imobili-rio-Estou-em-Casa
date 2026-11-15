@@ -5,13 +5,14 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { authorizationStatus } from '../../erp/properties/authorization-status';
 import { contractPaymentMethod } from './funnel-rules';
+import { dealScope } from '../../../common/access/access';
 
 @Injectable()
 export class DealFunnelService {
   constructor(private prisma: PrismaService) {}
 
   async setProperties(workspaceId: string, dealId: string, propertyIds: string[]) {
-    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, workspaceId, deletedAt: null }, select: { id: true } });
+    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, workspaceId, deletedAt: null, ...dealScope() }, select: { id: true } });
     if (!deal) throw new NotFoundException('Negócio não encontrado.');
     const ids = [...new Set(propertyIds)];
     if (ids.length) {
@@ -42,7 +43,7 @@ export class DealFunnelService {
    */
   async contractDraft(workspaceId: string, dealId: string) {
     const deal = await this.prisma.deal.findFirst({
-      where: { id: dealId, workspaceId, deletedAt: null },
+      where: { id: dealId, workspaceId, deletedAt: null, ...dealScope() },
       include: {
         contact: { select: { id: true, name: true, maritalStatus: true, spouseContactId: true } },
         properties: { select: { propertyId: true } },

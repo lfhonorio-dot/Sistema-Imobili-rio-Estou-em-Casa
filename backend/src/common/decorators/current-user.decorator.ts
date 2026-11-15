@@ -12,6 +12,9 @@ export interface JwtPayload {
   exp?: number;      // Expiration
   permissions?: Record<string, boolean>;
   isOwner?: boolean;
+  // Fase 7: preenchidos pelo WorkspaceGuard
+  roleKey?: 'ADMIN' | 'FINANCE' | 'MANAGER' | 'BROKER';
+  memberId?: string;
 }
 
 // Decorator que extrai o usuário do objeto de requisição

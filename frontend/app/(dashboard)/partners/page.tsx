@@ -21,7 +21,7 @@ import {
 } from '@/hooks/use-split';
 
 const KYC_BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
-  APPROVED: { label: 'Habilitado', variant: 'default', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+  APPROVED: { label: 'Dados conferidos', variant: 'default', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
   PENDING: { label: 'Pendente', variant: 'secondary', icon: <Clock className="w-3.5 h-3.5" /> },
   SUBMITTED: { label: 'Em análise', variant: 'secondary', icon: <Clock className="w-3.5 h-3.5" /> },
   REJECTED: { label: 'Recusado', variant: 'destructive', icon: <AlertTriangle className="w-3.5 h-3.5" /> },
@@ -86,9 +86,9 @@ export default function PartnersPage() {
   async function approveKyc(r: SplitRecipient) {
     try {
       await submitKyc.mutateAsync(r.id);
-      toast.success('Recebedor habilitado para repasses (KYC aprovado).');
+      toast.success('Dados do recebedor marcados como conferidos (conferência manual, registrada na auditoria).');
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Erro ao habilitar.';
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Não foi possível marcar como conferido.';
       toast.error(Array.isArray(msg) ? msg[0] : msg);
     }
   }
@@ -161,7 +161,7 @@ export default function PartnersPage() {
                       <div className="flex gap-2 justify-end">
                         {r.kycStatus !== 'APPROVED' && (
                           <Button size="sm" variant="outline" onClick={() => approveKyc(r)} disabled={submitKyc.isPending}>
-                            Habilitar
+                            Marcar dados como conferidos
                           </Button>
                         )}
                         <Button size="sm" variant="outline" onClick={() => openEdit(r)}>Editar</Button>

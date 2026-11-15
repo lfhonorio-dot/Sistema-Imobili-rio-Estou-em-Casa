@@ -9,7 +9,9 @@ import { SavePortalIntegrationDto, PublishPropertyDto, PortalType } from './port
 import { Public } from '../../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceGuard } from '../../../common/guards/workspace.guard';
+import { Access, ALL, STAFF, FINANCE_AREA, FINANCE_CONFIG, MANAGEMENT, ADMIN_ONLY } from '../../../common/access/access';
 
+@Access(...MANAGEMENT)
 @Controller('marketing/portals')
 export class PortalsController {
   constructor(

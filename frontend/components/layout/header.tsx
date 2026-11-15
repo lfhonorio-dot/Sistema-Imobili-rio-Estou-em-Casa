@@ -1,10 +1,12 @@
 // Header do dashboard.
-// O sino de notificações foi retirado até existir notificação de verdade
-// (Fase 7) — antes era um botão sem nenhuma ação.
+// Fase 7: sino com notificações reais e o papel do usuário.
 
 'use client';
 
 import { useAuthStore } from '@/stores/auth.store';
+import { NotificationBell } from './notification-bell';
+import { ROLE_LABELS } from '@/lib/navigation';
+import { useRoleKey } from '@/hooks/use-role';
 
 interface HeaderProps {
   title?: string;
@@ -12,6 +14,7 @@ interface HeaderProps {
 
 export function Header({ title }: HeaderProps) {
   const { currentWorkspace } = useAuthStore();
+  const role = useRoleKey();
 
   return (
     <header className="flex h-16 items-center justify-between border-b bg-white px-6">
@@ -24,9 +27,10 @@ export function Header({ title }: HeaderProps) {
       <div className="flex items-center gap-3">
         {currentWorkspace && (
           <span className="text-sm text-muted-foreground">
-            {currentWorkspace.role.name}
+            {ROLE_LABELS[role]}
           </span>
         )}
+        {currentWorkspace && <NotificationBell />}
       </div>
     </header>
   );

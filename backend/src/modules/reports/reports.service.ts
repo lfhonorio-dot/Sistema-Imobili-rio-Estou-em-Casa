@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReportFilterDto } from './reports.dto';
+import { brokerMemberId } from '../../common/access/access';
 
 @Injectable()
 export class ReportsService {
@@ -10,6 +11,9 @@ export class ReportsService {
   // explícita; o que ainda não existe no sistema volta como `null` com
   // `available: false`, para a tela dizer "não disponível" em vez de inventar.
   async getSalesDashboard(workspaceId: string, now: Date = new Date()) {
+    // Fase 7: Corretor vê só os números dele (sem saldo bancário nem totais da imobiliária)
+    const broker = brokerMemberId();
+    if (broker) return this.getBrokerDashboard(workspaceId, broker, now);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
@@ -174,6 +178,62 @@ export class ReportsService {
         weekEnd: weekEnd.toISOString(),
         monthStart: monthStart.toISOString(),
       },
+      scope: 'ALL' as const,
+    };
+  }
+
+  /** Fase 7 — painel do Corretor: só os leads, visitas, negócios, vendas e comissões DELE. */
+  async getBrokerDashboard(workspaceId: string, memberId: string, now: Date = new Date()) {
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000);
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    weekEnd.setMilliseconds(-1);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const todayStart = new Date(now);
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const myDeals = await this.prisma.deal.findMany({ where: { workspaceId, assigneeId: memberId }, select: { id: true } });
+    const dealIds = myDeals.map((d) => d.id);
+    const n = (v: unknown) => Number(v ?? 0);
+
+    const [newLeads, visitsWeek, visitsDone, openDeals, sales, myCommissions, openProposals] = await Promise.all([
+      this.prisma.deal.count({ where: { workspaceId, deletedAt: null, assigneeId: memberId, createdAt: { gte: sevenDaysAgo } } }),
+      this.prisma.visit.count({ where: { workspaceId, deletedAt: null, brokerId: memberId, scheduledAt: { gte: weekStart, lte: weekEnd } } }),
+      this.prisma.visit.count({ where: { workspaceId, deletedAt: null, brokerId: memberId, scheduledAt: { gte: weekStart, lte: weekEnd }, status: 'DONE' } }),
+      this.prisma.deal.aggregate({
+        where: { workspaceId, deletedAt: null, assigneeId: memberId, stage: { isWon: false, isLost: false }, pipeline: { type: { not: 'RENTAL' } } },
+        _sum: { value: true }, _count: true,
+      }),
+      this.prisma.contract.aggregate({
+        where: {
+          workspaceId, deletedAt: null, type: { in: ['SALE', 'BROKERAGE'] }, status: 'ACTIVE', dealId: { in: dealIds },
+          activatedAt: { gte: monthStart, lt: nextMonthStart },
+        },
+        _sum: { saleValue: true }, _count: true,
+      }),
+      this.prisma.financialEntry.aggregate({
+        where: { workspaceId, deletedAt: null, type: 'PAYABLE', category: 'COMMISSION', beneficiaryUserId: memberId, status: { in: ['PENDING', 'OVERDUE'] } },
+        _sum: { amount: true, paidAmount: true }, _count: true,
+      }),
+      this.prisma.proposal.count({ where: { workspaceId, deletedAt: null, status: 'OPEN', validUntil: { gte: todayStart }, dealId: { in: dealIds } } }),
+    ]);
+
+    return {
+      newLeads7d: newLeads,
+      visitsThisWeek: { total: visitsWeek, done: visitsDone },
+      openProposals: { available: true, count: openProposals as number | null },
+      vgvInNegotiation: { amount: n(openDeals._sum.value), deals: openDeals._count },
+      salesThisMonth: { amount: n(sales._sum.saleValue), count: sales._count },
+      // totais da imobiliária não aparecem para o Corretor
+      commissionsReceivable: null,
+      // o que a imobiliária deve a ESTE corretor
+      commissionsPayable: { amount: Math.round((n(myCommissions._sum.amount) - n(myCommissions._sum.paidAmount)) * 100) / 100, count: myCommissions._count },
+      projectedBalance30d: null,
+      period: { weekStart: weekStart.toISOString(), weekEnd: weekEnd.toISOString(), monthStart: monthStart.toISOString() },
+      scope: 'BROKER' as const,
     };
   }
 
