@@ -82,14 +82,16 @@ jobs:
       - name: Compilar o backend
         run: npm run build
 
-      - name: Criar as tabelas no banco de teste (migrations)
-        run: npx prisma migrate deploy
-
-      - name: Ligar o backend
+      # Liga o sistema pelo MESMO script que o Railway usa (start.sh), partindo de um
+      # banco vazio: é ele que cria as tabelas. Assim o teste também garante que o
+      # sistema sobe do zero (necessário para "zerar o banco" — docs/ZERAR-BANCO.md).
+      - name: Ligar o backend em banco vazio (start.sh cria as tabelas)
         run: |
-          nohup node dist/main.js > backend.log 2>&1 &
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:3001/api/v1/health > /dev/null; then echo "backend no ar"; exit 0; fi
+          nohup sh start.sh > backend.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:3001/api/v1/health > /dev/null; then
+              echo "backend no ar"; grep -E "Banco vazio|Banco já tem" backend.log || true; exit 0
+            fi
             sleep 2
           done
           echo "o backend não subiu:"; tail -n 80 backend.log; exit 1
