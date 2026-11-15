@@ -464,7 +464,7 @@ export class ReportsService {
     for (const c of campaigns) {
       if (!map.has(c.provider)) map.set(c.provider, { spend: 0, impressions: 0, clicks: 0, leads: 0, conversions: 0 });
       const entry = map.get(c.provider)!;
-      entry.spend += c.spend;
+      entry.spend += Number(c.spend);
       entry.impressions += c.impressions;
       entry.clicks += c.clicks;
       entry.leads += c.leads;

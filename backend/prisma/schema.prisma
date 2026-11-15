@@ -1159,7 +1159,7 @@ model CnabRecord {
   lineNumber  Int
   occurrence  String?  // 06=Liquidação, 09=Baixa, 02=Entrada Confirmada, etc.
   nossoNumero String?
-  amount      Float?
+  amount      Decimal? @db.Decimal(15, 2)
   paidAt      DateTime?
   boletoId    String?
   status      String   @default("PENDING") // PENDING, MATCHED, ERROR
@@ -1387,9 +1387,9 @@ model NfseRecord {
   takerName       String
   serviceCode     String
   description     String   @db.Text
-  amount          Float
+  amount          Decimal  @db.Decimal(15, 2)
   issRate         Float
-  issAmount       Float
+  issAmount       Decimal  @db.Decimal(15, 2)
   issRetained     Boolean  @default(false)
   status          String   @default("PENDING") // PENDING, ISSUED, CANCELLED, ERROR
   issuedAt        DateTime?
@@ -1444,11 +1444,11 @@ model FiscalObligation {
   type         String   // DAS, DARF_PIS, DARF_COFINS, DARF_IRPJ, DARF_CSLL, ISS, CNPJ
   period       String   // YYYY-MM ou YYYY-QX
   dueDate      DateTime
-  amount       Float?
+  amount       Decimal? @db.Decimal(15, 2)
   receiptCode  String?  // código de receita DARF
   status       String   @default("PENDING") // PENDING, GENERATED, PAID, OVERDUE
   paidAt       DateTime?
-  paidAmount   Float?
+  paidAmount   Decimal? @db.Decimal(15, 2)
   receiptUrl   String?
   calcDetails  Json     @default("{}")
   createdAt    DateTime @default(now())
@@ -1471,9 +1471,9 @@ model DimobRecord {
   propertyAddress String
   startDate    DateTime?
   endDate      DateTime?
-  monthlyValue Float?
-  totalValue   Float?
-  commissionAmount Float?
+  monthlyValue Decimal? @db.Decimal(15, 2)
+  totalValue   Decimal? @db.Decimal(15, 2)
+  commissionAmount Decimal? @db.Decimal(15, 2)
   // Declarante do rateio (imobiliária ou corretor parceiro PJ)
   declarantDoc     String?
   declarantName    String?
@@ -1502,10 +1502,10 @@ model IrrfRecord {
   tenantName       String
   ownerDocument    String
   ownerName        String
-  grossAmount      Float
+  grossAmount      Decimal  @db.Decimal(15, 2)
   irrfRate         Float
-  irrfAmount       Float
-  netAmount        Float
+  irrfAmount       Decimal  @db.Decimal(15, 2)
+  netAmount        Decimal  @db.Decimal(15, 2)
   status           String   @default("PENDING") // PENDING, RETAINED, INFORMED
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -1521,12 +1521,12 @@ model CarneLeaoRecord {
   ownerContactId   String?
   ownerDocument    String
   ownerName        String
-  grossIncome      Float
-  deductions       Float    @default(0)
-  taxableBase      Float
+  grossIncome      Decimal  @db.Decimal(15, 2)
+  deductions       Decimal    @default(0) @db.Decimal(15, 2)
+  taxableBase      Decimal  @db.Decimal(15, 2)
   rate             Float
-  taxDue           Float
-  darfAmount       Float
+  taxDue           Decimal  @db.Decimal(15, 2)
+  darfAmount       Decimal  @db.Decimal(15, 2)
   status           String   @default("CALCULATED") // CALCULATED, PAID, EXPORTED
   paidAt           DateTime?
   calcDetails      Json     @default("{}")
@@ -1565,12 +1565,12 @@ model AdCampaign {
   externalId  String
   name        String
   status      String    @default("ACTIVE")
-  spend       Float     @default(0)
+  spend       Decimal     @default(0) @db.Decimal(15, 2)
   impressions Int       @default(0)
   clicks      Int       @default(0)
   leads       Int       @default(0)
   conversions Int       @default(0)
-  revenue     Float     @default(0)
+  revenue     Decimal     @default(0) @db.Decimal(15, 2)
   metrics     Json      @default("{}")
   syncedAt    DateTime?
   createdAt   DateTime  @default(now())
