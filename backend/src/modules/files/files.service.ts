@@ -73,6 +73,22 @@ export class FilesService {
     });
   }
 
+  /** Fase 6: grava um arquivo gerado pelo próprio sistema (XML/PDF da NFS-e), sem a validação de upload. */
+  async storeGenerated(workspaceId: string, buffer: Buffer, fileName: string, mimeType: string, userId?: string) {
+    const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+    return this.prisma.storedFile.create({
+      data: { workspaceId, fileName: sanitizeFileName(fileName), mimeType, size: buffer.length, sha256, data: buffer, createdById: userId },
+      select: { id: true, fileName: true, mimeType: true, size: true },
+    });
+  }
+
+  /** Conteúdo de um arquivo do workspace (uso interno: anexos de e-mail). */
+  async read(workspaceId: string, fileId: string) {
+    const f = await this.prisma.storedFile.findFirst({ where: { id: fileId, workspaceId, deletedAt: null } });
+    if (!f) throw new NotFoundException('Arquivo não encontrado.');
+    return { fileName: f.fileName, mimeType: f.mimeType, data: Buffer.from(f.data) };
+  }
+
   /** Caminho relativo assinado: /files/:id?exp=...&sig=... */
   signedPath(fileId: string, ttlSeconds = DEFAULT_TTL_SECONDS, now = Date.now()): string {
     const exp = Math.floor(now / 1000) + ttlSeconds;

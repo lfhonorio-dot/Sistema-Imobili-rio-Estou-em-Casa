@@ -74,6 +74,10 @@ export class SendEmailDto {
   @IsOptional()
   @IsString()
   conversationId?: string;
+
+  // Fase 6: anexos (uso interno do backend — ex.: XML e PDF da NFS-e).
+  // Sem decorator de validação: pela API HTTP o campo é descartado.
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
 }
 
 export class EmailTemplateQueryDto {

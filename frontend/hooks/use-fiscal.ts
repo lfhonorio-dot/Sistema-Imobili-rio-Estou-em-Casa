@@ -19,22 +19,7 @@ export function useFiscal() {
     return r.data.data;
   }, [workspaceId]);
 
-  const findNfse = useCallback(async (params?: Record<string, unknown>) => {
-    setLoading(true);
-    try {
-      const r = await api.get('/fiscal/nfse', { params, headers });
-      return r.data.data;
-    } catch (e: unknown) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId]);
-
-  const emitNfse = useCallback(async (dto: Record<string, unknown>) => {
-    const r = await api.post('/fiscal/nfse', dto, { headers });
-    return r.data.data;
-  }, [workspaceId]);
+  // Fase 6: NFS-e passou para hooks/use-nfse.ts (rotas /nfse).
 
   const findDimob = useCallback(async (params?: Record<string, unknown>) => {
     const r = await api.get('/fiscal/dimob', { params, headers });
@@ -51,5 +36,5 @@ export function useFiscal() {
     return r.data.data;
   }, [workspaceId]);
 
-  return { getTaxConfig, saveTaxConfig, findNfse, emitNfse, findDimob, generateDimob, findCarneLeao, loading, error };
+  return { getTaxConfig, saveTaxConfig, findDimob, generateDimob, findCarneLeao, loading, error };
 }

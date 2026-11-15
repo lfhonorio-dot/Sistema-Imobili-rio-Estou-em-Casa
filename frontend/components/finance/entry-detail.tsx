@@ -16,18 +16,21 @@ import {
   brl, dmy, METHOD_LABELS, SOURCE_LABELS, useAttachReceipt, useEntry, useCancelEntry, useCharges, useEntryPayments, useReversePayment,
 } from '@/hooks/use-finance';
 import { ChargeCard } from './charge-panels';
+import { NFSE_STATUS_STYLE, useNfseList } from '@/hooks/use-nfse';
 
 type Entry = FinancialEntry & { openAmount?: number; isPartial?: boolean };
 
-export function EntryDetailSheet({ entry: initial, onClose, onPay, onCharge, onEdit }: {
+export function EntryDetailSheet({ entry: initial, onClose, onPay, onCharge, onEdit, onIssueNfse }: {
   entry: Entry | null; onClose: () => void;
   onPay: (e: Entry) => void; onCharge: (e: Entry) => void; onEdit: (e: Entry) => void;
+  onIssueNfse?: (e: Entry) => void;
 }) {
   const fresh = useEntry(initial?.id);
   // dados atualizados depois de baixa/estorno/cobrança (cai no da lista enquanto carrega)
   const entry: Entry | null = initial ? { ...initial, ...(fresh.data ?? {}) } : null;
   const payments = useEntryPayments(entry?.id);
   const charges = useCharges({ entryId: entry?.id, limit: 50 }, !!entry && entry.type === 'RECEIVABLE');
+  const nfse = useNfseList({ entryId: initial?.id, limit: 10 }, !!initial && initial.type === 'RECEIVABLE');
   const reverse = useReversePayment();
   const attach = useAttachReceipt();
   const cancel = useCancelEntry();
@@ -124,6 +127,33 @@ export function EntryDetailSheet({ entry: initial, onClose, onPay, onCharge, onE
               </ul>
             )}
           </section>
+
+          {entry.type === 'RECEIVABLE' && (
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold">Nota fiscal (NFS-e)</h3>
+                {onIssueNfse && entry.status !== 'CANCELLED' && !(nfse.data?.items ?? []).some((n) => ['QUEUED', 'PROCESSING', 'AUTHORIZED', 'ISSUED'].includes(n.status)) && (
+                  <Button size="sm" variant="outline" onClick={() => onIssueNfse(entry)}>Emitir NF</Button>
+                )}
+              </div>
+              {nfse.isLoading ? <Skeleton className="h-8 w-full" /> : nfse.isError ? (
+                <ErrorState error={nfse.error} onRetry={() => nfse.refetch()} compact />
+              ) : (nfse.data?.items ?? []).length === 0 ? (
+                <p className="text-muted-foreground">Nenhuma nota emitida para esta conta.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {nfse.data!.items.map((n) => (
+                    <li key={n.id} className="flex flex-wrap items-center justify-between gap-2 rounded border p-2">
+                      <span>{n.number ? `NFS-e nº ${n.number}` : `RPS ${n.rpsNumber ?? '—'}`}{n.environment === 'HOMOLOG' ? ' (homologação)' : ''}{Number(n.totalRetained) ? ` · retido ${brl(n.totalRetained)}` : ''}</span>
+                      <span className={`text-xs rounded-full px-2 py-0.5 ${NFSE_STATUS_STYLE[n.status] ?? 'bg-gray-100'}`}>{n.statusLabel}</span>
+                      {n.rejectionReason && <p className="w-full text-xs text-red-700">{n.rejectionReason}</p>}
+                      {n.pdfDownloadUrl && <a className="text-xs text-blue-600 hover:underline" href={apiFileUrl(n.pdfDownloadUrl)} target="_blank" rel="noreferrer">PDF</a>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           {entry.type === 'RECEIVABLE' && (
             <section>

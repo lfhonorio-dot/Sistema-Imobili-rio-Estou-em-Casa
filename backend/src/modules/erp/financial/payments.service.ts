@@ -28,7 +28,7 @@ export interface RegisterPaymentInput {
   bankAccountId?: string | null;
   receiptFileId?: string | null;
   notes?: string;
-  source?: 'MANUAL' | 'GATEWAY' | 'RECONCILIATION';
+  source?: 'MANUAL' | 'GATEWAY' | 'RECONCILIATION' | 'RETENTION';
   gatewayPaymentId?: string;
 }
 
@@ -142,6 +142,32 @@ export class PaymentsService {
       await this.recompute(tx, entryId);
       const updated = await tx.financialEntry.findUnique({ where: { id: entryId } });
       return { payment, entry: updated };
+    });
+  }
+
+  /**
+   * Fase 6 — retenção na fonte da NFS-e (IR, PIS, COFINS, CSLL, ISS retidos
+   * pelo tomador PJ). Abate o valor retido do saldo da conta SEM entrada de
+   * dinheiro (total = 0): o fluxo de caixa e o DRE ficam com o valor líquido,
+   * e o valor retido fica na NFS-e para o contador.
+   */
+  async registerRetention(workspaceId: string, entryId: string, amount: number, notes: string, db?: Tx) {
+    return this.run(db, async (tx) => {
+      const entry = await this.lockEntry(tx, workspaceId, entryId);
+      if (entry.status === 'CANCELLED') throw new BadRequestException('A conta está cancelada.');
+      const open = PaymentsService.openAmount(entry);
+      if (toCents(amount) <= 0) throw new BadRequestException('Retenção sem valor.');
+      if (toCents(amount) > toCents(open)) {
+        throw new BadRequestException(`A retenção (R$ ${amount.toFixed(2)}) é maior que o saldo em aberto da conta (R$ ${open.toFixed(2)}).`);
+      }
+      const payment = await tx.financialPayment.create({
+        data: {
+          workspaceId, entryId, principal: amount, discount: amount, total: 0, paidAt: new Date(),
+          method: 'RETENTION', source: 'RETENTION', notes,
+        },
+      });
+      await this.recompute(tx, entryId);
+      return payment;
     });
   }
 
