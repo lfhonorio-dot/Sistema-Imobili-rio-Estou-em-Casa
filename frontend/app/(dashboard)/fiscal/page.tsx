@@ -157,7 +157,7 @@ function FiscalPageContent() {
                     <tr key={n.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-gray-700">{n.takerName}</td>
                       <td className="px-4 py-3 text-right font-medium">
-                        {n.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {Number(n.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-500">{n.issRate}%</td>
                       <td className="px-4 py-3 text-gray-500">
@@ -208,7 +208,7 @@ function FiscalPageContent() {
                       <p className="text-sm text-gray-500">{d.propertyAddress as string}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">{(d.totalValue as number)?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                      <p className="font-semibold">{Number(d.totalValue ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                       <p className="text-xs text-gray-400">Ano {d.year as number}</p>
                     </div>
                   </div>
@@ -290,13 +290,13 @@ function FiscalPageContent() {
                     <tr key={c.id as string} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono">{c.period as string}</td>
                       <td className="px-4 py-3 text-right">
-                        {(c.grossIncome as number).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {Number(c.grossIncome).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {(c.taxableBase as number).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {Number(c.taxableBase).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-red-600">
-                        {(c.taxDue as number).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {Number(c.taxDue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{c.status as string}</span>
