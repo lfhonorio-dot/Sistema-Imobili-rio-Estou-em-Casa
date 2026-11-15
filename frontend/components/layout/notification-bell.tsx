@@ -17,7 +17,7 @@ const ago = (iso: string) => {
   return h < 24 ? `há ${h} h` : new Date(iso).toLocaleDateString('pt-BR');
 };
 
-export function NotificationBell() {
+export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' } = {}) {
   const unread = useUnreadCount();
   const list = useNotificationList(15);
   const { markRead, markAll } = useNotificationActions();
@@ -35,7 +35,7 @@ export function NotificationBell() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-0">
+      <PopoverContent align={align} className="w-96 max-w-[calc(100vw-1rem)] p-0">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-semibold">Notificações</span>
           {count > 0 && (

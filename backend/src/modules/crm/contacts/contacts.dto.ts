@@ -15,6 +15,7 @@ import {
   Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { EmptyToNull } from '../../../common/transforms/empty-to-null';
 
 // Tipos válidos de contato
 const CONTACT_TYPES = ['PERSON', 'COMPANY'] as const;
@@ -37,21 +38,25 @@ export class CreateContactDto {
   @IsString()
   name!: string;
 
+  @EmptyToNull()
   @IsOptional()
-  @IsEmail()
-  email?: string;
+  @IsEmail({}, { message: 'E-mail inválido.' })
+  email?: string | null;
 
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  phone?: string;
+  phone?: string | null;
 
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  cpf?: string;
+  cpf?: string | null;
 
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  cnpj?: string;
+  cnpj?: string | null;
 
   @IsOptional()
   @IsDateString()
@@ -166,21 +171,25 @@ export class UpdateContactDto {
   @IsString()
   name?: string;
 
+  @EmptyToNull()
   @IsOptional()
-  @IsEmail()
-  email?: string;
+  @IsEmail({}, { message: 'E-mail inválido.' })
+  email?: string | null;
 
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  phone?: string;
+  phone?: string | null;
 
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  cpf?: string;
+  cpf?: string | null;
 
+  @EmptyToNull()
   @IsOptional()
   @IsString()
-  cnpj?: string;
+  cnpj?: string | null;
 
   @IsOptional()
   @IsDateString()
