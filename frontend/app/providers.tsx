@@ -17,9 +17,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 60 * 1000, // 1 minuto
             retry: (failureCount, error) => {
-              // Não retentar em erros 401/403
+              // Erros 4xx (não autorizado, sem acesso, não encontrado, dado inválido)
+              // não mudam ao repetir: mostra a mensagem na hora. Antes, um 404 ficava
+              // vários segundos em "Carregando..." enquanto tentava de novo 3 vezes.
+              // Repete só falha de rede e erro do servidor (5xx).
               const status = (error as { response?: { status: number } })?.response?.status;
-              if (status === 401 || status === 403) return false;
+              if (status && status >= 400 && status < 500) return false;
               return failureCount < 3;
             },
           },
