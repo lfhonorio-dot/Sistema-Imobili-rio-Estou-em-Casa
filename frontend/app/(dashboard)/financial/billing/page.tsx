@@ -29,7 +29,9 @@ function GatewayCard() {
   const accounts = useBankAccounts();
   const save = useSaveGateway();
   const { rotate, test } = useGatewayActions();
-  const asaas: Gateway | undefined = (gateways.data ?? []).find((g) => g.provider === 'ASAAS');
+  // conta do CNPJ vigente; as de CNPJs anteriores ficam guardadas só para as cobranças antigas
+  const asaas: Gateway | undefined = (gateways.data ?? []).find((g) => g.provider === 'ASAAS' && !g.previousCnpj);
+  const oldAccounts = (gateways.data ?? []).filter((g) => g.previousCnpj);
   const [apiKey, setApiKey] = useState('');
   const [env, setEnv] = useState<string | null>(null);
   const [acc, setAcc] = useState<string | null>(null);
@@ -79,7 +81,9 @@ function GatewayCard() {
             <p className="text-muted-foreground">
               {asaas
                 ? <>Situação: <b className={asaas.isActive ? 'text-green-700' : 'text-red-700'}>{asaas.isActive ? 'ativo' : 'desativado'}</b> · ambiente {asaas.environment === 'PRODUCTION' ? 'produção' : 'sandbox (teste)'}</>
-                : 'Nenhum gateway cadastrado: boleto e PIX ficam indisponíveis até você cadastrar a chave do Asaas.'}
+                : oldAccounts.length
+                  ? <span className="text-amber-800">O CNPJ da empresa mudou: cadastre a conta Asaas aberta no <b>novo CNPJ</b> para emitir cobranças novas.</span>
+                  : 'Nenhum gateway cadastrado: boleto e PIX ficam indisponíveis até você cadastrar a chave do Asaas.'}
             </p>
             <div className="grid md:grid-cols-3 gap-3">
               <div className="space-y-1 md:col-span-1"><Label>Chave de API {asaas && '(deixe vazio para manter)'}</Label>
@@ -103,6 +107,15 @@ function GatewayCard() {
               {asaas && <Button variant="outline" disabled={test.isPending} onClick={() => void doTest()}>{test.isPending ? 'Testando...' : 'Testar conexão'}</Button>}
               {asaas && <Button variant="outline" onClick={() => void toggleActive()}>{asaas.isActive ? 'Desativar' : 'Ativar'}</Button>}
             </div>
+            {oldAccounts.length > 0 && (
+              <div className="rounded-md border border-dashed p-3 space-y-1">
+                <p className="font-medium">Contas do CNPJ anterior</p>
+                <p className="text-xs text-muted-foreground">Ficam guardadas só para receber os avisos de pagamento e cancelar as cobranças emitidas nelas. Não emitem cobranças novas. Mantenha o webhook delas ligado no Asaas até a última cobrança antiga ser paga ou cancelada.</p>
+                {oldAccounts.map((g) => (
+                  <p key={g.id} className="text-xs">{g.name} · {g.environment === 'PRODUCTION' ? 'produção' : 'sandbox'} · webhook {g.hasWebhookToken ? 'configurado' : <span className="text-red-700">sem token</span>}</p>
+                ))}
+              </div>
+            )}
             {asaas && (
               <div className="rounded-md border p-3 space-y-2">
                 <p className="font-medium">Baixa automática (webhook)</p>

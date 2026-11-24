@@ -92,7 +92,7 @@ export class NfseConfigService {
     // estão vazios (trocar é em Workspace → Dados da empresa). Demais dados
     // legais (inscrição municipal, regime) seguem para o registro vigente.
     const legal = await this.issuer.updateDetails(workspaceId, userId, {
-      cnpj: dto.cnpj, razaoSocial: dto.razaoSocial, inscricaoMunicipal: dto.inscricaoMunicipal, regimeTributario: dto.regime,
+      cnpj: dto.cnpj, razaoSocial: dto.razaoSocial, inscricaoMunicipal: dto.inscricaoMunicipal, regimeTributario: dto.regime ?? current.regime,
     });
     for (const f of PCT_FIELDS) {
       const v = dto[f];

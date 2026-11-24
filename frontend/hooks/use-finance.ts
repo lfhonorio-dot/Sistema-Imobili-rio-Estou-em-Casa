@@ -55,6 +55,8 @@ export interface BankTx {
 export interface Gateway {
   id: string; provider: string; name: string; environment: string; isActive: boolean; isDefault: boolean;
   hasWebhookToken: boolean; webhookPath: string; settlementBankAccountId?: string | null;
+  /** conta de um CNPJ anterior: só baixa/cancela as cobranças antigas */
+  previousCnpj?: boolean;
 }
 export interface CashFlowRow { period: string; realizedIn: number; realizedOut: number; projectedIn: number; projectedOut: number; realizedBalance: number; projectedBalance: number }
 export interface CashFlow {

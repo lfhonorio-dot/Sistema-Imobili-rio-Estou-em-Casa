@@ -20,6 +20,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { ErrorState } from '@/components/common/error-state';
 import { OperationProfileCard } from '@/components/settings/operation-profile-card';
+import { CompanyLegalCard } from '@/components/settings/company-legal-card';
 
 const schema = z.object({
   name: z.string().min(2).max(200).optional(),
@@ -76,6 +77,7 @@ export default function WorkspaceSettingsPage() {
     onSuccess: () => {
       toast.success('Configurações salvas com sucesso!');
       void queryClient.invalidateQueries({ queryKey: ['workspace'] });
+      void queryClient.invalidateQueries({ queryKey: ['issuer'] });
     },
     onError: (err) => {
       toast.error(getApiErrorMessage(err, 'Erro ao salvar configurações. Tente novamente.'));
@@ -83,7 +85,8 @@ export default function WorkspaceSettingsPage() {
   });
 
   function onSubmit(data: FormData) {
-    updateMutation.mutate(data);
+    const { cnpj, ...rest } = data;
+    updateMutation.mutate(workspace?.cnpj ? rest : { ...rest, cnpj });
   }
 
   if (isLoading) {
@@ -118,6 +121,10 @@ export default function WorkspaceSettingsPage() {
           <OperationProfileCard current={workspace?.operationProfile} canEdit={canEdit} />
         </div>
 
+        <div className="mb-6">
+          <CompanyLegalCard canEdit={canEdit} />
+        </div>
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Dados da empresa */}
           <Card>
@@ -142,7 +149,9 @@ export default function WorkspaceSettingsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="cnpj">CNPJ</Label>
-                <Input id="cnpj" placeholder="00.000.000/0001-00" {...register('cnpj')} />
+                {/* preenchido: só se troca pelo fluxo "Trocar CNPJ ou razão social" (guarda o histórico) */}
+                <Input id="cnpj" placeholder="00.000.000/0001-00" disabled={!!workspace?.cnpj} {...register('cnpj')} />
+                {workspace?.cnpj && <p className="text-xs text-muted-foreground">Para trocar o CNPJ use “Trocar CNPJ ou razão social” no quadro acima.</p>}
               </div>
 
               <div className="space-y-2">

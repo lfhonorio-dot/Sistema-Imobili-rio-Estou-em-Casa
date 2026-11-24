@@ -176,8 +176,10 @@ function ConfigPanel() {
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   const c = q.data as NfseConfig;
   const s = (k: string) => String(f[k] ?? '');
+  // CNPJ e razão social preenchidos só mudam pelo fluxo com histórico (Workspace → Dados legais da empresa)
+  const locked = (k: string) => (k === 'cnpj' || k === 'razaoSocial') && !!(c as unknown as Record<string, unknown>)[k];
   const field = (k: string, label: string, ph = '') => (
-    <div className="space-y-1"><Label htmlFor={`nf-${k}`} className="text-xs">{label}</Label><Input id={`nf-${k}`} value={s(k)} placeholder={ph} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></div>
+    <div className="space-y-1"><Label htmlFor={`nf-${k}`} className="text-xs">{label}</Label><Input id={`nf-${k}`} value={s(k)} placeholder={ph} disabled={locked(k)} title={locked(k) ? 'Para trocar, use Configurações → Workspace → “Trocar CNPJ ou razão social”.' : undefined} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></div>
   );
   const check = (k: string, label: string) => (
     <label className="flex items-center gap-2"><input type="checkbox" checked={!!f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} />{label}</label>
@@ -245,6 +247,7 @@ function ConfigPanel() {
           {field('itemListaServico', 'Item da LC 116', 'ex.: 10.05')}{field('codigoTributacaoMunicipio', 'Código de tributação do município')}{field('cnae', 'CNAE')}
           {field('rpsSerie', 'Série do RPS')}{field('rpsNextNumber', 'Próximo número de RPS')}
           <div className="space-y-2 pt-5">{check('optanteSimples', 'Optante pelo Simples')}{check('incentivoFiscal', 'Incentivo fiscal')}</div>
+          {(locked('cnpj') || locked('razaoSocial')) && <p className="md:col-span-3 text-xs text-muted-foreground">CNPJ e razão social se trocam em Configurações → Workspace → “Trocar CNPJ ou razão social” — assim as notas já emitidas continuam com os dados antigos.</p>}
         </CardContent>
       </Card>
 

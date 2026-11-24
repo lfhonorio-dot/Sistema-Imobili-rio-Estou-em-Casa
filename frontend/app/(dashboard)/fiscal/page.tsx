@@ -53,12 +53,18 @@ function FiscalPageContent() {
     }
   };
 
+  // CNPJs da própria imobiliária no ano (troca de CNPJ no meio do ano = um arquivo para cada)
+  const [companyCnpjs, setCompanyCnpjs] = useState<Array<{ cnpj: string | null; cnpjFormatted: string; name: string | null; periodFrom: string; periodTo: string; events: number }>>([]);
   async function loadDeclarants() {
     try {
-      const res = await api.get('/fiscal/dimob/export', { params: { year: exportYear } });
+      const [res, comp] = await Promise.all([
+        api.get('/fiscal/dimob/export', { params: { year: exportYear } }),
+        api.get('/fiscal/dimob/declarants', { params: { year: exportYear } }),
+      ]);
       const data = res.data.data;
       setDeclarants(data?.declarantes ?? []);
       setExportCsv(data?.csv ?? '');
+      setCompanyCnpjs(comp.data.data?.company ?? []);
     } catch (err) {
       alert(getApiErrorMessage(err, 'Erro ao carregar exportação DIMOB.'));
     }
@@ -181,6 +187,32 @@ function FiscalPageContent() {
                   {validation.issues.map((x, i) => <li key={i} className={x.level === 'ERROR' ? 'text-red-700' : 'text-amber-700'}>{x.where}: {x.message}</li>)}
                 </ul>
                 <p className="mt-2 text-xs text-gray-600">Confere vendedor e comprador (CPF/CNPJ válidos e nome), valores, datas e a estrutura do arquivo (R01, R02 locação, R04 venda, T9). O programa da Receita faz a conferência final ao importar.</p>
+              </div>
+            )}
+            {companyCnpjs.length > 1 && (
+              <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm">
+                <p className="font-medium">A empresa trocou de CNPJ em {exportYear}: entregue uma DIMOB para cada CNPJ.</p>
+                <p className="text-xs text-gray-600 mb-2">Cada operação entra no CNPJ que estava valendo na data dela. Escolha o declarante:</p>
+                <div className="space-y-2">
+                  {companyCnpjs.map((c) => {
+                    const doc = c.cnpj ?? '';
+                    const until = new Date(new Date(c.periodTo).getTime() - 864e5);
+                    return (
+                      <div key={doc} className="flex items-center justify-between rounded border bg-white p-2">
+                        <div>
+                          <p className="font-medium">{c.name ?? '(sem razão social)'} — CNPJ {c.cnpjFormatted}</p>
+                          <p className="text-xs text-gray-500">
+                            de {new Date(c.periodFrom).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} até {until.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} · {c.events} operação(ões)
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => void runValidation(doc)} disabled={!doc || !c.events} className="border text-xs px-3 py-2 rounded disabled:opacity-40">Validar</button>
+                          <button onClick={() => downloadPgd(doc)} disabled={!doc || !c.events} className="bg-gray-900 text-white text-xs px-3 py-2 rounded disabled:opacity-40">Arquivo PGD deste CNPJ</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
             {declarants.length > 0 && (
