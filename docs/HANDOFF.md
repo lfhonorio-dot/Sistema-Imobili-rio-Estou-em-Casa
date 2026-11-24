@@ -45,6 +45,29 @@
 - NFSe: env-gated Focus NFe (`FOCUS_NFE_TOKEN` + `FOCUS_NFE_ENV`); sem token,
   registro interno. Status: `GET /fiscal/nfse/:id/status`.
 
+### Dados da empresa emitente (histórico de CNPJ/razão social)
+- Fonte oficial: `WorkspaceLegalEntity` (um registro vigente por imobiliária; índice
+  único parcial). `workspaces.cnpj/name/address` e `tax_configs.cnpj/razaoSocial/
+  inscricaoMunicipal/regime` continuam existindo e são sincronizados pelo `IssuerService`.
+- Trocar CNPJ ou razão social: `POST /issuer/change` (Dono/Admin) encerra o vigente
+  e cria outro com a data de início escolhida (pode ser retroativa, nunca futura;
+  o 1º registro vale "desde o início"). Arquiva certificado/RPS da NFS-e, vincula
+  as contas de gateway ao CNPJ antigo, volta a NFS-e para homologação e move para
+  o novo CNPJ os eventos DIMOB a partir da data. Auditado. Telas antigas só
+  preenchem CNPJ/razão vazios (trocar por elas → 400 com orientação).
+- `issuerSnapshot` (JSON) gravado na emissão em contrato (ao sair do rascunho ou
+  ao pedir assinatura), envelope (com `documentHtml` congelado), NFS-e (pedido),
+  boleto/PIX, comissão (recebida) e proposta. Imutável: trigger no banco + DTOs
+  sem o campo. Reimpressão/reenvio/exportação leem a cópia.
+- NFS-e de CNPJ anterior: cancelar/consultar usa o certificado arquivado no ambiente
+  em que a nota foi emitida; nota não autorizada do CNPJ antigo é recusada (pedir outra).
+- Asaas: uma conta por CNPJ; webhook identifica a conta pelo token e ignora aviso de
+  cobrança de outra conta; cobrança nova só pela conta do CNPJ vigente.
+- DIMOB: declarante = CNPJ vigente na data do evento; `GET /fiscal/dimob/declarants`
+  lista os CNPJs do ano com período; tela gera um arquivo por CNPJ.
+- Checklist pós-troca: `GET /issuer` (+ `PUT /issuer/checklist` para itens manuais).
+- Teste ponta a ponta: `backend/test/api/dados-emitente.mjs` (39 verificações).
+
 ### Financeiro/Cobrança
 - Boleto: env-gated Asaas (gateway ASAAS ativo em /billing/gateways → emissão real
   com linha digitável/PIX/bankSlipUrl e split bancário por walletId); sem gateway,
@@ -79,7 +102,8 @@
 | WhatsApp | phoneNumberId + accessToken (Meta Business) via `PUT /whatsapp/config` |
 | Portais | Colar URL de `GET /marketing/portals/feed-url` no painel do portal; definir `BACKEND_PUBLIC_URL` |
 | Anti-cold-start | UptimeRobot ping 5min em `<backend>/api/v1/health` |
-| CNPJ da imobiliária | Preencher no Workspace (aparece nos contratos/DIMOB) e TaxConfig (`POST /fiscal/config`) |
+| CNPJ da imobiliária | Preencher uma vez no Workspace ou na configuração fiscal. Para TROCAR: Workspace → Dados legais da empresa → "Trocar CNPJ ou razão social" (guarda o histórico) |
+| `DATABASE_URL_DIRECT` | Conexão direta do Neon (sem `-pooler`) para as migrations. Sem ela, o `start.sh` usa a `DATABASE_URL` |
 | DIMOB | Registrar eventos de contratos antigos: `POST /fiscal/dimob/contracts/:id/register` |
 
 ## BACKLOG — próximos passos (em ordem sugerida)
@@ -109,6 +133,13 @@ e `npm run seed`). Use `./node_modules/.bin/prisma` — `npx prisma` baixa a v7,
 o schema (datasource `url`).
 
 ## Dívidas/atenções conhecidas
+
+- Lint não configurado (backend sem `.eslintrc`; `next lint` pede configuração
+  interativa) — fica para um PR separado.
+- DIMOB legado (`POST /fiscal/dimob/generate`, registro anual por contrato) não
+  separa por CNPJ; use a exportação por declarante.
+- Contrato em rascunho acompanha os dados atuais da empresa; a cópia é gravada ao
+  ativar/sair do rascunho ou ao pedir assinatura.
 
 - `payCommission` (legado) delega a `receiveCommission`.
 - E-mails da régua reenviam se o job rodar 2x no mesmo dia (aceito; disparo manual

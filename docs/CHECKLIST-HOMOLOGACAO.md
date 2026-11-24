@@ -177,6 +177,24 @@ Se o resultado for diferente do esperado, **pare**, anote o número do passo, ti
 - [ ] **Anonimizar** um cliente **sem** contrato (informe o motivo).
       → Dados pessoais somem. Num cliente **com** contrato, o aviso diz que nome e CPF ficam guardados por obrigação legal.
 
+### C7. Troca de CNPJ — *use uma imobiliária só de teste*
+Antes: emita nela um contrato (ative), uma nota fiscal, um boleto e um recibo de comissão.
+- [ ] **Configurações → Workspace**: o quadro **Dados legais da empresa** mostra CNPJ e razão social. O campo CNPJ do formulário fica travado.
+- [ ] **Trocar CNPJ ou razão social**: informe um CNPJ de teste válido, a razão social nova e a data de início. Marque "Entendi" e confirme.
+      → Aparece o histórico (CNPJ antigo com o período) e o quadro **"O CNPJ mudou"** com o checklist.
+- [ ] Reabra o **contrato antigo**, o **recibo antigo** e reenvie a **nota antiga** por e-mail.
+      → Todos continuam com o CNPJ e o nome **antigos**.
+- [ ] Tente emitir um **boleto novo** antes de cadastrar a conta Asaas do novo CNPJ.
+      → Recusado com a orientação para cadastrar a conta nova.
+- [ ] **Boletos e PIX**: cadastre a conta Asaas do novo CNPJ. A antiga aparece em "Contas do CNPJ anterior".
+- [ ] **Notas Fiscais → Configuração**: instale o certificado do **novo** CNPJ (o do antigo é recusado).
+      → No checklist, conta de cobrança e certificado ficam marcados sozinhos.
+- [ ] Emita um **contrato novo**, um **boleto novo** e uma **nota nova**.
+      → Saem com o CNPJ e a razão social **novos**.
+- [ ] **Cancele a nota antiga**. → A prefeitura aceita (usa o certificado antigo guardado).
+- [ ] **Fiscal → DIMOB → Carregar declarantes** do ano.
+      → Aparecem os **dois CNPJs**, cada um com seu período e suas operações; baixe um arquivo para cada.
+
 ---
 
 ## Parte D — Antes de usar com clientes reais
