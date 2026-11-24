@@ -9,8 +9,9 @@ import { SignedXml } from 'xml-crypto';
 
 export const ASAAS_KEY = 'chave-asaas-teste';
 
-export async function startAsaas(port = 3999) {
-  const state = { payments: new Map(), deleted: [], calls: [] };
+// keys: chaves aceitas (uma por conta; depois de trocar o CNPJ há duas contas)
+export async function startAsaas(port = 3999, keys = [ASAAS_KEY]) {
+  const state = { payments: new Map(), deleted: [], calls: [], keyOf: new Map() };
   let seq = 0;
   const server = http.createServer((req, res) => {
     let body = '';
@@ -18,7 +19,7 @@ export async function startAsaas(port = 3999) {
     req.on('end', () => {
       state.calls.push(`${req.method} ${req.url}`);
       const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
-      if (req.headers.access_token !== ASAAS_KEY) return send(401, { errors: [{ description: 'Chave de API inválida' }] });
+      if (!keys.includes(req.headers.access_token)) return send(401, { errors: [{ description: 'Chave de API inválida' }] });
       const u = new URL(req.url, 'http://x');
       if (req.method === 'GET' && u.pathname === '/customers') return send(200, { data: [] });
       if (req.method === 'POST' && u.pathname === '/customers') return send(200, { id: 'cus_' + (++seq) });
@@ -26,6 +27,7 @@ export async function startAsaas(port = 3999) {
         const p = JSON.parse(body);
         const id = 'pay_' + (++seq);
         state.payments.set(id, p);
+        state.keyOf.set(id, req.headers.access_token);
         return send(200, { id, status: 'PENDING', bankSlipUrl: p.billingType === 'BOLETO' ? `https://asaas.test/b/${id}.pdf` : null, invoiceUrl: `https://asaas.test/i/${id}`, nossoNumero: 'NN' + seq });
       }
       let m = u.pathname.match(/^\/payments\/([^/]+)\/identificationField$/);
@@ -34,7 +36,8 @@ export async function startAsaas(port = 3999) {
       if (m) return send(200, { encodedImage: 'iVBORw0KGgo=', payload: '00020126580014br.gov.bcb.pix0136' + m[1] });
       m = u.pathname.match(/^\/payments\/([^/]+)$/);
       if (m && req.method === 'DELETE') {
-        if (!state.payments.has(m[1])) return send(404, { errors: [{ description: 'Cobrança não encontrada' }] });
+        // cada conta só enxerga as próprias cobranças
+        if (!state.payments.has(m[1]) || state.keyOf.get(m[1]) !== req.headers.access_token) return send(404, { errors: [{ description: 'Cobrança não encontrada' }] });
         state.deleted.push(m[1]);
         return send(200, { deleted: true, id: m[1] });
       }
@@ -57,17 +60,24 @@ export function makeTestCertificate(cnpj = '12345678000195', password = 'senha12
   return { pfx, password, certPem: forge.pki.certificateToPem(cert), cnpj };
 }
 
+// certPem: um certificado ou uma lista (empresa com CNPJ antigo e novo)
 export async function startSil(certPem, port = 3998) {
-  const sil = { calls: [], badSignatures: 0, notes: new Map(), cancelled: new Set(), seq: 2026000700 };
+  const pems = Array.isArray(certPem) ? certPem : [certPem];
+  // signedBy: [{ op, cert (posição na lista), cnpj (do prestador no XML) }]
+  const sil = { calls: [], badSignatures: 0, notes: new Map(), cancelled: new Set(), seq: 2026000700, signedBy: [] };
   const resp = (op, inner) => `<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><ns2:${op}Response xmlns:ns2="http://nfse.abrasf.org.br"><outputXML>${inner.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</outputXML></ns2:${op}Response></soap:Body></soap:Envelope>`;
   const comp = (n) => `<CompNfse><Nfse versao="2.04"><InfNfse Id="N${n.numero}"><Numero>${n.numero}</Numero><CodigoVerificacao>CV${n.numero}</CodigoVerificacao><DataEmissao>${new Date().toISOString().slice(0, 19)}</DataEmissao></InfNfse></Nfse></CompNfse>`;
   const msg = (root, code, text) => `<${root}><ListaMensagemRetorno><MensagemRetorno><Codigo>${code}</Codigo><Mensagem>${text}</Mensagem></MensagemRetorno></ListaMensagemRetorno></${root}>`;
-  const verify = (xml) => {
+  const verify = (xml, op) => {
     const m = xml.match(/<Signature[\s\S]*?<\/Signature>/);
     if (!m) return false;
-    const v = new SignedXml({ publicCert: certPem });
-    v.loadSignature(m[0]);
-    try { return v.checkSignature(xml); } catch { return false; }
+    const idx = pems.findIndex((pem) => {
+      const v = new SignedXml({ publicCert: pem });
+      v.loadSignature(m[0]);
+      try { return v.checkSignature(xml); } catch { return false; }
+    });
+    if (idx >= 0) sil.signedBy.push({ op, cert: idx, cnpj: (xml.match(/<Cnpj>(\d+)<\/Cnpj>/) || [])[1] ?? null });
+    return idx >= 0;
   };
   const server = http.createServer((req, res) => {
     let body = '';
@@ -78,7 +88,7 @@ export async function startSil(certPem, port = 3998) {
       sil.calls.push(op);
       const send = (x) => { res.writeHead(200, { 'Content-Type': 'text/xml' }); res.end(x); };
       if (op === 'GerarNfse') {
-        if (!verify(dados)) { sil.badSignatures++; return send(resp(op, msg('GerarNfseResposta', 'E500', 'Assinatura inválida'))); }
+        if (!verify(dados, op)) { sil.badSignatures++; return send(resp(op, msg('GerarNfseResposta', 'E500', 'Assinatura inválida'))); }
         const rps = (dados.match(/<IdentificacaoRps>([\s\S]*?)<\/IdentificacaoRps>/) || [])[1] ?? '';
         const key = (rps.match(/<Numero>(\d+)<\/Numero>/) || [])[1];
         if (sil.notes.has(key)) return send(resp(op, msg('GerarNfseResposta', 'E10', 'RPS já informado')));
@@ -92,7 +102,7 @@ export async function startSil(certPem, port = 3998) {
         return send(resp(op, n ? `<ConsultarNfseRpsResposta>${comp(n)}</ConsultarNfseRpsResposta>` : msg('ConsultarNfseRpsResposta', 'E92', 'RPS não encontrado')));
       }
       if (op === 'CancelarNfse') {
-        if (!verify(dados)) { sil.badSignatures++; return send(resp(op, msg('CancelarNfseResposta', 'E500', 'Assinatura inválida'))); }
+        if (!verify(dados, op)) { sil.badSignatures++; return send(resp(op, msg('CancelarNfseResposta', 'E500', 'Assinatura inválida'))); }
         sil.cancelled.add((dados.match(/<Numero>(\d+)<\/Numero>/) || [])[1]);
         return send(resp(op, `<CancelarNfseResposta><RetCancelamento><NfseCancelamento><Confirmacao><DataHora>${new Date().toISOString()}</DataHora></Confirmacao></NfseCancelamento></RetCancelamento></CancelarNfseResposta>`));
       }

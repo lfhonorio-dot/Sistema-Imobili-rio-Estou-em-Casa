@@ -339,6 +339,7 @@ export class DimobService {
   /** Registros antigos podem ter o CNPJ com ou sem pontuação. */
   private docVariants(doc: string): string[] {
     const d = (doc ?? '').replace(/\D/g, '');
+    if (!d) return [doc ?? '']; // imobiliária sem CNPJ: eventos ficam com declarante vazio
     return [...new Set([doc, d, formatCnpj(d)].filter(Boolean))];
   }
 

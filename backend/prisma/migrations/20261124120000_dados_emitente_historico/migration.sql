@@ -74,7 +74,7 @@ INSERT INTO "workspace_legal_entities"
 SELECT gen_random_uuid()::text, w."id",
        NULLIF(regexp_replace(COALESCE(NULLIF(t."cnpj", ''), w."cnpj", ''), '\D', '', 'g'), ''),
        NULLIF(t."razaoSocial", ''), w."name", NULLIF(t."inscricaoMunicipal", ''),
-       NULLIF(w."address", ''), t."regime", w."createdAt", '{}', NOW(), NOW()
+       NULLIF(w."address", ''), t."regime", TIMESTAMP '2000-01-01 03:00:00', '{}', NOW(), NOW()
 FROM "workspaces" w
 LEFT JOIN "tax_configs" t ON t."workspaceId" = w."id"
 WHERE NOT EXISTS (SELECT 1 FROM "workspace_legal_entities" e WHERE e."workspaceId" = w."id");

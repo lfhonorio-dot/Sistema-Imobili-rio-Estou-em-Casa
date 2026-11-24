@@ -9,7 +9,7 @@ function entity(over: Record<string, unknown> = {}) {
   return {
     id: 'le-1', workspaceId: 'ws-1', cnpj: CNPJ_A, razaoSocial: 'Empresa Antiga Ltda', nomeFantasia: 'Estou em Casa',
     inscricaoMunicipal: '123', endereco: 'Rua A, 1', regimeTributario: 'LUCRO_PRESUMIDO',
-    validFrom: new Date('2024-01-01T03:00:00Z'), validTo: null, createdBy: null,
+    validFrom: new Date('2000-01-01T03:00:00Z'), validTo: null, createdBy: null,
     nfseCertPfxEnc: null, nfseCertPasswordEnc: null, nfseCertSubject: null, nfseCertValidUntil: null,
     nfseRpsSerie: null, nfseRpsNextNumber: null, checklist: {}, createdAt: new Date(), updatedAt: new Date(), deletedAt: null,
     ...over,
@@ -24,6 +24,7 @@ function makePrisma() {
     paymentGatewayConfig: { updateMany: jest.fn(), findFirst: jest.fn() },
     whatsAppConfig: { findFirst: jest.fn() },
     contract: { updateMany: jest.fn(), findFirst: jest.fn() },
+    dimobRecord: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
   };
   p.$transaction = jest.fn((fn: any) => fn(p));
   return p;
@@ -51,12 +52,12 @@ describe('IssuerService (dados da empresa com histórico)', () => {
 
     it('imobiliária sem registro: cria o vigente a partir do cadastro atual', async () => {
       prisma.workspaceLegalEntity.findFirst.mockResolvedValue(null);
-      prisma.workspace.findFirst.mockResolvedValue({ name: 'Imob', cnpj: '11.222.333/0001-81', address: null, createdAt: new Date('2025-01-01') });
+      prisma.workspace.findFirst.mockResolvedValue({ name: 'Imob', cnpj: '11.222.333/0001-81', address: null });
       prisma.taxConfig.findFirst.mockResolvedValue(null);
       prisma.workspaceLegalEntity.create.mockImplementation(async ({ data }: any) => ({ id: 'novo', ...data }));
       const s = await service.getCurrentSnapshot('ws-1');
       expect(s.cnpj).toBe(CNPJ_A);
-      expect(prisma.workspaceLegalEntity.create.mock.calls[0][0].data.workspaceId).toBe('ws-1');
+      expect(prisma.workspaceLegalEntity.create.mock.calls[0][0].data).toMatchObject({ workspaceId: 'ws-1', validFrom: new Date('2000-01-01T03:00:00.000Z') });
     });
   });
 
@@ -107,7 +108,8 @@ describe('IssuerService (dados da empresa com histórico)', () => {
       prisma.workspaceLegalEntity.findFirst.mockResolvedValue(entity());
       await expect(service.changeIdentity('ws-1', 'u-1', { ...input, cnpj: '11111111111111' })).rejects.toThrow('CNPJ inválido.');
       await expect(service.changeIdentity('ws-1', 'u-1', { ...input, validFrom: '2999-01-01' })).rejects.toThrow(/futuro/);
-      await expect(service.changeIdentity('ws-1', 'u-1', { ...input, validFrom: '2023-12-01' })).rejects.toThrow(/precisa ser depois/);
+      prisma.workspaceLegalEntity.findFirst.mockResolvedValue(entity({ validFrom: new Date('2025-08-01T03:00:00Z') }));
+      await expect(service.changeIdentity('ws-1', 'u-1', { ...input, validFrom: '2025-07-01' })).rejects.toThrow(/precisa ser depois/);
     });
 
     it('recusa quando nada muda', async () => {
@@ -141,6 +143,11 @@ describe('IssuerService (dados da empresa com histórico)', () => {
       expect(tax.data).toMatchObject({ cnpj: CNPJ_B, certPfxEnc: null, nfseEnvironment: 'HOMOLOG', productionAuthorizedAt: null });
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'LEGAL_ENTITY_CNPJ_CHANGED', workspaceId: 'ws-1', userId: 'u-1' }));
       expect(r.cnpjChanged).toBe(true);
+      // DIMOB: eventos a partir da data de início passam para o novo CNPJ
+      expect(prisma.dimobRecord.updateMany).toHaveBeenCalledWith({
+        where: { workspaceId: 'ws-1', deletedAt: null, declarantDoc: { in: [CNPJ_A, '11.222.333/0001-81'] }, eventDate: { gte: new Date('2025-07-01T03:00:00.000Z') } },
+        data: { declarantDoc: CNPJ_B, declarantName: 'Empresa Nova Ltda' },
+      });
     });
 
     it('troca só da razão social mantém certificado e inscrição municipal', async () => {

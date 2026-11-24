@@ -15,7 +15,7 @@ import { Prisma, WorkspaceLegalEntity } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { validCnpj } from '../erp/fiscal/dimob.validate';
-import { asSnapshot, IssuerSnapshot, onlyDigits } from './issuer.types';
+import { asSnapshot, formatCnpj, IssuerSnapshot, onlyDigits } from './issuer.types';
 
 export type FreezableModel = 'contract' | 'signatureEnvelope' | 'nfseRecord' | 'boleto' | 'commission' | 'proposal';
 
@@ -55,6 +55,10 @@ const MANUAL_ITEMS: Array<Omit<ChecklistItem, 'done' | 'auto'>> = [
 ];
 
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000-03:00`); // meia-noite em Brasília
+// O primeiro registro vale "desde o início": não há histórico anterior ao
+// sistema, e assim uma troca de CNPJ que aconteceu no começo do ano pode ser
+// registrada depois (com a data real), o que a DIMOB do ano precisa.
+export const FIRST_VALID_FROM = new Date('2000-01-01T03:00:00.000Z');
 
 @Injectable()
 export class IssuerService {
@@ -67,7 +71,7 @@ export class IssuerService {
     const found = await db.workspaceLegalEntity.findFirst({ where: { workspaceId, validTo: null, deletedAt: null } });
     if (found) return found;
     const [ws, tax] = await Promise.all([
-      db.workspace.findFirst({ where: { id: workspaceId }, select: { name: true, cnpj: true, address: true, createdAt: true } }),
+      db.workspace.findFirst({ where: { id: workspaceId }, select: { name: true, cnpj: true, address: true } }),
       db.taxConfig.findFirst({ where: { workspaceId }, select: { cnpj: true, razaoSocial: true, inscricaoMunicipal: true, regime: true } }),
     ]);
     if (!ws) throw new NotFoundException('Imobiliária não encontrada.');
@@ -81,7 +85,7 @@ export class IssuerService {
           inscricaoMunicipal: tax?.inscricaoMunicipal || null,
           endereco: ws.address || null,
           regimeTributario: tax?.regime ?? null,
-          validFrom: ws.createdAt,
+          validFrom: FIRST_VALID_FROM,
         },
       });
     } catch (e) {
@@ -273,13 +277,23 @@ export class IssuerService {
         });
       }
 
+      // 4) DIMOB: eventos já registrados com data a partir do início da nova
+      //    vigência passam para a nova empresa (cada operação no CNPJ da sua data)
+      const oldDocs = [...new Set([cur.cnpj ?? '', formatCnpj(cur.cnpj)].filter(Boolean))];
+      const dimobMoved = oldDocs.length
+        ? (await tx.dimobRecord.updateMany({
+            where: { workspaceId, deletedAt: null, declarantDoc: { in: oldDocs }, eventDate: { gte: validFrom } },
+            data: { declarantDoc: cnpj, declarantName: razaoSocial },
+          })).count
+        : 0;
+
       await this.audit.log({
         workspaceId, userId, action: cnpjChanged ? 'LEGAL_ENTITY_CNPJ_CHANGED' : 'LEGAL_ENTITY_NAME_CHANGED',
         entity: 'WorkspaceLegalEntity', entityId: created.id,
         before: { id: archived.id, cnpj: cur.cnpj, razaoSocial: cur.razaoSocial, validFrom: cur.validFrom, validTo: validFrom },
-        after: { id: created.id, cnpj, razaoSocial, validFrom, certificadoArquivado: cnpjChanged && !!tax?.certPfxEnc },
+        after: { id: created.id, cnpj, razaoSocial, validFrom, certificadoArquivado: cnpjChanged && !!tax?.certPfxEnc, dimobEventosMovidos: dimobMoved },
       });
-      return { previous: archived, current: created, cnpjChanged };
+      return { previous: archived, current: created, cnpjChanged, dimobMoved };
     });
   }
 

@@ -16,6 +16,7 @@ const ROTEIROS = [
   ['fase5-financeiro.mjs', 'Financeiro: baixa parcial, boleto e PIX por webhook'],
   ['fase6-nfse.mjs', 'NFS-e com prefeitura simulada'],
   ['fase7-permissoes.mjs', 'Permissões do Corretor, relatórios, avisos, LGPD'],
+  ['dados-emitente.mjs', 'Troca de CNPJ: documentos antigos intactos, novos com a empresa nova, DIMOB por CNPJ'],
 ];
 const only = process.argv.slice(2);
 const resumo = [];
