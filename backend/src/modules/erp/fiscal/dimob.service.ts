@@ -2,6 +2,8 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IssuerService } from '../../issuer/issuer.service';
+import { formatCnpj } from '../../issuer/issuer.types';
 
 type Db = PrismaService | Prisma.TransactionClient;
 import { computeDimobDeclarants, PartnerShareInput } from './dimob.calc';
@@ -12,9 +14,23 @@ import { validatePgdFile, validateSaleParties } from './dimob.validate';
 export class DimobService {
   private readonly logger = new Logger(DimobService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private issuer?: IssuerService) {}
 
-  private async loadContext(workspaceId: string, contractId: string, db: Db = this.prisma) {
+  /**
+   * Empresa declarante numa data: o CNPJ vigente na data do evento (histórico
+   * de dados da empresa). Assim, reprocessar um evento antigo depois de uma
+   * troca de CNPJ continua no CNPJ certo.
+   */
+  private async declarantAt(workspaceId: string, at: Date | null, db: Db) {
+    if (this.issuer) {
+      const e = at ? await this.issuer.getAt(workspaceId, at, db) : await this.issuer.getCurrent(workspaceId, db);
+      return { name: e.razaoSocial || e.nomeFantasia || '', cnpj: e.cnpj };
+    }
+    const ws = await db.workspace.findUnique({ where: { id: workspaceId }, select: { name: true, cnpj: true } });
+    return { name: ws?.name ?? '', cnpj: ws?.cnpj ?? null };
+  }
+
+  private async loadContext(workspaceId: string, contractId: string, db: Db = this.prisma, at: Date | null = null) {
     const contract = await db.contract.findFirst({
       where: { id: contractId, workspaceId, deletedAt: null },
       include: {
@@ -29,11 +45,6 @@ export class DimobService {
     });
     if (!contract) throw new NotFoundException('Contrato não encontrado');
 
-    const workspace = await db.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { name: true, cnpj: true },
-    });
-
     const partners: PartnerShareInput[] = (contract.splitRules ?? []).map((r: any) => ({
       name: r.recipient?.name ?? '',
       document: r.recipient?.document ?? null,
@@ -41,7 +52,7 @@ export class DimobService {
       percentage: Number(r.value),
     }));
 
-    return { contract, workspace, partners };
+    return { contract, partners, declarantAt: (d: Date | null = at) => this.declarantAt(workspaceId, d, db) };
   }
 
   // Remove os registros DIMOB de um contrato — usado quando o contrato de
@@ -67,7 +78,7 @@ export class DimobService {
     opts: { db?: Db; commissionTotal?: number; eventDate?: Date } = {},
   ) {
     const db = opts.db ?? this.prisma;
-    const { contract, workspace, partners } = await this.loadContext(workspaceId, contractId, db);
+    const { contract, partners, declarantAt } = await this.loadContext(workspaceId, contractId, db);
     if (contract.type !== 'SALE' && contract.type !== 'BROKERAGE') {
       return { created: 0, reason: 'not a sale/brokerage contract' };
     }
@@ -78,9 +89,10 @@ export class DimobService {
       (contract.commissionRate ? (saleValue * Number(contract.commissionRate)) / 100 : 0);
     const eventDate = opts.eventDate ?? contract.startDate ?? contract.createdAt;
     const year = new Date(eventDate).getFullYear();
+    const workspace = await declarantAt(new Date(eventDate));
 
     const declarants = computeDimobDeclarants(
-      { name: workspace?.name ?? '', cnpj: workspace?.cnpj ?? null },
+      { name: workspace.name, cnpj: workspace.cnpj },
       partners,
       commissionTotal,
     );
@@ -123,7 +135,8 @@ export class DimobService {
 
   // Registra um evento DIMOB mensal de LOCAÇÃO (por pagamento de aluguel).
   async registerRentalMonthEvent(workspaceId: string, contractId: string, opts: { grossAmount: number; competenceDate: Date; taxWithheld?: number }) {
-    const { contract, workspace, partners } = await this.loadContext(workspaceId, contractId);
+    const { contract, partners, declarantAt } = await this.loadContext(workspaceId, contractId);
+    const workspace = await declarantAt(opts.competenceDate);
     const commissionMonth = contract.commissionRate
       ? (opts.grossAmount * Number(contract.commissionRate)) / 100
       : 0;
@@ -131,7 +144,7 @@ export class DimobService {
     const month = opts.competenceDate.getMonth() + 1;
 
     const declarants = computeDimobDeclarants(
-      { name: workspace?.name ?? '', cnpj: workspace?.cnpj ?? null },
+      { name: workspace.name, cnpj: workspace.cnpj },
       partners,
       commissionMonth,
     );
@@ -176,10 +189,38 @@ export class DimobService {
     return { created };
   }
 
+  /**
+   * Declarantes possíveis de um ano, para a tela escolher: os CNPJs da
+   * empresa vigentes em algum momento do ano (com o período de cada um) e os
+   * demais declarantes que aparecem nos eventos (parceiros PJ).
+   * Um arquivo por CNPJ: cada operação fica no CNPJ vigente na data dela.
+   */
+  async declarants(workspaceId: string, year: number) {
+    const counts = await this.prisma.dimobRecord.groupBy({
+      by: ['declarantDoc', 'declarantName'],
+      where: { workspaceId, year, deletedAt: null },
+      _count: { _all: true },
+    });
+    const countOf = (doc: string | null) => counts.filter((c) => (c.declarantDoc ?? '').replace(/\D/g, '') === (doc ?? '').replace(/\D/g, ''))
+      .reduce((s, c) => s + c._count._all, 0);
+    const company = this.issuer ? await this.issuer.entitiesInYear(workspaceId, year) : [];
+    const companyDocs = new Set(company.map((e) => e.cnpj ?? ''));
+    return {
+      year,
+      company: company.map((e) => ({
+        cnpj: e.cnpj, cnpjFormatted: formatCnpj(e.cnpj), name: e.razaoSocial || e.nomeFantasia,
+        periodFrom: e.periodFrom, periodTo: e.periodTo, events: countOf(e.cnpj),
+      })),
+      others: counts
+        .filter((c) => !companyDocs.has((c.declarantDoc ?? '').replace(/\D/g, '')))
+        .map((c) => ({ declarantDoc: c.declarantDoc, name: c.declarantName, events: c._count._all })),
+    };
+  }
+
   // Agrega os eventos por declarante (CNPJ) e ano-calendário para exportação DIMOB.
   async exportDimob(workspaceId: string, year: number, declarantDoc?: string) {
     const records = await this.prisma.dimobRecord.findMany({
-      where: { workspaceId, year, deletedAt: null, ...(declarantDoc && { declarantDoc }) },
+      where: { workspaceId, year, deletedAt: null, ...(declarantDoc && { declarantDoc: { in: this.docVariants(declarantDoc) } }) },
       orderBy: [{ declarantDoc: 'asc' }, { referenceMonth: 'asc' }],
     });
 
@@ -223,7 +264,7 @@ export class DimobService {
   // Gera o arquivo TXT de importação do PGD DIMOB para um declarante/ano.
   async generatePgdFile(workspaceId: string, year: number, declarantDoc: string) {
     const records = await this.prisma.dimobRecord.findMany({
-      where: { workspaceId, year, declarantDoc, deletedAt: null },
+      where: { workspaceId, year, declarantDoc: { in: this.docVariants(declarantDoc) }, deletedAt: null },
       orderBy: [{ contractId: 'asc' }, { referenceMonth: 'asc' }],
     });
     if (records.length === 0) {
@@ -233,7 +274,7 @@ export class DimobService {
     }
 
     const declarant = {
-      cnpj: declarantDoc,
+      cnpj: declarantDoc.replace(/\D/g, '') || declarantDoc,
       name: records[0].declarantName ?? '',
       year,
     };
@@ -293,6 +334,12 @@ export class DimobService {
   async validateDimob(workspaceId: string, year: number, declarantDoc: string) {
     const r = await this.generatePgdFile(workspaceId, year, declarantDoc);
     return { year, declarantDoc, sales: r.sales, rentals: r.rentals, ...r.validation };
+  }
+
+  /** Registros antigos podem ter o CNPJ com ou sem pontuação. */
+  private docVariants(doc: string): string[] {
+    const d = (doc ?? '').replace(/\D/g, '');
+    return [...new Set([doc, d, formatCnpj(d)].filter(Boolean))];
   }
 
   private toCsv(declarantes: any[]): string {

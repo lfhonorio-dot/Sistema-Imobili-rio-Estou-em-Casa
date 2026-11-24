@@ -36,6 +36,12 @@ export class FiscalController {
     return this.dimob.registerSaleEvents(workspaceId, contractId);
   }
 
+  // CNPJs declarantes do ano (um arquivo por CNPJ; troca de CNPJ no meio do ano = dois arquivos)
+  @Get('dimob/declarants')
+  dimobDeclarants(@Headers('x-workspace-id') workspaceId: string, @Query('year') year: string) {
+    return this.dimob.declarants(workspaceId, Number(year));
+  }
+
   @Get('dimob/export')
   exportDimob(
     @Headers('x-workspace-id') workspaceId: string,

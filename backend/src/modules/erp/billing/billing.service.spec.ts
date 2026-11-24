@@ -29,6 +29,8 @@ function makePrismaMock() {
     $transaction: jest.fn(),
     paymentGatewayConfig: {
       findFirst: jest.fn(),
+      // webhook procura entre TODAS as contas Asaas com token (CNPJ atual e anteriores)
+      findMany: jest.fn(),
     },
     cnabFile: {
       create: jest.fn(),
@@ -60,6 +62,11 @@ describe('BillingService', () => {
     payments = { register: jest.fn(), reverse: jest.fn() };
     // transação de mentira: roda o callback com o próprio mock como "tx"
     prisma.$transaction.mockImplementation((fn: any) => fn(prisma));
+    // por padrão o findMany do webhook devolve a conta configurada no findFirst
+    prisma.paymentGatewayConfig.findMany.mockImplementation(async () => {
+      const g = await prisma.paymentGatewayConfig.findFirst();
+      return g?.webhookSecret ? [{ id: g.id ?? 'gw-1', webhookSecret: g.webhookSecret }] : [];
+    });
     service = new BillingService(prisma as any, asaas as any, payments as any);
   });
 
@@ -149,6 +156,31 @@ describe('BillingService', () => {
         where: { id: 'bol-2' },
         data: expect.objectContaining({ status: 'CANCELLED', financialEntryId: null }),
       });
+    });
+  });
+
+  describe('webhook com mais de uma conta Asaas (troca de CNPJ)', () => {
+    const contas = [
+      { id: 'gw-novo', webhookSecret: 'token-cnpj-novo' },
+      { id: 'gw-antigo', webhookSecret: 'token-cnpj-antigo' },
+    ];
+    beforeEach(() => prisma.paymentGatewayConfig.findMany.mockResolvedValue(contas));
+
+    it('aceita o aviso da conta do CNPJ anterior e baixa a cobrança antiga emitida nela', async () => {
+      prisma.boleto.findFirst.mockResolvedValue({ id: 'bol-velho', status: 'REGISTERED', financialEntryId: 'e-9', gatewayId: 'gw-antigo' });
+      const r = await service.processWebhook('ws-1', { id: 'evt_9', event: 'PAYMENT_DELETED', payment: { id: 'pay-9' } }, 'token-cnpj-antigo');
+      expect(r).toEqual({ received: true, result: 'CANCELLED' });
+    });
+
+    it('ignora aviso de uma conta sobre cobrança emitida por outra conta', async () => {
+      prisma.boleto.findFirst.mockResolvedValue({ id: 'bol-velho', status: 'REGISTERED', financialEntryId: 'e-9', gatewayId: 'gw-antigo' });
+      const r = await service.processWebhook('ws-1', { id: 'evt_10', event: 'PAYMENT_DELETED', payment: { id: 'pay-9' } }, 'token-cnpj-novo');
+      expect(r).toEqual({ received: true, result: 'IGNORED_OTHER_GATEWAY' });
+      expect(prisma.boleto.update).not.toHaveBeenCalled();
+    });
+
+    it('recusa token que não é de nenhuma conta', async () => {
+      await expect(service.processWebhook('ws-1', { event: 'PAYMENT_RECEIVED' }, 'token-forjado')).rejects.toThrow(ForbiddenException);
     });
   });
 

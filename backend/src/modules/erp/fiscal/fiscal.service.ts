@@ -3,6 +3,7 @@ import {
   Injectable, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IssuerService } from '../../issuer/issuer.service';
 import {
   SaveTaxConfigDto, GenerateDimobDto, GenerateCarneLeaoDto,
   DimobQueryDto, IrrfQueryDto, CarneLeaoQueryDto,
@@ -12,7 +13,7 @@ import {
 export class FiscalService {
   private readonly logger = new Logger(FiscalService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private issuer?: IssuerService) {}
 
   // ── CONFIGURAÇÃO FISCAL ───────────────────────────────────
 
@@ -23,6 +24,13 @@ export class FiscalService {
   async saveTaxConfig(workspaceId: string, dto: SaveTaxConfigDto) {
     const existing = await this.prisma.taxConfig.findFirst({ where: { workspaceId } });
     const data = { ...dto };
+    // CNPJ é do histórico da empresa: só preenche se vazio (trocar é pelo fluxo próprio)
+    if (this.issuer && (dto.cnpj !== undefined || dto.inscricaoMunicipal !== undefined || dto.regime !== undefined)) {
+      const legal = await this.issuer.updateDetails(workspaceId, undefined, {
+        cnpj: dto.cnpj, inscricaoMunicipal: dto.inscricaoMunicipal, regimeTributario: dto.regime,
+      });
+      if (dto.cnpj !== undefined) data.cnpj = legal.cnpj ?? undefined;
+    }
     if (existing) {
       return this.prisma.taxConfig.update({ where: { id: existing.id }, data });
     }

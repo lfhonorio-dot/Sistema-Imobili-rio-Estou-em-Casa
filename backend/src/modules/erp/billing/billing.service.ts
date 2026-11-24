@@ -20,6 +20,8 @@ import { PaymentsService } from '../financial/payments.service';
 import { splitGatewayAmount, toCents } from '../financial/settlement-math';
 import { EmailService } from '../../hub/email/email.service';
 import { WhatsAppService } from '../../hub/whatsapp/whatsapp.service';
+import { IssuerService } from '../../issuer/issuer.service';
+import { asSnapshot, displayName } from '../../issuer/issuer.types';
 import {
   CreateGatewayConfigDto, GenerateBoletoDto, BoletoQueryDto,
   UploadCnabDto, GenerateCnabRemessaDto,
@@ -54,7 +56,19 @@ export class BillingService {
     private payments?: PaymentsService,
     private email?: EmailService,
     private whatsapp?: WhatsAppService,
+    private issuer?: IssuerService,
   ) {}
+
+  /** Id do registro de dados da empresa vigente (null sem o serviço — testes unitários). */
+  private async currentLegalEntityId(workspaceId: string): Promise<string | null> {
+    return this.issuer ? (await this.issuer.getCurrent(workspaceId)).id : null;
+  }
+
+  /** Conta do gateway pertence ao CNPJ vigente? (contas sem dono contam como vigentes) */
+  private async isCurrentEntityGateway(workspaceId: string, g: { legalEntityId: string | null }) {
+    const cur = await this.currentLegalEntityId(workspaceId);
+    return !cur || !g.legalEntityId || g.legalEntityId === cur;
+  }
 
   // ── CONFIGURAÇÃO DE GATEWAY ──────────────────────────────
 
@@ -63,11 +77,14 @@ export class BillingService {
       where: { workspaceId, deletedAt: null },
       select: {
         id: true, provider: true, name: true, environment: true,
-        isActive: true, isDefault: true, createdAt: true, webhookSecret: true, metadata: true,
+        isActive: true, isDefault: true, createdAt: true, webhookSecret: true, metadata: true, legalEntityId: true,
       },
     });
+    const cur = await this.currentLegalEntityId(workspaceId);
     return list.map(({ webhookSecret, metadata, ...g }) => ({
       ...g,
+      // conta de um CNPJ anterior: só baixa/cancela cobranças antigas
+      previousCnpj: !!cur && !!g.legalEntityId && g.legalEntityId !== cur,
       hasWebhookToken: !!webhookSecret,
       webhookPath: `/billing/webhook/${workspaceId}`,
       settlementBankAccountId: ((metadata ?? {}) as Record<string, unknown>).settlementBankAccountId ?? null,
@@ -81,8 +98,14 @@ export class BillingService {
   }
 
   async createGateway(workspaceId: string, dto: CreateGatewayConfigDto) {
+    // uma conta por provedor POR CNPJ: depois de trocar o CNPJ, a conta antiga
+    // continua guardada (para baixar/cancelar cobranças antigas) e a nova é cadastrada ao lado
+    const legalEntityId = await this.currentLegalEntityId(workspaceId);
     const existing = await this.prisma.paymentGatewayConfig.findFirst({
-      where: { workspaceId, provider: dto.provider, deletedAt: null },
+      where: {
+        workspaceId, provider: dto.provider, deletedAt: null,
+        ...(legalEntityId && { OR: [{ legalEntityId }, { legalEntityId: null }] }),
+      },
     });
     if (existing) throw new BadRequestException(`Gateway ${dto.provider} já configurado`);
     await this.assertBankAccount(workspaceId, dto.settlementBankAccountId);
@@ -95,7 +118,7 @@ export class BillingService {
     const { settlementBankAccountId, ...rest } = dto;
     const created = await this.prisma.paymentGatewayConfig.create({
       data: {
-        workspaceId, ...rest,
+        workspaceId, ...rest, legalEntityId,
         apiKey: this.asaas.encryptApiKey(dto.apiKey),
         apiSecret: dto.apiSecret ? this.asaas.encryptApiKey(dto.apiSecret) : undefined,
         metadata: settlementBankAccountId ? { settlementBankAccountId } : {},
@@ -107,6 +130,9 @@ export class BillingService {
 
   async updateGateway(workspaceId: string, id: string, dto: Partial<CreateGatewayConfigDto>) {
     const gw = await this.getGatewayOrThrow(workspaceId, id);
+    if (dto.isDefault && !(await this.isCurrentEntityGateway(workspaceId, gw))) {
+      throw new BadRequestException('Esta conta é do CNPJ anterior: ela fica guardada só para baixar e cancelar as cobranças antigas e não pode voltar a ser a padrão.');
+    }
     await this.assertBankAccount(workspaceId, dto.settlementBankAccountId);
     const { settlementBankAccountId, ...rest } = dto;
     const data: Record<string, unknown> = { ...rest };
@@ -193,12 +219,27 @@ export class BillingService {
   }
 
   private async activeAsaasGateway(workspaceId: string, gatewayId?: string) {
+    // cobrança nova só sai pela conta do CNPJ vigente (o beneficiário do boleto é a empresa)
+    const legalEntityId = await this.currentLegalEntityId(workspaceId);
     const gateway = gatewayId
       ? await this.getGatewayOrThrow(workspaceId, gatewayId)
       : await this.prisma.paymentGatewayConfig.findFirst({
-          where: { workspaceId, provider: 'ASAAS', isActive: true, deletedAt: null },
+          where: {
+            workspaceId, provider: 'ASAAS', isActive: true, deletedAt: null,
+            ...(legalEntityId && { OR: [{ legalEntityId }, { legalEntityId: null }] }),
+          },
           orderBy: { isDefault: 'desc' },
         });
+    if (gateway && !(await this.isCurrentEntityGateway(workspaceId, gateway))) {
+      throw new BadRequestException('Esta conta de cobrança é do CNPJ anterior. Cadastre a conta Asaas do novo CNPJ em Financeiro → Boletos e PIX.');
+    }
+    if (!gateway && legalEntityId) {
+      const old = await this.prisma.paymentGatewayConfig.findFirst({
+        where: { workspaceId, provider: 'ASAAS', isActive: true, deletedAt: null, legalEntityId: { not: legalEntityId } },
+        select: { id: true },
+      });
+      if (old) throw new BadRequestException('O CNPJ da empresa mudou e a conta Asaas cadastrada é do CNPJ anterior. Cadastre a conta Asaas do novo CNPJ em Financeiro → Boletos e PIX para emitir novas cobranças.');
+    }
     // Só o Asaas tem emissão real implementada. Sem ele, recusa com mensagem clara.
     if (!gateway || gateway.provider !== 'ASAAS' || !gateway.isActive) {
       throw new BadRequestException(BOLETO_UNAVAILABLE_MESSAGE);
@@ -295,9 +336,11 @@ export class BillingService {
     });
 
     try {
+      const issuerSnapshot = this.issuer ? await this.issuer.getCurrentSnapshot(workspaceId) : null;
       const boleto = await this.prisma.boleto.create({
         data: {
           workspaceId,
+          ...(issuerSnapshot && { issuerSnapshot: issuerSnapshot as unknown as Prisma.InputJsonValue }),
           gatewayId: gateway.id,
           gatewayBoletoId: issued.paymentId,
           financialEntryId: entry.id,
@@ -491,8 +534,10 @@ export class BillingService {
       ? await this.prisma.contact.findFirst({ where: { id: b.contactId, workspaceId, deletedAt: null }, select: { name: true, email: true, phone: true } })
       : null;
     if (!contact) throw new BadRequestException('A cobrança não tem pagador cadastrado.');
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
-    const agency = ws?.name ?? 'Imobiliária';
+    // empresa que emitiu a cobrança (cópia gravada na emissão)
+    const snap = asSnapshot((b as { issuerSnapshot?: unknown }).issuerSnapshot);
+    const ws = snap ? null : await this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+    const agency = displayName(snap, ws?.name ?? 'Imobiliária');
     const amount = brl(Number(b.amount));
     const due = dmy(b.dueDate);
     const isPix = b.kind === 'PIX';
@@ -644,18 +689,23 @@ ${payLine}` } as any);
   ) {
     // Valida o token (header asaas-access-token x webhookSecret do gateway
     // Asaas) antes de confiar em qualquer coisa do payload.
-    const gateway = await this.prisma.paymentGatewayConfig.findFirst({
-      where: { workspaceId, provider: 'ASAAS', deletedAt: null },
-      orderBy: { isDefault: 'desc' },
+    // Pode haver mais de uma conta Asaas (a do CNPJ atual e as de CNPJs
+    // anteriores, que continuam recebendo baixas das cobranças antigas):
+    // o token identifica a conta que mandou o aviso.
+    const gateways = await this.prisma.paymentGatewayConfig.findMany({
+      where: { workspaceId, provider: 'ASAAS', deletedAt: null, webhookSecret: { not: null } },
+      select: { id: true, webhookSecret: true },
     });
-    if (!gateway?.webhookSecret) {
+    if (!gateways.length) {
       this.logger.warn(`Webhook de billing recusado: workspace ${workspaceId} sem token de webhook configurado.`);
       throw new ForbiddenException('Webhook não configurado ou não autorizado');
     }
     const a = Buffer.from(receivedToken ?? '');
-    const b = Buffer.from(gateway.webhookSecret);
-    const valid = a.length === b.length && crypto.timingSafeEqual(a, b);
-    if (!valid) {
+    const gateway = gateways.find((g) => {
+      const b = Buffer.from(g.webhookSecret as string);
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    });
+    if (!gateway) {
       throw new ForbiddenException('Token de webhook inválido');
     }
 
@@ -670,7 +720,7 @@ ${payLine}` } as any);
       return await this.prisma.$transaction(async (tx) => {
         // idempotência: o mesmo evento só é processado uma vez
         await tx.gatewayWebhookEvent.create({ data: { workspaceId, eventId, event, paymentId: pay.id ?? null } });
-        const result = await this.applyWebhookEvent(tx, workspaceId, event, pay);
+        const result = await this.applyWebhookEvent(tx, workspaceId, event, pay, gateway.id);
         await tx.gatewayWebhookEvent.update({ where: { workspaceId_eventId: { workspaceId, eventId } }, data: { result } });
         this.logger.log(`Webhook ${event} (${eventId}): ${result}`);
         return { received: true, result };
@@ -688,10 +738,13 @@ ${payLine}` } as any);
     workspaceId: string,
     event: string,
     pay: { id?: string; value?: number; originalValue?: number; paymentDate?: string; clientPaymentDate?: string; confirmedDate?: string },
+    gatewayId?: string,
   ): Promise<string> {
     if (!pay.id) return 'IGNORED_NO_PAYMENT';
     const boleto = await tx.boleto.findFirst({ where: { workspaceId, gatewayBoletoId: pay.id, deletedAt: null } });
     if (!boleto) return 'IGNORED_UNKNOWN_PAYMENT';
+    // aviso de uma conta sobre cobrança emitida por outra conta: não confia
+    if (gatewayId && boleto.gatewayId && boleto.gatewayId !== gatewayId) return 'IGNORED_OTHER_GATEWAY';
 
     switch (event) {
       case 'PAYMENT_RECEIVED':

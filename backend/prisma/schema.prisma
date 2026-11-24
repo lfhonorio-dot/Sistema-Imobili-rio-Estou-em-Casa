@@ -9,8 +9,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations usam a conexão DIRETA do Neon (a DATABASE_URL é a conexão
+  // compartilhada/pooler, inadequada para DDL). O start.sh usa a DATABASE_URL
+  // como reserva quando a direta não está definida (dev local, CI).
+  directUrl = env("DATABASE_URL_DIRECT")
 }
 
 // -----------------------------------------------
@@ -92,6 +96,7 @@ model Workspace {
   plan                 WorkspacePlan?
   onboardingSteps      OnboardingStep[]
 
+  legalEntities      WorkspaceLegalEntity[]
   @@map("workspaces")
 }
 
@@ -766,6 +771,9 @@ model Contract {
   rescindedAt      DateTime?
   rescissionReason String?
 
+  // Dados da empresa emitente no momento da emissão (IssuerSnapshot). Imutável
+  // depois de gravado (trigger no banco); reimpressão/reenvio leem daqui.
+  issuerSnapshot   Json?
   @@unique([workspaceId, code])
   @@map("contracts")
 }
@@ -825,6 +833,9 @@ model Commission {
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   contract    Contract  @relation(fields: [contractId], references: [id])
 
+  // Dados da empresa emitente no momento da emissão (IssuerSnapshot). Imutável
+  // depois de gravado (trigger no banco); reimpressão/reenvio leem daqui.
+  issuerSnapshot   Json?
   @@map("commissions")
 }
 
@@ -1025,6 +1036,11 @@ model SignatureEnvelope {
   contract      Contract?  @relation(fields: [contractId], references: [id])
   signatories   SignatureSignatory[]
 
+  // Dados da empresa emitente no momento da emissão (IssuerSnapshot). Imutável
+  // depois de gravado (trigger no banco); reimpressão/reenvio leem daqui.
+  issuerSnapshot   Json?
+  // Texto do documento congelado no envio para assinatura (o hash lacra isto).
+  documentHtml     String?  @db.Text
   @@map("signature_envelopes")
 }
 
@@ -1096,6 +1112,10 @@ model PaymentGatewayConfig {
   boletos       Boleto[]
   splitRecipients SplitRecipient[]
 
+  // Empresa (CNPJ) dona desta conta no gateway. Contas de CNPJs anteriores
+  // continuam guardadas para baixar/cancelar as cobranças já emitidas nelas.
+  legalEntityId    String?
+  legalEntity      WorkspaceLegalEntity? @relation(fields: [legalEntityId], references: [id])
   @@map("payment_gateway_configs")
 }
 
@@ -1141,6 +1161,9 @@ model Boleto {
   gateway          PaymentGatewayConfig? @relation(fields: [gatewayId], references: [id])
   financialEntry   FinancialEntry?       @relation(fields: [financialEntryId], references: [id])
 
+  // Dados da empresa emitente no momento da emissão (IssuerSnapshot). Imutável
+  // depois de gravado (trigger no banco); reimpressão/reenvio leem daqui.
+  issuerSnapshot   Json?
   @@map("boletos")
 }
 
@@ -1446,6 +1469,9 @@ model NfseRecord {
   updatedAt       DateTime @updatedAt
   workspace       Workspace @relation(fields: [workspaceId], references: [id])
 
+  // Dados da empresa emitente no momento da emissão (IssuerSnapshot). Imutável
+  // depois de gravado (trigger no banco); reimpressão/reenvio leem daqui.
+  issuerSnapshot   Json?
   @@unique([workspaceId, rpsSerie, rpsNumber])
   @@index([status, nextAttemptAt])
   @@map("nfse_records")
@@ -1997,6 +2023,9 @@ model Proposal {
   contact             Contact   @relation(fields: [contactId], references: [id])
   property            Property  @relation(fields: [propertyId], references: [id])
 
+  // Dados da empresa emitente no momento da emissão (IssuerSnapshot). Imutável
+  // depois de gravado (trigger no banco); reimpressão/reenvio leem daqui.
+  issuerSnapshot   Json?
   @@index([workspaceId, dealId])
   @@map("proposals")
 }
@@ -2144,4 +2173,41 @@ model GatewayWebhookEvent {
 
   @@unique([workspaceId, eventId])
   @@map("gateway_webhook_events")
+}
+
+// -----------------------------------------------
+// Histórico dos dados legais da empresa (emitente). Um registro vigente por
+// workspace (validTo nulo — índice único parcial na migration). Trocar CNPJ
+// ou razão social encerra o vigente e cria outro; nada é sobrescrito.
+// -----------------------------------------------
+model WorkspaceLegalEntity {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  cnpj                String?
+  razaoSocial         String?
+  nomeFantasia        String?
+  inscricaoMunicipal  String?
+  endereco            String?
+  regimeTributario    String?
+  validFrom           DateTime
+  validTo             DateTime?
+  createdBy           String?
+  // Credenciais fiscais arquivadas ao encerrar a vigência (para cancelar e
+  // consultar notas emitidas neste CNPJ). Criptografadas como em tax_configs.
+  nfseCertPfxEnc      String?   @db.Text
+  nfseCertPasswordEnc String?
+  nfseCertSubject     String?
+  nfseCertValidUntil  DateTime?
+  nfseRpsSerie        String?
+  nfseRpsNextNumber   Int?
+  // Itens do checklist pós-troca marcados manualmente ({ chave: ISO date })
+  checklist           Json      @default("{}")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+  workspace           Workspace @relation(fields: [workspaceId], references: [id])
+  gateways            PaymentGatewayConfig[]
+
+  @@index([workspaceId, validFrom])
+  @@map("workspace_legal_entities")
 }

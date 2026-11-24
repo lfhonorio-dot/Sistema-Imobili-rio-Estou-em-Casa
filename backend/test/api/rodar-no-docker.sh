@@ -18,6 +18,7 @@ export FRONTEND_URL=http://localhost:3000 APP_URL=http://localhost:3000 LOG_TO_F
 export RATE_LIMIT_PER_MINUTE=5000 ASAAS_API_URL_TEST_OVERRIDE=http://127.0.0.1:3999
 export SMTP_HOST=127.0.0.1 SMTP_PORT=2525 SMTP_USER=teste SMTP_PASS=teste SMTP_FROM=teste@teste.local
 export API_URL=http://localhost:3001/api/v1
+export DATABASE_URL_DIRECT="${DATABASE_URL_DIRECT:-$DATABASE_URL}"
 
 if [ "$PULAR_INSTALACAO" != "1" ]; then
   echo "== Instalando dependencias (a primeira vez demora alguns minutos)..."

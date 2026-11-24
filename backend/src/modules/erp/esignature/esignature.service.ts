@@ -6,6 +6,8 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../hub/email/email.service';
 import { ContractTemplateService } from '../contracts/contract-template.service';
+import { IssuerService } from '../../issuer/issuer.service';
+import { Prisma } from '@prisma/client';
 import {
   CreateEnvelopeDto, EnvelopeQueryDto, ValidateOtpDto, RejectSignatureDto,
 } from './esignature.dto';
@@ -16,6 +18,7 @@ export class EsignatureService {
     private prisma: PrismaService,
     private emailService: EmailService,
     private contractTemplate: ContractTemplateService,
+    private issuer: IssuerService,
   ) {}
 
   // ── ENVELOPES ─────────────────────────────────────────────
@@ -54,7 +57,21 @@ export class EsignatureService {
     // Hash SHA-256 do CONTEÚDO real do documento (garantia de imutabilidade).
     // Antes era um hash de "documentUrl + Date.now()" — decorativo, nunca
     // detectava alteração nenhuma no conteúdo do contrato/documento.
-    const documentHash = await this.computeDocumentHash(workspaceId, dto.contractId, dto.documentUrl);
+    //
+    // Envelope de contrato: o contrato é "emitido" aqui — grava a cópia dos
+    // dados da empresa no contrato e congela o texto no envelope.
+    let documentHtml: string | null = null;
+    let contractSnap = null as Awaited<ReturnType<IssuerService['freeze']>> | null;
+    if (dto.contractId) {
+      const ok = await this.prisma.contract.findFirst({ where: { id: dto.contractId, workspaceId, deletedAt: null }, select: { id: true } });
+      if (!ok) throw new BadRequestException('Contrato não encontrado nesta imobiliária.');
+      contractSnap = await this.issuer.freeze('contract', workspaceId, dto.contractId);
+      documentHtml = await this.contractTemplate.generate(workspaceId, dto.contractId);
+    }
+    const documentHash = documentHtml !== null
+      ? this.hashString(documentHtml)
+      : await this.computeDocumentHash(workspaceId, undefined, dto.documentUrl);
+    const issuerSnapshot = contractSnap ?? await this.issuer.getCurrentSnapshot(workspaceId);
 
     const envelope = await this.prisma.signatureEnvelope.create({
       data: {
@@ -62,6 +79,8 @@ export class EsignatureService {
         title: dto.title,
         documentUrl: dto.documentUrl,
         documentHash,
+        documentHtml,
+        issuerSnapshot: issuerSnapshot as unknown as Prisma.InputJsonValue,
         contractId: dto.contractId,
         type: dto.type || 'ADVANCED',
         order: dto.order || 'PARALLEL',

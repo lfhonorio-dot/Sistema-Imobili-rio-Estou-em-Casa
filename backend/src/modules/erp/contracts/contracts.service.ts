@@ -12,6 +12,7 @@ import * as crypto from 'crypto';
 import { contractScope } from './contract-scope';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IssuerService } from '../../issuer/issuer.service';
 import { AuditService } from '../../audit/audit.service';
 import { EmailService } from '../../hub/email/email.service';
 import { ContractTemplateService } from './contract-template.service';
@@ -37,6 +38,7 @@ export class ContractsService {
     private contractTemplate: ContractTemplateService,
     private dimobService: DimobService,
     private billingService: BillingService,
+    private issuer: IssuerService,
   ) {}
 
   // Lista contratos com filtros
@@ -476,7 +478,15 @@ export class ContractsService {
   }
 
   // Gera o HTML do contrato e retorna para visualização/download
+  // Contrato já assinado: devolve exatamente o texto congelado no envelope
+  // (o que as partes assinaram), não um texto regerado.
   async getContractDocument(workspaceId: string, id: string): Promise<string> {
+    const signed = await this.prisma.signatureEnvelope.findFirst({
+      where: { workspaceId, contractId: id, deletedAt: null, status: 'COMPLETED', documentHtml: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { documentHtml: true },
+    });
+    if (signed?.documentHtml) return signed.documentHtml;
     return this.contractTemplate.generate(workspaceId, id);
   }
 
@@ -661,6 +671,10 @@ export class ContractsService {
     // O hash de imutabilidade tem que ser do CONTEÚDO real do contrato, não de
     // uma URL/placeholder + timestamp (isso não detectava nenhuma alteração
     // do texto do contrato entre a criação do envelope e a assinatura).
+    // Enviar para assinatura "emite" o contrato: grava a cópia dos dados da
+    // empresa e congela o texto no envelope (o que for assinado é exatamente
+    // este texto, mesmo que o cadastro da empresa mude depois).
+    const issuerSnapshot = await this.issuer.freeze('contract', workspaceId, contract.id);
     const contractHtmlForHash = await this.contractTemplate.generate(workspaceId, contract.id);
     const documentHash = crypto.createHash('sha256').update(contractHtmlForHash).digest('hex');
 
@@ -671,6 +685,8 @@ export class ContractsService {
         title,
         documentUrl,
         documentHash,
+        documentHtml: contractHtmlForHash,
+        issuerSnapshot: issuerSnapshot as unknown as Prisma.InputJsonValue,
         type: dto.type ?? 'ADVANCED',
         order: 'PARALLEL',
         deadline: dto.deadline ? new Date(dto.deadline) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -893,6 +909,8 @@ export class ContractsService {
         where: { id },
         data: { status: dto.status },
       });
+      // saiu do rascunho = emitido: grava a cópia dos dados da empresa
+      if (dto.status !== 'DRAFT') await this.issuer.freeze('contract', workspaceId, id, tx);
 
       if (becomingActive && (isSaleType || isRentalType)) {
         const newPropertyStatus = isSaleType ? 'SOLD' : 'RENTED';

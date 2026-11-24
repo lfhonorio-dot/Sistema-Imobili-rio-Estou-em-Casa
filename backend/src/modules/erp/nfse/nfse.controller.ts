@@ -31,7 +31,7 @@ export class NfseController {
 
   @Access(...FINANCE_CONFIG)
   @Patch('config')
-  saveConfig(@Headers('x-workspace-id') ws: string, @Body() dto: NfseConfigDto) { return this.config.save(ws, dto); }
+  saveConfig(@Headers('x-workspace-id') ws: string, @CurrentUser() user: JwtPayload, @Body() dto: NfseConfigDto) { return this.config.save(ws, dto, user?.sub); }
 
   @Access(...FINANCE_CONFIG)
   @Post('config/certificate')

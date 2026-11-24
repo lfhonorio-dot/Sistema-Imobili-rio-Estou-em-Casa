@@ -20,6 +20,7 @@ import { UsersModule } from './modules/users/users.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LgpdModule } from './modules/lgpd/lgpd.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { IssuerModule } from './modules/issuer/issuer.module';
 
 // Módulo CRM Core (Estágio 2)
 import { CrmModule } from './modules/crm/crm.module';
@@ -87,6 +88,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     WorkspaceModule,
     LgpdModule,
     AuditModule,
+    IssuerModule,
 
     // CRM Core
     CrmModule,

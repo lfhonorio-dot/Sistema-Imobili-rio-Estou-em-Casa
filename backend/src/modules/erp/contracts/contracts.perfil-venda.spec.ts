@@ -27,7 +27,7 @@ const rentalDto = {
 } as any;
 
 function makeService(prisma: unknown) {
-  return new ContractsService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+  return new ContractsService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
 }
 
 describe('ContractsService.create — perfil de operação', () => {

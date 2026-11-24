@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IssuerService } from '../../issuer/issuer.service';
 import { EmailService } from '../../hub/email/email.service';
 import { CommissionReceiptService } from './commission-receipt.service';
 import {
@@ -31,6 +32,7 @@ export class FinancialService {
     private payments: PaymentsService,
     private config: FinancialConfigService,
     private billing: BillingService,
+    private issuer: IssuerService,
   ) {}
 
   // Lista lançamentos financeiros com filtros
@@ -482,6 +484,8 @@ export class FinancialService {
           notes: dto.notes ?? commission.notes,
         },
       });
+      // recebida = recibo emitido: grava a cópia dos dados da empresa
+      await this.issuer.freeze('commission', workspaceId, id, tx);
 
       // Lançamento financeiro de comissão recebida
       const entry = await tx.financialEntry.create({

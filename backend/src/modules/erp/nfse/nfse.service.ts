@@ -21,6 +21,8 @@ import { computeNfseTaxes, takerKind } from './nfse-tax';
 import { buildNfsePdf } from './nfse-pdf';
 import type { RpsInput } from './abrasf-xml';
 import type { NfseProviderContext } from './nfse-provider';
+import { IssuerService } from '../../issuer/issuer.service';
+import { asSnapshot, displayName, formatCnpj, onlyDigits } from '../../issuer/issuer.types';
 
 export const ACTIVE_NFSE = ['QUEUED', 'PROCESSING', 'AUTHORIZED', 'ISSUED', 'PENDING'];
 const BACKOFF_MIN = [1, 5, 15, 60, 240];
@@ -49,6 +51,7 @@ export class NfseService {
     private payments: PaymentsService,
     private config: NfseConfigService,
     private provider: SilAbrasf24Provider,
+    private issuer?: IssuerService,
   ) {}
 
   // ── Consulta ─────────────────────────────────────────────
@@ -87,7 +90,7 @@ export class NfseService {
     issuedAt: true, cancelledAt: true, cancelReason: true, environment: true, rpsSerie: true, rpsNumber: true, baseAmount: true, issDue: true,
     irRetained: true, pisRetained: true, cofinsRetained: true, csllRetained: true, issRetainedAmount: true, totalRetained: true, netAmount: true,
     rejectionReason: true, retryCount: true, nextAttemptAt: true, xmlFileId: true, pdfFileId: true, autoIssued: true, retentionWarning: true,
-    emailedAt: true, createdAt: true, competence: true,
+    emailedAt: true, createdAt: true, competence: true, issuerCnpj: true,
   } satisfies Prisma.NfseRecordSelect;
 
   async get(workspaceId: string, id: string) {
@@ -168,11 +171,14 @@ export class NfseService {
       if (dup) throw new BadRequestException('Já existe nota fiscal para esta conta.');
       const rpsNumber = c.rpsNextNumber;
       await tx.taxConfig.update({ where: { workspaceId }, data: { rpsNextNumber: rpsNumber + 1 } });
+      // cópia dos dados da empresa na emissão (o PDF, o reenvio e a exportação usam esta cópia)
+      const snap = this.issuer ? await this.issuer.getCurrentSnapshot(workspaceId, tx) : null;
       return tx.nfseRecord.create({
         data: {
           workspaceId, financialEntryId: entryId, provider: this.provider.name, environment: c.nfseEnvironment,
           rpsSerie: c.rpsSerie, rpsNumber, serie: c.rpsSerie,
-          issuerCnpj: c.cnpj ?? '', takerDocument: (pv.taker!.document ?? '').replace(/\D/g, ''), takerName: pv.taker!.name,
+          ...(snap && { issuerSnapshot: snap as unknown as Prisma.InputJsonValue }),
+          issuerCnpj: snap?.cnpj || c.cnpj || '', takerDocument: (pv.taker!.document ?? '').replace(/\D/g, ''), takerName: pv.taker!.name,
           takerType: pv.taker!.type, takerEmail: pv.taker!.email, takerContactId: pv.taker!.id,
           serviceCode: c.itemListaServico ?? '', description, competence,
           amount: t.base, issRate: t.issRatePct, issAmount: t.issDue, issRetained: t.issRetained,
@@ -223,12 +229,34 @@ export class NfseService {
 
   // ── Processamento (fila) ─────────────────────────────────
 
-  private async context(workspaceId: string): Promise<{ ctx: NfseProviderContext; cfg: Awaited<ReturnType<NfseConfigService['raw']>> }> {
+  /**
+   * Contexto para falar com a prefeitura. Sem `forCnpj` (ou com o CNPJ
+   * vigente) usa a configuração fiscal atual. Para nota de um CNPJ anterior
+   * (cancelar/consultar) usa o certificado e a inscrição municipal arquivados
+   * no histórico da empresa, no ambiente em que a nota foi emitida.
+   */
+  private async context(workspaceId: string, forCnpj?: string | null, forEnvironment?: string | null): Promise<{ ctx: NfseProviderContext; cfg: Awaited<ReturnType<NfseConfigService['raw']>>; archived: boolean }> {
     const cfg = await this.config.raw(workspaceId);
+    const old = this.issuer && forCnpj && onlyDigits(forCnpj) !== onlyDigits(cfg.cnpj)
+      ? await this.issuer.archivedFiscalCredentials(workspaceId, forCnpj)
+      : null;
+    if (old) {
+      const env = forEnvironment === 'PRODUCTION' ? 'PRODUCTION' : 'HOMOLOG';
+      const wsUrl = this.config.wsUrl({ ...cfg, nfseEnvironment: env });
+      if (!wsUrl) throw new BadRequestException('Endereço do webservice da prefeitura não configurado.');
+      return {
+        cfg, archived: true,
+        ctx: {
+          environment: env, wsUrl, soapNamespace: cfg.nfseSoapNamespace,
+          certificate: this.config.loadCertificate({ certPfxEnc: old.certPfxEnc, certPasswordEnc: old.certPasswordEnc }),
+          prestador: { cnpj: old.cnpj, inscricaoMunicipal: old.inscricaoMunicipal ?? '', codigoMunicipio: cfg.codigoMunicipioIbge },
+        },
+      };
+    }
     const rd = this.config.readiness(cfg);
     if (!rd.ready) throw new BadRequestException(`Configuração fiscal incompleta: ${rd.missing.join(', ')}.`);
     return {
-      cfg,
+      cfg, archived: false,
       ctx: {
         environment: cfg.nfseEnvironment === 'PRODUCTION' ? 'PRODUCTION' : 'HOMOLOG',
         wsUrl: this.config.wsUrl(cfg)!,
@@ -249,7 +277,15 @@ export class NfseService {
     const n = await this.prisma.nfseRecord.findUniqueOrThrow({ where: { id } });
     const attempt = n.retryCount + 1;
     try {
-      const { ctx, cfg } = await this.context(n.workspaceId);
+      const { ctx, cfg, archived } = await this.context(n.workspaceId, n.issuerCnpj, n.environment);
+      if (archived) {
+        // pedida antes da troca de CNPJ: só confere se a prefeitura já gerou; não emite mais no CNPJ antigo
+        if (n.retryCount > 0 && n.rpsNumber) {
+          const found = await this.provider.consultByRps(ctx, n.rpsSerie!, n.rpsNumber);
+          if (found.kind === 'AUTHORIZED') return void await this.authorize(n.id, found, ctx.environment);
+        }
+        return void await this.reject(id, 'Esta nota foi pedida com o CNPJ anterior da empresa e não chegou a ser autorizada. Cancele-a e peça uma nova nota (ela sairá no CNPJ atual).');
+      }
       if (n.environment && n.environment !== ctx.environment) {
         return void await this.reject(id, `A nota foi pedida em ${n.environment === 'PRODUCTION' ? 'produção' : 'homologação'}, mas o ambiente mudou. Reenvie para usar o ambiente atual.`, true);
       }
@@ -323,13 +359,18 @@ export class NfseService {
   private async authorize(id: string, r: { numero: string; codigoVerificacao?: string; dataEmissao?: string; xml: string }, environment: string) {
     const n = await this.prisma.nfseRecord.findUniqueOrThrow({ where: { id } });
     const cfg = await this.config.raw(n.workspaceId);
+    // prestador = empresa da data do pedido da nota (cópia gravada)
+    const snap = asSnapshot(n.issuerSnapshot);
     const issuedAt = r.dataEmissao && !Number.isNaN(Date.parse(r.dataEmissao)) ? new Date(r.dataEmissao) : new Date();
     const xmlBuf = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>${r.xml}`, 'utf-8');
     const xmlFile = await this.files.storeGenerated(n.workspaceId, xmlBuf, `nfse-${r.numero}.xml`, 'application/xml');
     const pdfBuf = await buildNfsePdf({
       environment, numero: r.numero, codigoVerificacao: r.codigoVerificacao, dataEmissao: issuedAt,
       rps: `${n.rpsSerie}-${n.rpsNumber}`,
-      prestador: { nome: cfg.razaoSocial ?? 'Prestador', cnpj: cfg.cnpj ?? '', inscricaoMunicipal: cfg.inscricaoMunicipal ?? '', municipio: cfg.municipio ?? 'Franca' },
+      prestador: {
+        nome: snap?.razaoSocial ?? cfg.razaoSocial ?? 'Prestador', cnpj: snap?.cnpj ?? n.issuerCnpj ?? cfg.cnpj ?? '',
+        inscricaoMunicipal: snap?.inscricaoMunicipal ?? cfg.inscricaoMunicipal ?? '', municipio: cfg.municipio ?? 'Franca',
+      },
       tomador: { nome: n.takerName, documento: n.takerDocument, email: n.takerEmail },
       discriminacao: n.description, itemListaServico: n.serviceCode,
       valores: {
@@ -433,7 +474,7 @@ export class NfseService {
       return this.get(workspaceId, id);
     }
     if (n.status !== 'AUTHORIZED' || !n.number) throw new BadRequestException('Só notas autorizadas podem ser canceladas na prefeitura.');
-    const { ctx } = await this.context(workspaceId);
+    const { ctx } = await this.context(workspaceId, n.issuerCnpj, n.environment);
     if ((n.environment ?? 'HOMOLOG') !== ctx.environment) throw new BadRequestException('A nota é de outro ambiente (homologação/produção) do que o configurado agora.');
     const r = await this.provider.cancel(ctx, n.number, code);
     if (!r.ok) throw new BadRequestException(`A prefeitura não cancelou a nota: ${r.reason}`);
@@ -457,7 +498,9 @@ export class NfseService {
     const dest = (to ?? n.takerEmail ?? '').trim();
     if (!dest || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(dest)) throw new BadRequestException('O tomador não tem e-mail válido cadastrado.');
     const [xml, pdf] = await Promise.all([this.files.read(workspaceId, n.xmlFileId), this.files.read(workspaceId, n.pdfFileId)]);
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+    // nome da empresa que emitiu a nota (cópia gravada), não o cadastro de hoje
+    const snap = asSnapshot(n.issuerSnapshot);
+    const ws = { name: displayName(snap) || (await this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }))?.name };
     await this.email.sendEmail(workspaceId, {
       to: dest,
       subject: `${ws?.name ?? 'Imobiliária'} — NFS-e nº ${n.number}`,
@@ -512,19 +555,19 @@ export class NfseService {
     const ws = wb.addWorksheet(`NFS-e ${month}`);
     ws.addRow([`Notas fiscais de serviço — ${month}${r.environment !== 'PRODUCTION' ? ' (HOMOLOGAÇÃO — sem valor fiscal)' : ''}`]).font = { bold: true, size: 13 };
     ws.addRow([]);
-    ws.addRow(['Número', 'Emissão', 'Situação', 'Tomador', 'CPF/CNPJ', 'Base de cálculo', 'Alíq. ISS %', 'ISS', 'ISS retido', 'IR retido', 'PIS retido', 'COFINS retido', 'CSLL retido', 'Total retido', 'Líquido']).font = { bold: true };
+    ws.addRow(['Número', 'Emissão', 'Situação', 'CNPJ do prestador', 'Tomador', 'CPF/CNPJ', 'Base de cálculo', 'Alíq. ISS %', 'ISS', 'ISS retido', 'IR retido', 'PIS retido', 'COFINS retido', 'CSLL retido', 'Total retido', 'Líquido']).font = { bold: true };
     for (const n of r.notes) {
-      ws.addRow([n.number, n.issuedAt ? new Date(n.issuedAt).toLocaleDateString('pt-BR') : '', n.statusLabel, n.takerName, n.takerDocument,
+      ws.addRow([n.number, n.issuedAt ? new Date(n.issuedAt).toLocaleDateString('pt-BR') : '', n.statusLabel, formatCnpj(n.issuerCnpj), n.takerName, n.takerDocument,
         num(n.baseAmount ?? n.amount), Number(n.issRate), num(n.issDue ?? n.issAmount), num(n.issRetainedAmount), num(n.irRetained), num(n.pisRetained),
         num(n.cofinsRetained), num(n.csllRetained), num(n.totalRetained), num(n.netAmount ?? n.amount)]);
     }
     const t = r.totals;
-    ws.addRow(['Totais (sem canceladas)', '', `${t.count} nota(s)`, '', '', t.base, '', t.issDue, t.issRetained, t.irRetained, t.pisRetained, t.cofinsRetained, t.csllRetained, t.totalRetained, t.net]).font = { bold: true };
+    ws.addRow(['Totais (sem canceladas)', '', `${t.count} nota(s)`, '', '', '', t.base, '', t.issDue, t.issRetained, t.irRetained, t.pisRetained, t.cofinsRetained, t.csllRetained, t.totalRetained, t.net]).font = { bold: true };
     ws.addRow([]);
     ws.addRow(['Estimativa de tributos do mês (Lucro Presumido, alíquotas configuradas) — confirmar com o contador']).font = { bold: true };
     ws.addRow(['PIS', r.estimate.pis]); ws.addRow(['COFINS', r.estimate.cofins]);
     ws.addRow(['IRPJ (base presumida)', r.estimate.irpj]); ws.addRow(['CSLL (base presumida)', r.estimate.csll]);
-    ws.columns.forEach((c, i) => { c.width = i === 3 ? 32 : 14; if (i >= 5) c.numFmt = '#,##0.00'; });
+    ws.columns.forEach((c, i) => { c.width = i === 4 ? 32 : i === 3 ? 20 : 14; if (i >= 6) c.numFmt = '#,##0.00'; });
     return Buffer.from(await wb.xlsx.writeBuffer());
   }
 }

@@ -6,6 +6,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
+import { Prisma } from '@prisma/client';
+import { IssuerService } from '../../issuer/issuer.service';
+import { asSnapshot, formatCnpj, displayName } from '../../issuer/issuer.types';
 import { advanceDealToStage } from '../pipelines/funnel-stages';
 import { proposalSituation, validatePaymentTerms } from './funnel-rules';
 import { CreateProposalDto, DecideProposalDto, ProposalTermsDto } from './funnel.dto';
@@ -32,6 +35,7 @@ export class ProposalsService {
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
+    private issuer: IssuerService,
   ) {}
 
   private decorate<T extends { status: string; validUntil: Date }>(p: T) {
@@ -106,7 +110,10 @@ export class ProposalsService {
 
     const result = await this.prisma.$transaction(async (tx) => {
       const proposal = await tx.proposal.create({
-        data: { workspaceId, dealId: deal.id, contactId: deal.contactId, propertyId: property.id, kind: 'OFFER', createdById: userId, ...data },
+        data: {
+          workspaceId, dealId: deal.id, contactId: deal.contactId, propertyId: property.id, kind: 'OFFER', createdById: userId, ...data,
+          issuerSnapshot: (await this.issuer.getCurrentSnapshot(workspaceId, tx)) as unknown as Prisma.InputJsonValue,
+        },
       });
       const link = await tx.dealProperty.findFirst({ where: { dealId: deal.id, propertyId: property.id } });
       if (!link) await tx.dealProperty.create({ data: { dealId: deal.id, propertyId: property.id } });
@@ -135,6 +142,7 @@ export class ProposalsService {
         data: {
           workspaceId, dealId: parent.dealId, contactId: parent.contactId, propertyId: parent.propertyId,
           parentId: parent.id, kind: parent.kind === 'OFFER' ? 'COUNTER' : 'OFFER', createdById: userId, ...data,
+          issuerSnapshot: (await this.issuer.getCurrentSnapshot(workspaceId, tx)) as unknown as Prisma.InputJsonValue,
         },
       });
       const movedTo = await advanceDealToStage(tx, workspaceId, parent.dealId, 'NEGOTIATION', userId);
@@ -197,7 +205,9 @@ export class ProposalsService {
       },
     });
     if (!p) throw new NotFoundException('Proposta não encontrada.');
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true, cnpj: true } });
+    // empresa da data da proposta (cópia gravada na emissão)
+    const snap = asSnapshot(p.issuerSnapshot) ?? await this.issuer.freeze('proposal', workspaceId, p.id);
+    const ws = { name: displayName(snap), cnpj: snap.cnpj ? formatCnpj(snap.cnpj) : null };
     const situation = proposalSituation(p);
     const addr = [p.property.street, p.property.number, p.property.complement, p.property.neighborhood, p.property.city, p.property.state]
       .filter(Boolean).join(', ');

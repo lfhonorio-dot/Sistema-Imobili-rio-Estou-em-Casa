@@ -8,10 +8,12 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IssuerService } from '../../issuer/issuer.service';
+import { asSnapshot, formatCnpj, legalName } from '../../issuer/issuer.types';
 
 @Injectable()
 export class CommissionReceiptService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private issuer: IssuerService) {}
 
   private fmtCurrency(value: unknown): string {
     if (value === null || value === undefined) return 'R$ 0,00';
@@ -69,10 +71,12 @@ export class CommissionReceiptService {
       include: { user: { select: { name: true, email: true } } },
     });
 
-    const workspace = await this.prisma.workspace.findFirst({
-      where: { id: workspaceId },
-      select: { name: true, cnpj: true },
-    });
+    // Dados da empresa: a cópia gravada quando a comissão foi recebida
+    // (recibo emitido). Prévia de comissão pendente mostra o cadastro atual.
+    const settled = commission.status === 'RECEIVED' || commission.status === 'PAID';
+    const snap = asSnapshot(commission.issuerSnapshot)
+      ?? (settled ? await this.issuer.freeze('commission', workspaceId, commission.id) : await this.issuer.getCurrentSnapshot(workspaceId));
+    const workspace = { name: legalName(snap) || null, cnpj: snap.cnpj ? formatCnpj(snap.cnpj) : null };
 
     return { commission, broker: workspaceUser?.user ?? null, workspace };
   }

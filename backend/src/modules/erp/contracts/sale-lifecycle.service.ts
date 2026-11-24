@@ -19,6 +19,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@prisma/client';
 import { contractScope } from './contract-scope';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IssuerService } from '../../issuer/issuer.service';
 import { AuditService } from '../../audit/audit.service';
 import { DimobService } from '../fiscal/dimob.service';
 import { BillingService } from '../billing/billing.service';
@@ -40,6 +41,7 @@ export class SaleLifecycleService {
     private audit: AuditService,
     private dimob: DimobService,
     private billing: BillingService,
+    private issuer: IssuerService,
   ) {}
 
   private async loadSaleContract(workspaceId: string, id: string) {
@@ -174,6 +176,7 @@ export class SaleLifecycleService {
         },
       });
       if (flip.count !== 1) throw new ConflictException('Este contrato já foi ativado.');
+      await this.issuer.freeze('contract', workspaceId, id, tx); // ativar = emitir
 
       // 2. imóvel → vendido (bloqueia se outro contrato já vendeu)
       const property = await tx.property.findFirst({ where: { id: c.propertyId, workspaceId, deletedAt: null } });

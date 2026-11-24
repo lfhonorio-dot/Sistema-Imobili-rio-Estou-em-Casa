@@ -11,6 +11,7 @@ import { EncryptionService } from '../../../security/encryption.service';
 import { loadPfx, type LoadedCertificate } from './xml-signer';
 import { SIL_FRANCA_PRODUCTION_URL } from './nfse-provider';
 import type { NfseTaxConfig } from './nfse-tax';
+import { IssuerService } from '../../issuer/issuer.service';
 
 export const FRANCA_IBGE = '3516200';
 
@@ -57,6 +58,7 @@ export class NfseConfigService {
   constructor(
     private prisma: PrismaService,
     private encryption: EncryptionService,
+    private issuer: IssuerService,
   ) {}
 
   /** Configuração (cria com LUCRO PRESUMIDO e Franca se ainda não existir). */
@@ -71,9 +73,12 @@ export class NfseConfigService {
   /** Para a tela: nunca devolve o certificado nem a senha. */
   async get(workspaceId: string) {
     const c = await this.raw(workspaceId);
+    const legal = await this.issuer.getCurrent(workspaceId);
     const { certPfxEnc, certPasswordEnc, nfseLogin, nfsePassword, ...rest } = c;
     return {
       ...rest,
+      cnpj: legal.cnpj ?? rest.cnpj,
+      razaoSocial: legal.razaoSocial ?? rest.razaoSocial,
       hasCertificate: !!certPfxEnc,
       certificateExpired: !!c.certValidUntil && c.certValidUntil < new Date(),
       effectiveWsUrl: this.wsUrl(c),
@@ -81,8 +86,14 @@ export class NfseConfigService {
     };
   }
 
-  async save(workspaceId: string, dto: SaveNfseConfig) {
+  async save(workspaceId: string, dto: SaveNfseConfig, userId?: string) {
     const current = await this.raw(workspaceId);
+    // CNPJ/razão social são do histórico da empresa: aqui só se preenche quando
+    // estão vazios (trocar é em Workspace → Dados da empresa). Demais dados
+    // legais (inscrição municipal, regime) seguem para o registro vigente.
+    const legal = await this.issuer.updateDetails(workspaceId, userId, {
+      cnpj: dto.cnpj, razaoSocial: dto.razaoSocial, inscricaoMunicipal: dto.inscricaoMunicipal, regimeTributario: dto.regime,
+    });
     for (const f of PCT_FIELDS) {
       const v = dto[f];
       if (v !== undefined && (typeof v !== 'number' || v < 0 || v > 100)) throw new BadRequestException(`Percentual inválido em ${f}.`);
@@ -111,7 +122,8 @@ export class NfseConfigService {
       where: { workspaceId },
       data: {
         ...dto,
-        cnpj: digits(dto.cnpj) ?? undefined,
+        cnpj: legal.cnpj ?? digits(dto.cnpj) ?? undefined,
+        razaoSocial: legal.razaoSocial ?? dto.razaoSocial,
         autoIssueSince: dto.autoIssueOnReceipt && !current.autoIssueOnReceipt ? new Date() : undefined,
       },
     });
@@ -143,6 +155,7 @@ export class NfseConfigService {
         ...(!config.cnpj && cert.cnpj && { cnpj: cert.cnpj }),
       },
     });
+    if (!config.cnpj && cert.cnpj) await this.issuer.updateDetails(workspaceId, undefined, { cnpj: cert.cnpj });
     return this.get(workspaceId);
   }
 

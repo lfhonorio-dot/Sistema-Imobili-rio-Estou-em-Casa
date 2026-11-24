@@ -7,6 +7,10 @@ ls -la /app/ 2>/dev/null || echo "Pasta /app nao existe"
 echo "==> DEBUG: Pasta dist:"
 ls -la /app/dist/ 2>/dev/null || echo "DIST NAO EXISTE!"
 
+# Migrations usam a conexão DIRETA (schema.prisma: directUrl). Sem ela definida
+# (dev local, CI), usa a DATABASE_URL como reserva.
+export DATABASE_URL_DIRECT="${DATABASE_URL_DIRECT:-$DATABASE_URL}"
+
 echo "==> Aguardando banco de dados..."
 for i in $(seq 1 30); do
   echo "SELECT 1" | npx prisma db execute --stdin 2>/dev/null && break || true

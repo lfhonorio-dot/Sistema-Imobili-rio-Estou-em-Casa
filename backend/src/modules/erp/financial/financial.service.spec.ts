@@ -23,7 +23,7 @@ describe('FinancialService.payEntry', () => {
   beforeEach(() => {
     prisma = makePrismaMock();
     payments = { register: jest.fn().mockResolvedValue({ entry: { status: 'PAID' } }) };
-    service = new FinancialService(prisma as any, {} as any, {} as any, payments as any, {} as any, {} as any);
+    service = new FinancialService(prisma as any, {} as any, {} as any, payments as any, {} as any, {} as any, {} as any);
   });
 
   it('registra pagamento de um lançamento do tipo PAYABLE (contas a pagar) quitando o saldo', async () => {
@@ -90,7 +90,7 @@ describe('FinancialService.createEntry', () => {
   beforeEach(() => {
     prisma = makeCreatePrismaMock();
     const config = { assertCategory: jest.fn(), assertCostCenter: jest.fn() };
-    service = new FinancialService(prisma as any, {} as any, {} as any, {} as any, config as any, {} as any);
+    service = new FinancialService(prisma as any, {} as any, {} as any, {} as any, config as any, {} as any, {} as any);
   });
 
   it('cria conta a pagar sem vínculos e sem consultar contrato/imóvel/contato', async () => {

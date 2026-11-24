@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { IssuerService } from '../issuer/issuer.service';
 import { UpdateWorkspaceDto, CreateRoleDto, UpdateRoleDto } from './workspace.dto';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class WorkspaceService {
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
+    private issuer: IssuerService,
   ) {}
 
   // Busca dados do workspace
@@ -33,7 +35,9 @@ export class WorkspaceService {
     });
 
     if (!workspace) throw new NotFoundException('Workspace não encontrado.');
-    return workspace;
+    // CNPJ oficial vem do histórico de dados da empresa
+    const legal = await this.issuer.getCurrent(workspaceId);
+    return { ...workspace, cnpj: legal.cnpj ?? workspace.cnpj, razaoSocial: legal.razaoSocial, legalEntityId: legal.id };
   }
 
   // Atualiza configurações do workspace
@@ -43,9 +47,14 @@ export class WorkspaceService {
       select: { name: true, cnpj: true, address: true, phone: true, twoFactorRequired: true },
     });
 
+    // CNPJ só pode ser preenchido aqui se estiver vazio; trocar é pelo
+    // fluxo "Trocar CNPJ ou razão social" (mantém o histórico dos documentos).
+    const legal = await this.issuer.updateDetails(workspaceId, userId, {
+      cnpj: dto.cnpj, nomeFantasia: dto.name, endereco: dto.address,
+    });
     const updated = await this.prisma.workspace.update({
       where: { id: workspaceId },
-      data: dto,
+      data: { ...dto, ...(dto.cnpj !== undefined && { cnpj: legal.cnpj }) },
     });
 
     await this.auditService.log({

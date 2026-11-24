@@ -3,10 +3,12 @@
 
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IssuerService } from '../../issuer/issuer.service';
+import { asSnapshot, formatCnpj, legalName } from '../../issuer/issuer.types';
 
 @Injectable()
 export class ContractTemplateService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private issuer: IssuerService) {}
 
   private fmt(value: unknown): string {
     if (!value) return '______________';
@@ -101,16 +103,19 @@ ${body}
     });
     if (!contract) throw new Error('Contrato não encontrado');
 
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { name: true, cnpj: true },
-    });
-    const taxConfig = await this.prisma.taxConfig.findFirst({
-      where: { workspaceId },
-      select: { cnpj: true, inscricaoMunicipal: true },
-    }).catch(() => null);
+    // Dados da empresa: a cópia gravada no contrato quando ele saiu do
+    // rascunho (ou foi enviado para assinatura). Reimprimir mostra sempre a
+    // empresa daquela data. Rascunho ainda acompanha o cadastro atual.
+    let snap = asSnapshot(contract.issuerSnapshot);
+    if (!snap) {
+      snap = contract.status !== 'DRAFT'
+        ? await this.issuer.freeze('contract', workspaceId, contractId)
+        : await this.issuer.getCurrentSnapshot(workspaceId);
+    }
+    const workspace = { name: legalName(snap) || null, cnpj: snap.cnpj ? formatCnpj(snap.cnpj) : null };
+    const taxConfig = { cnpj: null as string | null, inscricaoMunicipal: snap.inscricaoMunicipal };
 
-    return { contract, workspace, taxConfig };
+    return { contract, workspace, taxConfig, issuerSnapshot: snap };
   }
 
   // Bloco de split (parágrafo 2º): lista beneficiários com % e valor
